@@ -1,0 +1,6 @@
+[package]
+name = "shaders"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
