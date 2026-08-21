@@ -1,0 +1,24 @@
+[package]
+name = "infers-bindings"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+crate-type = ["lib", "cdylib", "staticlib"]
+name = "infers_bindings"
+
+[dependencies]
+infers-core = { path = "../core" }
+processing = { path = "../processing" }
+processing-core = { path = "../processing/core" }
+platform-android = { path = "../platform/android" }
+infers-backend-executorch = { path = "../backends/executorch" }
+uniffi = { version = "0.28", features = ["cli"] }
+thiserror = "2"
+parking_lot = "0.12"
+
+[build-dependencies]
+uniffi = { version = "0.28", features = ["build"] }
+
+[dev-dependencies]
+uniffi = { version = "0.28", features = ["bindgen-tests"] }

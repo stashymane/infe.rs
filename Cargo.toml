@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "crates/backends/executorch",
+    "crates/bindings",
     "crates/core",
     "crates/platform/android",
     "crates/processing",

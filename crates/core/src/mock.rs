@@ -139,7 +139,10 @@ impl ModelSession for MockSession {
                     actual: input.device().clone(),
                 });
             }
-            if i < self.input_shapes.len() && input.shape() != &self.input_shapes[i] {
+            if i < self.input_shapes.len()
+                && input.shape() != &self.input_shapes[i]
+                && input.shape().element_count() != self.input_shapes[i].element_count()
+            {
                 return Err(CoreError::InvalidShape(format!(
                     "Input {} shape mismatch: expected {:?}, got {:?}",
                     i,

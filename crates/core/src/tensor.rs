@@ -397,3 +397,55 @@ impl TensorBuffer for CpuTensor<u8> {
         }
     }
 }
+
+impl TensorBuffer for CpuTensor<i32> {
+    fn shape(&self) -> &TensorShape {
+        &self.shape
+    }
+    fn dtype(&self) -> DataType {
+        self.dtype
+    }
+    fn device(&self) -> &Device {
+        static CPU: std::sync::OnceLock<Device> = std::sync::OnceLock::new();
+        CPU.get_or_init(Device::cpu)
+    }
+    fn read_to_cpu(&self) -> Result<Box<dyn AnyHostTensor>, CoreError> {
+        Ok(Box::new(self.clone()))
+    }
+    fn copy_to_device(&self, target: &Device) -> Result<Box<dyn TensorBuffer>, CoreError> {
+        if target.is_cpu() {
+            Ok(Box::new(self.clone()))
+        } else {
+            Err(CoreError::BufferTransferFailed(format!(
+                "Transfer from CPU to {} not supported by pure CPU tensor; use device context allocator",
+                target
+            )))
+        }
+    }
+}
+
+impl TensorBuffer for CpuTensor<i64> {
+    fn shape(&self) -> &TensorShape {
+        &self.shape
+    }
+    fn dtype(&self) -> DataType {
+        self.dtype
+    }
+    fn device(&self) -> &Device {
+        static CPU: std::sync::OnceLock<Device> = std::sync::OnceLock::new();
+        CPU.get_or_init(Device::cpu)
+    }
+    fn read_to_cpu(&self) -> Result<Box<dyn AnyHostTensor>, CoreError> {
+        Ok(Box::new(self.clone()))
+    }
+    fn copy_to_device(&self, target: &Device) -> Result<Box<dyn TensorBuffer>, CoreError> {
+        if target.is_cpu() {
+            Ok(Box::new(self.clone()))
+        } else {
+            Err(CoreError::BufferTransferFailed(format!(
+                "Transfer from CPU to {} not supported by pure CPU tensor; use device context allocator",
+                target
+            )))
+        }
+    }
+}
