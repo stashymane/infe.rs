@@ -4,3 +4,9 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+infers-core = { path = "../../core" }
+processing-core = { path = "../../processing/core" }
+thiserror = "2"
+
+[dev-dependencies]
+processing = { path = "../../processing" }

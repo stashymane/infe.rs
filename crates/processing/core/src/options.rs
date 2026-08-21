@@ -1,5 +1,5 @@
 #[repr(C)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub struct ProcessingOptions {
     pub src_w: u32,
     pub src_h: u32,
@@ -26,23 +26,26 @@ impl ProcessingOptions {
 }
 
 #[repr(u32)]
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Default)]
 pub enum FitMode {
+    #[default]
     STRETCH = 0,
     CONTAIN = 1,
     CROP = 2,
 }
 
 #[repr(u32)]
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Default)]
 pub enum ImageFormat {
+    #[default]
     RGB888 = 0,
     RGBF32 = 1,
 }
 
 #[repr(u32)]
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Default)]
 pub enum Rotation {
+    #[default]
     None = 0,
     R90DEG = 1,
     R180DEG = 2,
