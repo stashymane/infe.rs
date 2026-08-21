@@ -4,3 +4,7 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+processing-core = { path = "core" }
+
+[build-dependencies]
+spirv-builder = "=0.10.0-alpha.1"

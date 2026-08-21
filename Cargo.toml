@@ -1,10 +1,18 @@
 [workspace]
-members = ["crates/core", "crates/processing", "crates/shaders"]
+members = [
+    "crates/core",
+    "crates/platform/android",
+    "crates/processing",
+    "crates/processing/core",
+    "crates/processing/shaders",
+]
 resolver = "3"
 
 [workspace.package]
-name = "infers"
 version = "0.1.0"
 edition = "2024"
+
+[workspace.lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_arch, values("spirv"))'] }
 
 [workspace.dependencies]

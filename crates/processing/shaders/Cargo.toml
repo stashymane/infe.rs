@@ -1,0 +1,12 @@
+[package]
+name = "processing-shaders"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+spirv-std = { version = "=0.10.0-alpha.1" }
+processing-core = { path = "../core" }
+
+[lints]
+workspace = true
