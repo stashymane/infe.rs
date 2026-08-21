@@ -1,6 +1,9 @@
 [package]
-name = "core"
+name = "infers-core"
 version.workspace = true
 edition.workspace = true
 
 [dependencies]
+processing-core = { path = "../processing/core" }
+thiserror = "2"
+bytemuck = { version = "1", features = ["derive"], optional = true }
