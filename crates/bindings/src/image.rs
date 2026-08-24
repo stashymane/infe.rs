@@ -7,6 +7,7 @@ use infers_core::ImageInputBuffer;
 #[cfg(target_os = "android")]
 use platform_android::AndroidHardwareBufferHandle as CoreHardwareBuffer;
 use processing::{CpuImageProcessor, GpuImageProcessor};
+use infers_gpu::VulkanContext;
 use processing_core::{
     FitMode as CoreFitMode, ImageFormat as CoreImageFormat,
     ProcessingOptions as CoreProcessingOptions, Rotation as CoreRotation,
@@ -17,6 +18,8 @@ use std::sync::Arc;
 pub enum ImageFormat {
     Rgb888,
     Rgbf32,
+    Nv12,
+    I420,
 }
 
 impl From<CoreImageFormat> for ImageFormat {
@@ -24,6 +27,8 @@ impl From<CoreImageFormat> for ImageFormat {
         match format {
             CoreImageFormat::RGB888 => ImageFormat::Rgb888,
             CoreImageFormat::RGBF32 => ImageFormat::Rgbf32,
+            CoreImageFormat::NV12 => ImageFormat::Nv12,
+            CoreImageFormat::I420 => ImageFormat::I420,
         }
     }
 }
@@ -33,6 +38,8 @@ impl From<ImageFormat> for CoreImageFormat {
         match format {
             ImageFormat::Rgb888 => CoreImageFormat::RGB888,
             ImageFormat::Rgbf32 => CoreImageFormat::RGBF32,
+            ImageFormat::Nv12 => CoreImageFormat::NV12,
+            ImageFormat::I420 => CoreImageFormat::I420,
         }
     }
 }
@@ -104,6 +111,7 @@ pub struct ProcessingOptions {
     pub crop_h: u32,
     pub dest_w: u32,
     pub dest_h: u32,
+    pub src_format: ImageFormat,
     pub dest_format: ImageFormat,
     pub fit_mode: FitMode,
     pub rotation: Rotation,
@@ -120,6 +128,7 @@ impl From<CoreProcessingOptions> for ProcessingOptions {
             crop_h: opts.crop_h,
             dest_w: opts.dest_w,
             dest_h: opts.dest_h,
+            src_format: opts.src_format.into(),
             dest_format: opts.dest_format.into(),
             fit_mode: opts.fit_mode.into(),
             rotation: opts.rotation.into(),
@@ -138,6 +147,7 @@ impl From<ProcessingOptions> for CoreProcessingOptions {
             crop_h: opts.crop_h,
             dest_w: opts.dest_w,
             dest_h: opts.dest_h,
+            src_format: opts.src_format.into(),
             dest_format: opts.dest_format.into(),
             fit_mode: opts.fit_mode.into(),
             rotation: opts.rotation.into(),
@@ -268,7 +278,10 @@ impl ImageProcessor {
         let hb = buffer.inner();
 
         if let Some(gpu) = &self.gpu_proc {
-            let out_tensor = gpu.process(hb, &core_opts).map_err(InfersError::from)?;
+            let sampled = hb
+                .to_vulkan(Arc::clone(gpu.context()))
+                .map_err(InfersError::from)?;
+            let out_tensor = gpu.process(&sampled, &core_opts).map_err(InfersError::from)?;
             Ok(Arc::new(TensorBuffer::from_boxed(out_tensor)))
         } else if let Some(cpu) = &self.cpu_proc {
             let out_tensor = cpu.process(hb, &core_opts).map_err(InfersError::from)?;
@@ -293,7 +306,15 @@ pub fn create_cpu_image_processor() -> Arc<ImageProcessor> {
 #[uniffi::export]
 pub fn create_gpu_image_processor(device: Device) -> Result<Arc<ImageProcessor>, InfersError> {
     let core_device: infers_core::Device = device.clone().into();
-    let gpu_proc = GpuImageProcessor::new(&core_device).map_err(InfersError::from)?;
+    #[cfg(target_os = "android")]
+    let context = Arc::new(
+        platform_android::create_vulkan_context(&core_device).map_err(InfersError::from)?,
+    );
+    #[cfg(not(target_os = "android"))]
+    let context = Arc::new(VulkanContext::new(&core_device).map_err(|err| InfersError::ProcessingFailed {
+        message: err.to_string(),
+    })?);
+    let gpu_proc = GpuImageProcessor::new(context).map_err(InfersError::from)?;
     Ok(Arc::new(ImageProcessor {
         cpu_proc: None,
         gpu_proc: Some(gpu_proc),

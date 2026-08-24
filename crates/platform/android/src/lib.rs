@@ -8,4 +8,4 @@ pub mod vulkan;
 pub use error::AndroidPlatformError;
 pub use ffi::*;
 pub use hardware_buffer::{AndroidHardwareBufferHandle, LockedCpuBuffer};
-pub use vulkan::VulkanHardwareBufferImport;
+pub use vulkan::{create_vulkan_context, vulkan_context_options};

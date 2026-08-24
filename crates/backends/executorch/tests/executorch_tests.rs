@@ -320,6 +320,7 @@ fn test_asset_image_preprocessing_and_executorch_inference() {
         dest_format: processing::core::ImageFormat::RGBF32,
         fit_mode: FitMode::CONTAIN,
         rotation: Rotation::None,
+        ..Default::default()
     };
 
     let processed_tensor = processor
@@ -482,6 +483,7 @@ fn test_end_to_end_face_pipeline_with_asset_image() {
                 dest_format: processing::core::ImageFormat::RGBF32,
                 fit_mode: FitMode::CONTAIN,
                 rotation: Rotation::None,
+                ..Default::default()
             },
         )
         .expect("Preprocessing for detector failed");
@@ -548,6 +550,7 @@ fn test_end_to_end_face_pipeline_with_asset_image() {
                 dest_format: processing::core::ImageFormat::RGBF32,
                 fit_mode: FitMode::STRETCH,
                 rotation: Rotation::None,
+                ..Default::default()
             },
         )
         .expect("Preprocessing for landmarker failed");

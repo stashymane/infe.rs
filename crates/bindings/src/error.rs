@@ -1,5 +1,5 @@
 use infers_core::CoreError;
-use processing::ProcessingError;
+use processing::{GpuError, ProcessingError};
 
 #[cfg(target_os = "android")]
 use platform_android::AndroidPlatformError;
@@ -63,6 +63,12 @@ impl From<ProcessingError> for InfersError {
         InfersError::ProcessingFailed {
             message: err.to_string(),
         }
+    }
+}
+
+impl From<GpuError> for InfersError {
+    fn from(err: GpuError) -> Self {
+        ProcessingError::from(err).into()
     }
 }
 

@@ -5,7 +5,10 @@ edition.workspace = true
 
 [target.'cfg(target_os = "android")'.dependencies]
 infers-core = { path = "../../core" }
+infers-gpu = { path = "../../gpu" }
+ash = "0.38"
 thiserror = "2"
 
 [target.'cfg(target_os = "android")'.dev-dependencies]
 processing = { path = "../../processing" }
+infers-gpu = { path = "../../gpu" }

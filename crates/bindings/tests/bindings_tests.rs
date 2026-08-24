@@ -60,6 +60,7 @@ fn test_uniffi_image_processor_cpu() {
         crop_h: 4,
         dest_w: 2,
         dest_h: 2,
+        src_format: ImageFormat::Rgb888,
         dest_format: ImageFormat::Rgbf32,
         fit_mode: FitMode::Stretch,
         rotation: Rotation::None,

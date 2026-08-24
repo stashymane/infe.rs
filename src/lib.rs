@@ -9,9 +9,19 @@ pub mod core {
     pub use infers_core::*;
 }
 
-/// CPU and GPU image preprocessing.
+/// GPU types and a shared Vulkan context (`VulkanContext`).
+pub mod gpu {
+    pub use infers_gpu::*;
+}
+
+/// CPU image preprocessing.
 pub mod processing {
     pub use ::processing::*;
+}
+
+/// GPU image preprocessing (SPIR-V convert kernels, including YUV sources).
+pub mod processing_gpu {
+    pub use ::processing_gpu::*;
 }
 
 /// ExecuTorch backend, sessions, and native program types.
@@ -28,7 +38,6 @@ pub mod android {
 pub use core::*;
 pub use processing::{
     CpuImageProcessor, CpuTensorBuffer, GpuImageProcessor, GpuTensorBuffer, ProcessingError, SHADERS,
-    reference_shader_convert_main,
 };
 pub use executorch::{
     ExecuTorchBackend, ExecuTorchDelegate, ExecuTorchError, ExecuTorchSession, ExecuTorchTensorBuffer,
@@ -38,5 +47,6 @@ pub use executorch::{
 
 #[cfg(target_os = "android")]
 pub use android::{
-    AndroidHardwareBufferHandle, AndroidPlatformError, LockedCpuBuffer, VulkanHardwareBufferImport,
+    AndroidHardwareBufferHandle, AndroidPlatformError, LockedCpuBuffer, create_vulkan_context,
+    vulkan_context_options,
 };

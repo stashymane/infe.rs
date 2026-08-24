@@ -1,0 +1,13 @@
+[package]
+name = "infers-gpu"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+infers-core = { path = "../core" }
+ash = "0.38"
+gpu-allocator = "0.28"
+thiserror = "2"
+
+[lints]
+workspace = true

@@ -38,6 +38,17 @@ impl CpuImageProcessor {
             ProcessingError::InvalidBuffer("Input buffer does not contain CPU-accessible bytes".into())
         })?;
 
+        if input.format().is_yuv() {
+            return Err(ProcessingError::InvalidBuffer(
+                "CpuImageProcessor does not support YUV input; use GpuImageProcessor".into(),
+            ));
+        }
+        if options.dest_format.is_yuv() {
+            return Err(ProcessingError::InvalidBuffer(
+                "CpuImageProcessor does not support YUV destination".into(),
+            ));
+        }
+
         let src_w = input.width();
         let src_h = input.height();
         let (crop_x, crop_y, crop_w, crop_h) = options.effective_crop();
@@ -190,6 +201,9 @@ impl CpuImageProcessor {
                 let tensor = CpuTensor::from_f32(shape, f32_data)?;
                 Ok(Box::new(CpuTensorBuffer::new(tensor)))
             }
+            ImageFormat::NV12 | ImageFormat::I420 => Err(ProcessingError::InvalidBuffer(
+                "CpuImageProcessor does not support YUV destination".into(),
+            )),
         }
     }
 }
@@ -284,163 +298,4 @@ impl Clone for CpuTensorBuffer<u8> {
             tensor: self.tensor.clone(),
         }
     }
-}
-
-/// Software CPU reference shader emulator executing the exact SPIR-V `convert_main` math
-pub fn reference_shader_convert_main(
-    src: &[u8],
-    options: &ProcessingOptions,
-) -> Result<Vec<u8>, ProcessingError> {
-    let (dest_w, dest_h) = (options.dest_w, options.dest_h);
-    let bytes_per_pixel = match options.dest_format {
-        ImageFormat::RGB888 => 3,
-        ImageFormat::RGBF32 => 12,
-    };
-    let mut dst = vec![0u8; (dest_w * dest_h * bytes_per_pixel) as usize];
-
-    for dy in 0..dest_h {
-        for dx in 0..dest_w {
-            let (sx, sy, valid) = map_dst_to_src(options, dx as f32, dy as f32);
-            let (r, g, b) = if valid {
-                sample_rgb_bilinear(src, options.src_w, options.src_h, sx, sy)
-            } else {
-                (0.0, 0.0, 0.0)
-            };
-
-            match options.dest_format {
-                ImageFormat::RGB888 => {
-                    let o = ((dy * dest_w + dx) * 3) as usize;
-                    dst[o] = r.round().clamp(0.0, 255.0) as u8;
-                    dst[o + 1] = g.round().clamp(0.0, 255.0) as u8;
-                    dst[o + 2] = b.round().clamp(0.0, 255.0) as u8;
-                }
-                ImageFormat::RGBF32 => {
-                    let base = ((dy * dest_w + dx) * 12) as usize;
-                    let r_bits = (r / 255.0).to_bits();
-                    dst[base..base + 4].copy_from_slice(&r_bits.to_le_bytes());
-                    let g_bits = (g / 255.0).to_bits();
-                    dst[base + 4..base + 8].copy_from_slice(&g_bits.to_le_bytes());
-                    let b_bits = (b / 255.0).to_bits();
-                    dst[base + 8..base + 12].copy_from_slice(&b_bits.to_le_bytes());
-                }
-            }
-        }
-    }
-
-    Ok(dst)
-}
-
-fn bilinear(v00: f32, v10: f32, v01: f32, v11: f32, tx: f32, ty: f32) -> f32 {
-    let v0 = v00 + (v10 - v00) * tx;
-    let v1 = v01 + (v11 - v01) * tx;
-    v0 + (v1 - v0) * ty
-}
-
-fn sample_rgb_bilinear(
-    src: &[u8],
-    src_w: u32,
-    src_h: u32,
-    fx: f32,
-    fy: f32,
-) -> (f32, f32, f32) {
-    if fx < 0.0 || fy < 0.0 || fx >= src_w as f32 || fy >= src_h as f32 {
-        return (0.0, 0.0, 0.0);
-    }
-    let x0 = fx.floor();
-    let y0 = fy.floor();
-    let x1 = (x0 + 1.0).min((src_w - 1) as f32);
-    let y1 = (y0 + 1.0).min((src_h - 1) as f32);
-    let tx = fx - x0;
-    let ty = fy - y0;
-    let w = src_w as usize;
-    let i00 = (y0 as usize * w + x0 as usize) * 3;
-    let i10 = (y0 as usize * w + x1 as usize) * 3;
-    let i01 = (y1 as usize * w + x0 as usize) * 3;
-    let i11 = (y1 as usize * w + x1 as usize) * 3;
-
-    if i11 + 2 >= src.len() {
-        return (0.0, 0.0, 0.0);
-    }
-
-    let r = bilinear(
-        src[i00] as f32,
-        src[i10] as f32,
-        src[i01] as f32,
-        src[i11] as f32,
-        tx,
-        ty,
-    );
-    let g = bilinear(
-        src[i00 + 1] as f32,
-        src[i10 + 1] as f32,
-        src[i01 + 1] as f32,
-        src[i11 + 1] as f32,
-        tx,
-        ty,
-    );
-    let b = bilinear(
-        src[i00 + 2] as f32,
-        src[i10 + 2] as f32,
-        src[i01 + 2] as f32,
-        src[i11 + 2] as f32,
-        tx,
-        ty,
-    );
-    (r, g, b)
-}
-
-fn map_dst_to_src(params: &ProcessingOptions, dx: f32, dy: f32) -> (f32, f32, bool) {
-    let (crop_x, crop_y, crop_w, crop_h) = {
-        let (x, y, w, h) = params.effective_crop();
-        (x as f32, y as f32, w as f32, h as f32)
-    };
-
-    let (rot_w, rot_h) = match params.rotation {
-        Rotation::None | Rotation::R180DEG => (crop_w, crop_h),
-        Rotation::R90DEG | Rotation::R270DEG => (crop_h, crop_w),
-    };
-
-    let dst_w = params.dest_w as f32;
-    let dst_h = params.dest_h as f32;
-
-    let (scale_x, scale_y, pad_x, pad_y) = match params.fit_mode {
-        FitMode::STRETCH => (dst_w / rot_w, dst_h / rot_h, 0.0, 0.0),
-        FitMode::CONTAIN | FitMode::CROP => {
-            let sx = dst_w / rot_w;
-            let sy = dst_h / rot_h;
-            let s = if params.fit_mode == FitMode::CROP {
-                if sx > sy { sx } else { sy }
-            } else {
-                if sx < sy { sx } else { sy }
-            };
-            let scaled_w = rot_w * s;
-            let scaled_h = rot_h * s;
-            let pad_x = (dst_w - scaled_w) * 0.5;
-            let pad_y = (dst_h - scaled_h) * 0.5;
-            (s, s, pad_x, pad_y)
-        }
-    };
-
-    let rx = (dx - pad_x) / scale_x;
-    let ry = (dy - pad_y) / scale_y;
-
-    if rx < 0.0 || ry < 0.0 || rx >= rot_w || ry >= rot_h {
-        return (0.0, 0.0, false);
-    }
-
-    let (cx, cy) = match params.rotation {
-        Rotation::None => (rx, ry),
-        Rotation::R90DEG => (ry, (crop_h - 1.0) - rx),
-        Rotation::R180DEG => ((crop_w - 1.0) - rx, (crop_h - 1.0) - ry),
-        Rotation::R270DEG => ((crop_w - 1.0) - ry, rx),
-    };
-
-    let sx = cx + crop_x;
-    let sy = cy + crop_y;
-
-    if sx < 0.0 || sy < 0.0 || sx >= params.src_w as f32 || sy >= params.src_h as f32 {
-        return (0.0, 0.0, false);
-    }
-
-    (sx, sy, true)
 }

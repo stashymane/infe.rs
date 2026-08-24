@@ -9,6 +9,7 @@ name = "infers_bindings"
 
 [dependencies]
 infers-core = { path = "../core" }
+infers-gpu = { path = "../gpu" }
 processing = { path = "../processing" }
 processing-core = { path = "../processing/core" }
 infers-backend-executorch = { path = "../backends/executorch" }

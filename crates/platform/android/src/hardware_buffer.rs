@@ -1,6 +1,5 @@
 use crate::error::AndroidPlatformError;
 use crate::ffi::*;
-use crate::vulkan::VulkanHardwareBufferImport;
 use infers_core::{Device, ImageFormat, ImageInputBuffer};
 use std::ffi::c_void;
 
@@ -63,15 +62,36 @@ impl AndroidHardwareBufferHandle {
         &self.desc
     }
 
-    /// Acquire Vulkan external memory import descriptor for zero-copy GPU compute
-    pub fn as_vulkan_external_memory(&self) -> Result<VulkanHardwareBufferImport, AndroidPlatformError> {
-        Ok(VulkanHardwareBufferImport::new(
-            self.raw_ptr as *mut c_void,
-            self.desc.width,
-            self.desc.height,
-            self.desc.format,
-            self.desc.usage,
-        ))
+    #[inline]
+    pub fn width(&self) -> u32 {
+        self.desc.width
+    }
+
+    #[inline]
+    pub fn height(&self) -> u32 {
+        self.desc.height
+    }
+
+    #[inline]
+    pub fn format(&self) -> ImageFormat {
+        match self.desc.format {
+            AHARDWAREBUFFER_FORMAT_R8G8B8_UNORM | AHARDWAREBUFFER_FORMAT_R8G8B8A8_UNORM => {
+                ImageFormat::RGB888
+            }
+            AHARDWAREBUFFER_FORMAT_R16G16B16A16_FLOAT => ImageFormat::RGBF32,
+            AHARDWAREBUFFER_FORMAT_Y8Cb8Cr8_420 => ImageFormat::NV12,
+            _ => ImageFormat::RGB888,
+        }
+    }
+
+    #[inline]
+    pub fn device(&self) -> &Device {
+        &self.device
+    }
+
+    #[inline]
+    pub fn supports_gpu_sampling(&self) -> bool {
+        (self.desc.usage & AHARDWAREBUFFER_USAGE_GPU_SAMPLED_IMAGE) != 0
     }
 
     /// Lock the buffer for CPU reading (RAII unlock on drop)
@@ -120,13 +140,7 @@ impl ImageInputBuffer for AndroidHardwareBufferHandle {
     }
 
     fn format(&self) -> ImageFormat {
-        match self.desc.format {
-            AHARDWAREBUFFER_FORMAT_R8G8B8_UNORM | AHARDWAREBUFFER_FORMAT_R8G8B8A8_UNORM => {
-                ImageFormat::RGB888
-            }
-            AHARDWAREBUFFER_FORMAT_R16G16B16A16_FLOAT => ImageFormat::RGBF32,
-            _ => ImageFormat::RGB888,
-        }
+        AndroidHardwareBufferHandle::format(self)
     }
 
     fn device(&self) -> &Device {
@@ -135,6 +149,10 @@ impl ImageInputBuffer for AndroidHardwareBufferHandle {
 
     fn as_bytes(&self) -> Option<&[u8]> {
         None
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 }
 

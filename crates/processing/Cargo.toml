@@ -5,10 +5,9 @@ edition.workspace = true
 
 [dependencies]
 processing-core = { path = "core" }
+processing-gpu = { path = "gpu" }
 infers-core = { path = "../core" }
+infers-gpu = { path = "../gpu" }
 fast_image_resize = "5"
 image = { version = "0.25", default-features = false }
 thiserror = "2"
-
-[build-dependencies]
-spirv-builder = "=0.10.0-alpha.1"

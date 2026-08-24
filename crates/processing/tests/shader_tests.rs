@@ -72,6 +72,8 @@ fn test_processing_options_enums() {
 
     assert_eq!(ImageFormat::RGB888 as u32, 0);
     assert_eq!(ImageFormat::RGBF32 as u32, 1);
+    assert_eq!(ImageFormat::NV12 as u32, 2);
+    assert_eq!(ImageFormat::I420 as u32, 3);
 
     assert_eq!(Rotation::None as u32, 0);
     assert_eq!(Rotation::R90DEG as u32, 1);
@@ -93,6 +95,7 @@ fn test_processing_options_crop() {
         dest_format: ImageFormat::RGBF32,
         fit_mode: FitMode::CONTAIN,
         rotation: Rotation::None,
+        ..Default::default()
     };
 
     assert_eq!(opts_no_crop.effective_crop(), (0, 0, 1920, 1080));
@@ -109,6 +112,7 @@ fn test_processing_options_crop() {
         dest_format: ImageFormat::RGB888,
         fit_mode: FitMode::CROP,
         rotation: Rotation::R90DEG,
+        ..Default::default()
     };
 
     assert_eq!(opts_with_crop.effective_crop(), (100, 50, 400, 300));

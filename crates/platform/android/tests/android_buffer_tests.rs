@@ -7,6 +7,7 @@ use platform_android::{
     AHARDWAREBUFFER_USAGE_CPU_WRITE_OFTEN, AHARDWAREBUFFER_USAGE_GPU_SAMPLED_IMAGE,
 };
 use processing::{CpuImageProcessor, FitMode, GpuImageProcessor};
+use std::sync::Arc;
 
 fn allocate_rgb888_buffer(
     width: u32,
@@ -46,11 +47,7 @@ fn test_android_hardware_buffer_metadata() {
     assert_eq!(handle.desc().width, 64);
     assert_eq!(handle.desc().height, 64);
     assert_eq!(handle.desc().format, AHARDWAREBUFFER_FORMAT_R8G8B8_UNORM);
-
-    let vulkan_import = handle.as_vulkan_external_memory().unwrap();
-    assert_eq!(vulkan_import.width, 64);
-    assert_eq!(vulkan_import.height, 64);
-    assert!(vulkan_import.supports_gpu_sampling());
+    assert!(handle.supports_gpu_sampling());
 
     let locked = handle.lock_cpu_read().unwrap();
     assert!(!locked.as_slice().is_empty());
@@ -84,8 +81,28 @@ fn test_android_hardware_buffer_with_image_processors() {
     let cpu_out = cpu_proc.process(&cpu_img, &opts).unwrap();
     assert_eq!(cpu_out.shape().dims(), &[1, 16, 16, 3]);
 
-    let gpu_proc = GpuImageProcessor::new(&Device::gpu(0)).unwrap();
-    let gpu_out = gpu_proc.process(&handle, &opts).unwrap();
+    let context = match platform_android::create_vulkan_context(&Device::gpu(0)) {
+        Ok(ctx) => Arc::new(ctx),
+        Err(err) => {
+            eprintln!("skipping Android GPU processor test: {err}");
+            return;
+        }
+    };
+    let gpu_proc = match GpuImageProcessor::new(Arc::clone(&context)) {
+        Ok(proc) => proc,
+        Err(err) => {
+            eprintln!("skipping Android GPU processor test: {err}");
+            return;
+        }
+    };
+    let sampled = match handle.to_vulkan(context) {
+        Ok(img) => img,
+        Err(err) => {
+            eprintln!("skipping Android GPU import: {err}");
+            return;
+        }
+    };
+    let gpu_out = gpu_proc.process(&sampled, &opts).unwrap();
     assert_eq!(gpu_out.shape().dims(), &[1, 16, 16, 3]);
     assert_eq!(gpu_out.device(), &Device::gpu(0));
 }

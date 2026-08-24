@@ -2,6 +2,7 @@ pub use processing_core::{FitMode, ImageFormat, ProcessingOptions, Rotation};
 
 use crate::device::Device;
 use crate::error::CoreError;
+use std::any::Any;
 
 /// Trait representing an input image for preprocessing
 pub trait ImageInputBuffer: Send + Sync {
@@ -10,6 +11,7 @@ pub trait ImageInputBuffer: Send + Sync {
     fn format(&self) -> ImageFormat;
     fn device(&self) -> &Device;
     fn as_bytes(&self) -> Option<&[u8]>;
+    fn as_any(&self) -> &dyn Any;
 }
 
 /// A CPU-resident image buffer
@@ -28,10 +30,7 @@ impl CpuImageBuffer {
         format: ImageFormat,
         data: Vec<u8>,
     ) -> Result<Self, CoreError> {
-        let expected_bytes = match format {
-            ImageFormat::RGB888 => (width as usize) * (height as usize) * 3,
-            ImageFormat::RGBF32 => (width as usize) * (height as usize) * 3 * 4,
-        };
+        let expected_bytes = format.frame_bytes(width, height) as usize;
 
         if data.len() != expected_bytes {
             return Err(CoreError::InvalidArgument(format!(
@@ -95,5 +94,9 @@ impl ImageInputBuffer for CpuImageBuffer {
 
     fn as_bytes(&self) -> Option<&[u8]> {
         Some(&self.data)
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
