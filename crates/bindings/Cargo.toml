@@ -22,3 +22,4 @@ uniffi = { version = "0.28", features = ["build"] }
 
 [dev-dependencies]
 uniffi = { version = "0.28", features = ["bindgen-tests"] }
+infers-test-utils = { path = "../test-utils" }

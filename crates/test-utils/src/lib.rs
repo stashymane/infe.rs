@@ -1,16 +1,21 @@
 use std::sync::Arc;
-use crate::backend::{Backend, ModelSession, SessionConfig};
-use crate::device::Device;
-use crate::error::CoreError;
-use crate::tensor::{AnyHostTensor, CpuTensor, DataType, TensorBuffer, TensorShape};
 
-/// A simulated device-resident tensor (e.g. on GPU or NPU)
+use infers_core::{
+    AnyHostTensor, Backend, CoreError, CpuTensor, DataType, Device, ImageFormat, ModelSession,
+    SessionConfig, TensorBuffer, TensorShape,
+};
+use platform_android::{
+    AndroidHardwareBufferHandle, AHARDWAREBUFFER_FORMAT_R16G16B16A16_FLOAT,
+    AHARDWAREBUFFER_FORMAT_R8G8B8_UNORM, AHARDWAREBUFFER_USAGE_CPU_READ_OFTEN,
+    AHARDWAREBUFFER_USAGE_GPU_SAMPLED_IMAGE, AHardwareBuffer, AHardwareBuffer_Desc,
+};
+
+/// Simulated device-resident tensor (e.g. on GPU or NPU) for tests and examples.
 #[derive(Clone, Debug)]
 pub struct MockDeviceTensor {
     device: Device,
     shape: TensorShape,
     dtype: DataType,
-    // Raw backing payload kept opaque from direct CPU inspection
     raw_payload: Vec<u8>,
 }
 
@@ -131,7 +136,6 @@ impl ModelSession for MockSession {
     }
 
     fn run(&mut self, inputs: &[&dyn TensorBuffer]) -> Result<Vec<Box<dyn TensorBuffer>>, CoreError> {
-        // Enforce device safety
         for (i, input) in inputs.iter().enumerate() {
             if input.device() != &self.device {
                 return Err(CoreError::DeviceMismatch {
@@ -213,4 +217,35 @@ impl Backend for MockBackend {
             forward,
         )))
     }
+}
+
+/// Host-side stand-in for `AHardwareBuffer` used by tests that cannot allocate a real buffer.
+pub fn mock_hardware_buffer(
+    width: u32,
+    height: u32,
+    format: ImageFormat,
+    data: Vec<u8>,
+    device: Device,
+) -> AndroidHardwareBufferHandle {
+    let ahb_format = match format {
+        ImageFormat::RGB888 => AHARDWAREBUFFER_FORMAT_R8G8B8_UNORM,
+        ImageFormat::RGBF32 => AHARDWAREBUFFER_FORMAT_R16G16B16A16_FLOAT,
+    };
+    let desc = AHardwareBuffer_Desc {
+        width,
+        height,
+        layers: 1,
+        format: ahb_format,
+        usage: AHARDWAREBUFFER_USAGE_GPU_SAMPLED_IMAGE | AHARDWAREBUFFER_USAGE_CPU_READ_OFTEN,
+        stride: width,
+        rfu0: 0,
+        rfu1: 0,
+    };
+
+    AndroidHardwareBufferHandle::from_desc_with_cpu_data(
+        0x1 as *mut AHardwareBuffer,
+        desc,
+        device,
+        data,
+    )
 }

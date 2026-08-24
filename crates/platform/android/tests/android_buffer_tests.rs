@@ -1,13 +1,12 @@
 use infers_core::{Device, ImageFormat, ImageInputBuffer, ProcessingOptions, Rotation};
-use platform_android::{
-    AndroidHardwareBufferHandle, AHARDWAREBUFFER_FORMAT_R8G8B8_UNORM,
-};
+use infers_test_utils::mock_hardware_buffer;
+use platform_android::AHARDWAREBUFFER_FORMAT_R8G8B8_UNORM;
 use processing::{CpuImageProcessor, FitMode, GpuImageProcessor};
 
 #[test]
 fn test_android_hardware_buffer_mock_and_metadata() {
     let raw_data = vec![128u8; 64 * 64 * 3];
-    let handle = AndroidHardwareBufferHandle::from_mock(
+    let handle = mock_hardware_buffer(
         64,
         64,
         ImageFormat::RGB888,
@@ -39,7 +38,7 @@ fn test_android_hardware_buffer_with_image_processors() {
         raw_data.push((i % 256) as u8);
     }
 
-    let handle = AndroidHardwareBufferHandle::from_mock(
+    let handle = mock_hardware_buffer(
         32,
         32,
         ImageFormat::RGB888,

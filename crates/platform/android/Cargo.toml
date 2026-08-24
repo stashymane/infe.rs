@@ -10,3 +10,4 @@ thiserror = "2"
 
 [dev-dependencies]
 processing = { path = "../../processing" }
+infers-test-utils = { path = "../../test-utils" }

@@ -201,18 +201,6 @@ pub fn create_hardware_buffer_from_raw(
     Ok(Arc::new(HardwareBufferHandle::new(Arc::new(handle))))
 }
 
-#[uniffi::export]
-pub fn create_mock_hardware_buffer(
-    width: u32,
-    height: u32,
-    format: ImageFormat,
-    data: Vec<u8>,
-    device: Device,
-) -> Arc<HardwareBufferHandle> {
-    let handle = CoreHardwareBuffer::from_mock(width, height, format.into(), data, device.into());
-    Arc::new(HardwareBufferHandle::new(Arc::new(handle)))
-}
-
 #[derive(uniffi::Object)]
 pub struct ImageProcessor {
     cpu_proc: Option<CpuImageProcessor>,

@@ -2,12 +2,10 @@ pub mod backend;
 pub mod device;
 pub mod error;
 pub mod image;
-pub mod mock;
 pub mod tensor;
 
 pub use backend::{Backend, ModelSession, SessionConfig};
 pub use device::{Device, DeviceKind};
 pub use error::CoreError;
 pub use image::{CpuImageBuffer, ImageInputBuffer, FitMode, ImageFormat, ProcessingOptions, Rotation};
-pub use mock::{MockBackend, MockDeviceTensor, MockSession};
 pub use tensor::{AnyHostTensor, CpuTensor, DataType, DeviceBuffer, TensorBuffer, TensorShape};

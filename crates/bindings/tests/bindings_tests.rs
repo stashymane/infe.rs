@@ -1,4 +1,8 @@
 use infers_bindings::*;
+use infers_core::Backend;
+use infers_test_utils::MockBackend;
+
+mod common;
 
 #[test]
 fn test_uniffi_device_creation() {
@@ -81,7 +85,7 @@ fn test_uniffi_image_processor_cpu() {
 fn test_uniffi_hardware_buffer_mock() {
     let cpu = create_cpu_device();
     let data = vec![255u8; 16 * 16 * 3];
-    let hb = create_mock_hardware_buffer(16, 16, ImageFormat::Rgb888, data.clone(), cpu);
+    let hb = common::create_mock_hardware_buffer(16, 16, ImageFormat::Rgb888, data.clone(), cpu);
 
     assert_eq!(hb.width(), 16);
     assert_eq!(hb.height(), 16);
@@ -122,14 +126,12 @@ fn test_uniffi_hardware_buffer_mock() {
 
 #[test]
 fn test_uniffi_mock_backend_and_session() {
-    let backend = MockBackend::new();
+    let backend = MockBackend::new("mock_backend");
     let devices = backend.available_devices();
     assert!(!devices.is_empty());
 
     let cpu = create_cpu_device();
-    let session = backend
-        .load_model(vec![0x01, 0x02, 0x03], cpu.clone())
-        .expect("Load model on mock backend failed");
+    let session = common::load_mock_session(vec![0x01, 0x02, 0x03], cpu.clone());
 
     assert_eq!(session.device(), cpu);
 

@@ -1,6 +1,8 @@
 use infers_bindings::*;
 use std::time::Instant;
 
+mod common;
+
 #[test]
 fn test_end_to_end_face_pipeline_uniffi() {
     let cpu = create_cpu_device();
@@ -9,17 +11,12 @@ fn test_end_to_end_face_pipeline_uniffi() {
     let image_proc = create_cpu_image_processor();
 
     // 2. Mock detector session on CPU
-    let backend = MockBackend::new();
-    let detector = backend
-        .load_model(vec![0xAA, 0xBB], cpu.clone())
-        .expect("Failed to load detector");
-    let landmarker = backend
-        .load_model(vec![0xCC, 0xDD], cpu.clone())
-        .expect("Failed to load landmarker");
+    let detector = common::load_mock_session(vec![0xAA, 0xBB], cpu.clone());
+    let landmarker = common::load_mock_session(vec![0xCC, 0xDD], cpu.clone());
 
     // 3. Simulate camera stream frame (640x480 RGB888)
     let frame_data = vec![128u8; 640 * 480 * 3];
-    let hw_buffer = create_mock_hardware_buffer(640, 480, ImageFormat::Rgb888, frame_data, cpu.clone());
+    let hw_buffer = common::create_mock_hardware_buffer(640, 480, ImageFormat::Rgb888, frame_data, cpu.clone());
 
     // 4. Step 1: Preprocess camera frame -> Face detector input (224x224 RGBF32)
     let detector_options = ProcessingOptions {
@@ -98,10 +95,7 @@ fn test_cross_device_mismatch_error_handling() {
     let cpu = create_cpu_device();
     let gpu = create_gpu_device(0);
 
-    let backend = MockBackend::new();
-    let gpu_session = backend
-        .load_model(vec![0x01, 0x02], gpu.clone())
-        .expect("Failed to load GPU session");
+    let gpu_session = common::load_mock_session(vec![0x01, 0x02], gpu.clone());
 
     // Create CPU tensor
     let cpu_tensor = create_tensor_from_f32(
@@ -130,13 +124,10 @@ fn test_cross_device_mismatch_error_handling() {
 fn test_pipeline_latency_and_throughput_benchmark() {
     let cpu = create_cpu_device();
     let image_proc = create_cpu_image_processor();
-    let backend = MockBackend::new();
-    let detector = backend
-        .load_model(vec![0x10, 0x20], cpu.clone())
-        .expect("Failed to load detector");
+    let detector = common::load_mock_session(vec![0x10, 0x20], cpu.clone());
 
     let frame_data = vec![200u8; 320 * 240 * 3];
-    let hw_buffer = create_mock_hardware_buffer(320, 240, ImageFormat::Rgb888, frame_data, cpu);
+    let hw_buffer = common::create_mock_hardware_buffer(320, 240, ImageFormat::Rgb888, frame_data, cpu);
 
     let options = ProcessingOptions {
         src_w: 320,

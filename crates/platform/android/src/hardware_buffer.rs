@@ -9,7 +9,7 @@ pub struct AndroidHardwareBufferHandle {
     raw_ptr: *mut AHardwareBuffer,
     desc: AHardwareBuffer_Desc,
     device: Device,
-    host_mock_data: Option<Vec<u8>>,
+    cpu_data: Option<Vec<u8>>,
 }
 
 // Safety: AHardwareBuffer instances are ref-counted and thread-safe across threads on Android
@@ -32,7 +32,7 @@ impl AndroidHardwareBufferHandle {
                 raw_ptr,
                 desc,
                 device,
-                host_mock_data: None,
+                cpu_data: None,
             })
         }
 
@@ -52,39 +52,25 @@ impl AndroidHardwareBufferHandle {
                 raw_ptr,
                 desc,
                 device,
-                host_mock_data: None,
+                cpu_data: None,
             })
         }
     }
 
-    /// Create a simulated hardware buffer handle for testing on host/desktop
-    pub fn from_mock(
-        width: u32,
-        height: u32,
-        format: ImageFormat,
-        data: Vec<u8>,
+    /// Wrap a raw pointer, descriptor, and optional CPU-readable payload.
+    ///
+    /// Used by test utilities to stand in for a real `AHardwareBuffer` on host builds.
+    pub fn from_desc_with_cpu_data(
+        raw_ptr: *mut AHardwareBuffer,
+        desc: AHardwareBuffer_Desc,
         device: Device,
+        cpu_data: Vec<u8>,
     ) -> Self {
-        let ahb_format = match format {
-            ImageFormat::RGB888 => AHARDWAREBUFFER_FORMAT_R8G8B8_UNORM,
-            ImageFormat::RGBF32 => AHARDWAREBUFFER_FORMAT_R16G16B16A16_FLOAT,
-        };
-        let desc = AHardwareBuffer_Desc {
-            width,
-            height,
-            layers: 1,
-            format: ahb_format,
-            usage: AHARDWAREBUFFER_USAGE_GPU_SAMPLED_IMAGE | AHARDWAREBUFFER_USAGE_CPU_READ_OFTEN,
-            stride: width,
-            rfu0: 0,
-            rfu1: 0,
-        };
-
         Self {
-            raw_ptr: 0x1 as *mut AHardwareBuffer,
+            raw_ptr,
             desc,
             device,
-            host_mock_data: Some(data),
+            cpu_data: Some(cpu_data),
         }
     }
 
@@ -111,7 +97,7 @@ impl AndroidHardwareBufferHandle {
 
     /// Lock the buffer for CPU reading (RAII unlock on drop)
     pub fn lock_cpu_read(&self) -> Result<LockedCpuBuffer<'_>, AndroidPlatformError> {
-        if let Some(ref data) = self.host_mock_data {
+        if let Some(ref data) = self.cpu_data {
             return Ok(LockedCpuBuffer {
                 buffer: self,
                 slice: data.as_slice(),
@@ -184,7 +170,7 @@ impl ImageInputBuffer for AndroidHardwareBufferHandle {
     }
 
     fn as_bytes(&self) -> Option<&[u8]> {
-        self.host_mock_data.as_deref()
+        self.cpu_data.as_deref()
     }
 }
 
@@ -205,7 +191,7 @@ impl<'a> LockedCpuBuffer<'a> {
 impl<'a> Drop for LockedCpuBuffer<'a> {
     fn drop(&mut self) {
         #[cfg(target_os = "android")]
-        if self.buffer.host_mock_data.is_none() && !self.buffer.raw_ptr.is_null() {
+        if self.buffer.cpu_data.is_none() && !self.buffer.raw_ptr.is_null() {
             unsafe {
                 let mut fence: i32 = -1;
                 AHardwareBuffer_unlock(self.buffer.raw_ptr, &mut fence);

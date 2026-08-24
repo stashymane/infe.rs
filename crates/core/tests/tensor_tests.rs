@@ -1,7 +1,8 @@
 use infers_core::{
-    Backend, CpuImageBuffer, CpuTensor, DataType, Device, DeviceKind, ImageFormat, MockBackend,
-    MockDeviceTensor, TensorBuffer, TensorShape, CoreError,
+    Backend, CpuImageBuffer, CpuTensor, DataType, Device, DeviceKind, ImageFormat, TensorBuffer,
+    TensorShape, CoreError,
 };
+use infers_test_utils::{MockBackend, MockDeviceTensor};
 
 #[test]
 fn test_device_creation_and_properties() {

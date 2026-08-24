@@ -1,9 +1,9 @@
 use std::sync::Arc;
 use infers_core::{
     Backend, CoreError, CpuImageBuffer, Device, FitMode, ImageFormat, ImageInputBuffer,
-    MockBackend, MockDeviceTensor, MockSession, ModelSession, ProcessingOptions, Rotation,
-    TensorBuffer, TensorShape,
+    ModelSession, ProcessingOptions, Rotation, TensorBuffer, TensorShape,
 };
+use infers_test_utils::{MockBackend, MockDeviceTensor, MockSession};
 
 #[derive(Debug, Clone)]
 pub struct BoundingBox {
