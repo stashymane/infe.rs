@@ -921,6 +921,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "infers"
+version = "0.1.0"
+dependencies = [
+ "infers-backend-executorch",
+ "infers-core",
+ "platform-android",
+ "processing",
+]
+
+[[package]]
 name = "infers-backend-executorch"
 version = "0.1.0"
 dependencies = [

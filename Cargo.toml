@@ -19,3 +19,16 @@ edition = "2024"
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_arch, values("spirv"))'] }
 
 [workspace.dependencies]
+
+[package]
+name = "infers"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+infers-core = { path = "crates/core" }
+processing = { path = "crates/processing" }
+infers-backend-executorch = { path = "crates/backends/executorch" }
+
+[target.'cfg(target_os = "android")'.dependencies]
+platform-android = { path = "crates/platform/android" }
