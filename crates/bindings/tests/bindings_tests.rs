@@ -82,49 +82,6 @@ fn test_uniffi_image_processor_cpu() {
 }
 
 #[test]
-fn test_uniffi_hardware_buffer_mock() {
-    let cpu = create_cpu_device();
-    let data = vec![255u8; 16 * 16 * 3];
-    let hb = common::create_mock_hardware_buffer(16, 16, ImageFormat::Rgb888, data.clone(), cpu);
-
-    assert_eq!(hb.width(), 16);
-    assert_eq!(hb.height(), 16);
-
-    let locked = hb.lock_cpu().expect("Lock CPU failed");
-    assert_eq!(locked.len(), 16 * 16 * 3);
-    assert_eq!(locked, data);
-
-    let processor = create_cpu_image_processor();
-    let options = ProcessingOptions {
-        src_w: 16,
-        src_h: 16,
-        crop_x: 2,
-        crop_y: 2,
-        crop_w: 8,
-        crop_h: 8,
-        dest_w: 4,
-        dest_h: 4,
-        dest_format: ImageFormat::Rgb888,
-        fit_mode: FitMode::Crop,
-        rotation: Rotation::R90deg,
-    };
-
-    let out_tensor = processor
-        .process_hardware_buffer(hb, options)
-        .expect("Process mock hardware buffer failed");
-
-    assert_eq!(
-        out_tensor.shape(),
-        TensorShape {
-            dims: vec![1, 4, 4, 3]
-        }
-    );
-    assert_eq!(out_tensor.dtype(), DataType::U8);
-    let bytes = out_tensor.read_to_cpu_u8().unwrap();
-    assert_eq!(bytes.len(), 4 * 4 * 3);
-}
-
-#[test]
 fn test_uniffi_mock_backend_and_session() {
     let backend = MockBackend::new("mock_backend");
     let devices = backend.available_devices();

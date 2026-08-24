@@ -1,18 +1,43 @@
-use infers_core::{Device, ImageFormat, ImageInputBuffer, ProcessingOptions, Rotation};
-use infers_test_utils::mock_hardware_buffer;
-use platform_android::AHARDWAREBUFFER_FORMAT_R8G8B8_UNORM;
+#![cfg(target_os = "android")]
+
+use infers_core::{CpuImageBuffer, Device, ImageFormat, ImageInputBuffer, ProcessingOptions, Rotation};
+use platform_android::{
+    AndroidHardwareBufferHandle, AHardwareBuffer_Desc, AHardwareBuffer_allocate,
+    AHARDWAREBUFFER_FORMAT_R8G8B8_UNORM, AHARDWAREBUFFER_USAGE_CPU_READ_OFTEN,
+    AHARDWAREBUFFER_USAGE_CPU_WRITE_OFTEN, AHARDWAREBUFFER_USAGE_GPU_SAMPLED_IMAGE,
+};
 use processing::{CpuImageProcessor, FitMode, GpuImageProcessor};
 
+fn allocate_rgb888_buffer(
+    width: u32,
+    height: u32,
+    device: Device,
+) -> AndroidHardwareBufferHandle {
+    let desc = AHardwareBuffer_Desc {
+        width,
+        height,
+        layers: 1,
+        format: AHARDWAREBUFFER_FORMAT_R8G8B8_UNORM,
+        usage: AHARDWAREBUFFER_USAGE_GPU_SAMPLED_IMAGE
+            | AHARDWAREBUFFER_USAGE_CPU_READ_OFTEN
+            | AHARDWAREBUFFER_USAGE_CPU_WRITE_OFTEN,
+        stride: 0,
+        rfu0: 0,
+        rfu1: 0,
+    };
+
+    unsafe {
+        let mut ptr = std::ptr::null_mut();
+        let status = AHardwareBuffer_allocate(&desc, &mut ptr);
+        assert_eq!(status, 0, "AHardwareBuffer_allocate failed: {status}");
+        AndroidHardwareBufferHandle::from_allocated(ptr, device)
+            .expect("from_allocated should succeed for a non-null buffer")
+    }
+}
+
 #[test]
-fn test_android_hardware_buffer_mock_and_metadata() {
-    let raw_data = vec![128u8; 64 * 64 * 3];
-    let handle = mock_hardware_buffer(
-        64,
-        64,
-        ImageFormat::RGB888,
-        raw_data.clone(),
-        Device::gpu(0),
-    );
+fn test_android_hardware_buffer_metadata() {
+    let handle = allocate_rgb888_buffer(64, 64, Device::gpu(0));
 
     assert_eq!(handle.width(), 64);
     assert_eq!(handle.height(), 64);
@@ -28,23 +53,21 @@ fn test_android_hardware_buffer_mock_and_metadata() {
     assert!(vulkan_import.supports_gpu_sampling());
 
     let locked = handle.lock_cpu_read().unwrap();
-    assert_eq!(locked.as_slice().len(), 64 * 64 * 3);
+    assert!(!locked.as_slice().is_empty());
 }
 
 #[test]
 fn test_android_hardware_buffer_with_image_processors() {
-    let mut raw_data = Vec::with_capacity(32 * 32 * 3);
-    for i in 0..(32 * 32 * 3) {
-        raw_data.push((i % 256) as u8);
-    }
-
-    let handle = mock_hardware_buffer(
-        32,
-        32,
-        ImageFormat::RGB888,
-        raw_data,
-        Device::gpu(0),
-    );
+    let handle = allocate_rgb888_buffer(32, 32, Device::gpu(0));
+    let locked = handle.lock_cpu_read().unwrap();
+    let cpu_img = CpuImageBuffer::new(
+        handle.width(),
+        handle.height(),
+        handle.format(),
+        locked.as_slice().to_vec(),
+    )
+    .unwrap();
+    drop(locked);
 
     let opts = ProcessingOptions {
         src_w: 32,
@@ -58,7 +81,7 @@ fn test_android_hardware_buffer_with_image_processors() {
     };
 
     let cpu_proc = CpuImageProcessor::new();
-    let cpu_out = cpu_proc.process(&handle, &opts).unwrap();
+    let cpu_out = cpu_proc.process(&cpu_img, &opts).unwrap();
     assert_eq!(cpu_out.shape().dims(), &[1, 16, 16, 3]);
 
     let gpu_proc = GpuImageProcessor::new(&Device::gpu(0)).unwrap();

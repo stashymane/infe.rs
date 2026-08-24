@@ -16,7 +16,6 @@ fn test_end_to_end_face_pipeline_uniffi() {
 
     // 3. Simulate camera stream frame (640x480 RGB888)
     let frame_data = vec![128u8; 640 * 480 * 3];
-    let hw_buffer = common::create_mock_hardware_buffer(640, 480, ImageFormat::Rgb888, frame_data, cpu.clone());
 
     // 4. Step 1: Preprocess camera frame -> Face detector input (224x224 RGBF32)
     let detector_options = ProcessingOptions {
@@ -34,7 +33,7 @@ fn test_end_to_end_face_pipeline_uniffi() {
     };
 
     let detector_input = image_proc
-        .process_hardware_buffer(hw_buffer.clone(), detector_options)
+        .process_bytes(frame_data.clone(), 640, 480, ImageFormat::Rgb888, detector_options)
         .expect("Preprocessing for detector failed");
 
     assert_eq!(
@@ -74,7 +73,7 @@ fn test_end_to_end_face_pipeline_uniffi() {
     };
 
     let landmarker_input = image_proc
-        .process_hardware_buffer(hw_buffer, landmarker_options)
+        .process_bytes(frame_data, 640, 480, ImageFormat::Rgb888, landmarker_options)
         .expect("Preprocessing for landmarker failed");
 
     // 8. Run Landmarker
@@ -127,7 +126,6 @@ fn test_pipeline_latency_and_throughput_benchmark() {
     let detector = common::load_mock_session(vec![0x10, 0x20], cpu.clone());
 
     let frame_data = vec![200u8; 320 * 240 * 3];
-    let hw_buffer = common::create_mock_hardware_buffer(320, 240, ImageFormat::Rgb888, frame_data, cpu);
 
     let options = ProcessingOptions {
         src_w: 320,
@@ -148,7 +146,7 @@ fn test_pipeline_latency_and_throughput_benchmark() {
 
     for _ in 0..iterations {
         let input_tensor = image_proc
-            .process_hardware_buffer(hw_buffer.clone(), options.clone())
+            .process_bytes(frame_data.clone(), 320, 240, ImageFormat::Rgb888, options.clone())
             .expect("Preprocess failed");
         let outputs = detector
             .run(vec![input_tensor])

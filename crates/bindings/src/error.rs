@@ -1,6 +1,8 @@
 use infers_core::CoreError;
-use platform_android::AndroidPlatformError;
 use processing::ProcessingError;
+
+#[cfg(target_os = "android")]
+use platform_android::AndroidPlatformError;
 
 #[derive(Debug, thiserror::Error, uniffi::Error)]
 pub enum InfersError {
@@ -64,6 +66,7 @@ impl From<ProcessingError> for InfersError {
     }
 }
 
+#[cfg(target_os = "android")]
 impl From<AndroidPlatformError> for InfersError {
     fn from(err: AndroidPlatformError) -> Self {
         InfersError::PlatformError {

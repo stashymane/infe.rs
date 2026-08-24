@@ -961,7 +961,6 @@ name = "infers-test-utils"
 version = "0.1.0"
 dependencies = [
  "infers-core",
- "platform-android",
 ]
 
 [[package]]
@@ -1351,9 +1350,7 @@ name = "platform-android"
 version = "0.1.0"
 dependencies = [
  "infers-core",
- "infers-test-utils",
  "processing",
- "processing-core",
  "thiserror 2.0.20",
 ]
 

@@ -9,7 +9,6 @@ pub struct AndroidHardwareBufferHandle {
     raw_ptr: *mut AHardwareBuffer,
     desc: AHardwareBuffer_Desc,
     device: Device,
-    cpu_data: Option<Vec<u8>>,
 }
 
 // Safety: AHardwareBuffer instances are ref-counted and thread-safe across threads on Android
@@ -17,61 +16,41 @@ unsafe impl Send for AndroidHardwareBufferHandle {}
 unsafe impl Sync for AndroidHardwareBufferHandle {}
 
 impl AndroidHardwareBufferHandle {
-    /// Create a handle wrapping an existing raw `AHardwareBuffer` pointer
+    /// Wrap an existing `AHardwareBuffer` pointer, incrementing its reference count.
     pub fn from_raw(raw_ptr: *mut AHardwareBuffer, device: Device) -> Result<Self, AndroidPlatformError> {
         if raw_ptr.is_null() {
             return Err(AndroidPlatformError::NullBufferPointer);
         }
 
-        #[cfg(target_os = "android")]
         unsafe {
             AHardwareBuffer_acquire(raw_ptr);
-            let mut desc = std::mem::zeroed();
-            AHardwareBuffer_describe(raw_ptr, &mut desc);
-            Ok(Self {
-                raw_ptr,
-                desc,
-                device,
-                cpu_data: None,
-            })
-        }
-
-        #[cfg(not(target_os = "android"))]
-        {
-            let desc = AHardwareBuffer_Desc {
-                width: 0,
-                height: 0,
-                layers: 1,
-                format: AHARDWAREBUFFER_FORMAT_R8G8B8_UNORM,
-                usage: AHARDWAREBUFFER_USAGE_GPU_SAMPLED_IMAGE,
-                stride: 0,
-                rfu0: 0,
-                rfu1: 0,
-            };
-            Ok(Self {
-                raw_ptr,
-                desc,
-                device,
-                cpu_data: None,
-            })
+            Self::from_acquired(raw_ptr, device)
         }
     }
 
-    /// Wrap a raw pointer, descriptor, and optional CPU-readable payload.
-    ///
-    /// Used by test utilities to stand in for a real `AHardwareBuffer` on host builds.
-    pub fn from_desc_with_cpu_data(
+    /// Take ownership of a pointer returned by `AHardwareBuffer_allocate` (no extra acquire).
+    pub fn from_allocated(
         raw_ptr: *mut AHardwareBuffer,
-        desc: AHardwareBuffer_Desc,
         device: Device,
-        cpu_data: Vec<u8>,
-    ) -> Self {
-        Self {
+    ) -> Result<Self, AndroidPlatformError> {
+        if raw_ptr.is_null() {
+            return Err(AndroidPlatformError::NullBufferPointer);
+        }
+
+        unsafe { Self::from_acquired(raw_ptr, device) }
+    }
+
+    unsafe fn from_acquired(
+        raw_ptr: *mut AHardwareBuffer,
+        device: Device,
+    ) -> Result<Self, AndroidPlatformError> {
+        let mut desc = std::mem::zeroed();
+        AHardwareBuffer_describe(raw_ptr, &mut desc);
+        Ok(Self {
             raw_ptr,
             desc,
             device,
-            cpu_data: Some(cpu_data),
-        }
+        })
     }
 
     #[inline]
@@ -97,15 +76,6 @@ impl AndroidHardwareBufferHandle {
 
     /// Lock the buffer for CPU reading (RAII unlock on drop)
     pub fn lock_cpu_read(&self) -> Result<LockedCpuBuffer<'_>, AndroidPlatformError> {
-        if let Some(ref data) = self.cpu_data {
-            return Ok(LockedCpuBuffer {
-                buffer: self,
-                slice: data.as_slice(),
-                _fence: -1,
-            });
-        }
-
-        #[cfg(target_os = "android")]
         unsafe {
             let mut virtual_addr: *mut c_void = std::ptr::null_mut();
             let status = AHardwareBuffer_lock(
@@ -127,17 +97,11 @@ impl AndroidHardwareBufferHandle {
                 _fence: -1,
             })
         }
-
-        #[cfg(not(target_os = "android"))]
-        {
-            Err(AndroidPlatformError::LockFailed(-1))
-        }
     }
 }
 
 impl Drop for AndroidHardwareBufferHandle {
     fn drop(&mut self) {
-        #[cfg(target_os = "android")]
         if !self.raw_ptr.is_null() {
             unsafe {
                 AHardwareBuffer_release(self.raw_ptr);
@@ -170,13 +134,12 @@ impl ImageInputBuffer for AndroidHardwareBufferHandle {
     }
 
     fn as_bytes(&self) -> Option<&[u8]> {
-        self.cpu_data.as_deref()
+        None
     }
 }
 
 /// RAII lock for CPU memory reading from an `AHardwareBuffer`
 pub struct LockedCpuBuffer<'a> {
-    #[allow(dead_code)]
     buffer: &'a AndroidHardwareBufferHandle,
     slice: &'a [u8],
     _fence: i32,
@@ -190,8 +153,7 @@ impl<'a> LockedCpuBuffer<'a> {
 
 impl<'a> Drop for LockedCpuBuffer<'a> {
     fn drop(&mut self) {
-        #[cfg(target_os = "android")]
-        if self.buffer.cpu_data.is_none() && !self.buffer.raw_ptr.is_null() {
+        if !self.buffer.raw_ptr.is_null() {
             unsafe {
                 let mut fence: i32 = -1;
                 AHardwareBuffer_unlock(self.buffer.raw_ptr, &mut fence);

@@ -5,4 +5,3 @@ edition.workspace = true
 
 [dependencies]
 infers-core = { path = "../core" }
-platform-android = { path = "../platform/android" }

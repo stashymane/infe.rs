@@ -1,7 +1,10 @@
 use crate::device::Device;
 use crate::error::InfersError;
 use crate::tensor::TensorBuffer;
-use infers_core::{CpuImageBuffer, ImageInputBuffer};
+use infers_core::CpuImageBuffer;
+#[cfg(target_os = "android")]
+use infers_core::ImageInputBuffer;
+#[cfg(target_os = "android")]
 use platform_android::AndroidHardwareBufferHandle as CoreHardwareBuffer;
 use processing::{CpuImageProcessor, GpuImageProcessor};
 use processing_core::{
@@ -142,11 +145,13 @@ impl From<ProcessingOptions> for CoreProcessingOptions {
     }
 }
 
+#[cfg(target_os = "android")]
 #[derive(uniffi::Object)]
 pub struct HardwareBufferHandle {
     inner: Arc<CoreHardwareBuffer>,
 }
 
+#[cfg(target_os = "android")]
 impl std::fmt::Debug for HardwareBufferHandle {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("HardwareBufferHandle")
@@ -156,6 +161,7 @@ impl std::fmt::Debug for HardwareBufferHandle {
     }
 }
 
+#[cfg(target_os = "android")]
 impl HardwareBufferHandle {
     pub fn new(inner: Arc<CoreHardwareBuffer>) -> Self {
         Self { inner }
@@ -166,6 +172,7 @@ impl HardwareBufferHandle {
     }
 }
 
+#[cfg(target_os = "android")]
 #[uniffi::export]
 impl HardwareBufferHandle {
     pub fn width(&self) -> u32 {
@@ -190,6 +197,7 @@ impl HardwareBufferHandle {
     }
 }
 
+#[cfg(target_os = "android")]
 #[uniffi::export]
 pub fn create_hardware_buffer_from_raw(
     ptr: u64,
@@ -246,7 +254,11 @@ impl ImageProcessor {
             })
         }
     }
+}
 
+#[cfg(target_os = "android")]
+#[uniffi::export]
+impl ImageProcessor {
     pub fn process_hardware_buffer(
         &self,
         buffer: Arc<HardwareBufferHandle>,

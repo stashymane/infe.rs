@@ -1,3 +1,5 @@
+#![cfg(target_os = "android")]
+
 pub mod error;
 pub mod ffi;
 pub mod hardware_buffer;

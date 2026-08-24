@@ -3,11 +3,9 @@ name = "platform-android"
 version.workspace = true
 edition.workspace = true
 
-[dependencies]
+[target.'cfg(target_os = "android")'.dependencies]
 infers-core = { path = "../../core" }
-processing-core = { path = "../../processing/core" }
 thiserror = "2"
 
-[dev-dependencies]
+[target.'cfg(target_os = "android")'.dev-dependencies]
 processing = { path = "../../processing" }
-infers-test-utils = { path = "../../test-utils" }
