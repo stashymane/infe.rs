@@ -1,9 +1,9 @@
-use crate::error::GpuContextError;
+use crate::error::GpuError;
 use ash::vk;
 use gpu_allocator::vulkan::{Allocator, AllocatorCreateDesc};
 use infers_core::{Device, DeviceKind};
-use std::ffi::CStr;
-use std::sync::Mutex;
+use parking_lot::Mutex;
+use std::ffi::{CStr, c_char};
 
 /// Extra instance/device setup supplied by the app or a platform crate.
 #[derive(Clone, Default)]
@@ -24,16 +24,6 @@ impl VulkanContextOptions {
     }
 }
 
-/// Raw Vulkan objects for wrapping an existing device.
-pub struct VulkanHandles {
-    pub instance: vk::Instance,
-    pub physical_device: vk::PhysicalDevice,
-    pub device: vk::Device,
-    pub queue: vk::Queue,
-    pub queue_family_index: u32,
-    pub owns_device: bool,
-}
-
 /// Shared Vulkan instance, device, compute queue, and memory allocator.
 ///
 /// Create the context before GPU processors or Vulkan inference sessions, keep an
@@ -49,6 +39,9 @@ pub struct VulkanContext {
     queue: vk::Queue,
     queue_family_index: u32,
     queue_lock: Mutex<()>,
+    oneshot_lock: Mutex<()>,
+    oneshot_cmd_pool: vk::CommandPool,
+    oneshot_fence: vk::Fence,
     allocator: Mutex<Option<Allocator>>,
     owns_device: bool,
     logical: Device,
@@ -56,19 +49,19 @@ pub struct VulkanContext {
 
 impl VulkanContext {
     /// Create a new instance and compute-capable logical device for `device`.
-    pub fn new(device: &Device) -> Result<Self, GpuContextError> {
+    pub fn new(device: &Device) -> Result<Self, GpuError> {
         Self::new_with_options(device, VulkanContextOptions::for_shared_inference())
     }
 
     pub fn new_with_options(
         device: &Device,
         options: VulkanContextOptions,
-    ) -> Result<Self, GpuContextError> {
+    ) -> Result<Self, GpuError> {
         if device.kind != DeviceKind::Gpu {
-            return Err(GpuContextError::NotGpu(device.clone()));
+            return Err(GpuError::NotGpu(device.clone()));
         }
 
-        let entry = unsafe { ash::Entry::load() }.map_err(|err| GpuContextError::Loader(err.to_string()))?;
+        let entry = unsafe { ash::Entry::load() }.map_err(|err| GpuError::Loader(err.to_string()))?;
 
         let app_name = std::ffi::CString::new("infers").unwrap();
         let engine_name = std::ffi::CString::new("infers-gpu").unwrap();
@@ -79,7 +72,7 @@ impl VulkanContext {
             .engine_version(vk::make_api_version(0, 0, 1, 0))
             .api_version(vk::API_VERSION_1_1);
 
-        let instance_exts: Vec<*const i8> = options
+        let instance_exts: Vec<*const c_char> = options
             .extra_instance_extensions
             .iter()
             .map(|name| name.as_ptr())
@@ -99,9 +92,9 @@ impl VulkanContext {
         }
         let physical_device = *compute_devices
             .get(device.id)
-            .ok_or(GpuContextError::NoDevice(device.id))?;
+            .ok_or(GpuError::NoDevice(device.id))?;
         let queue_family_index = first_compute_queue_family(&instance, physical_device)
-            .ok_or(GpuContextError::NoDevice(device.id))?;
+            .ok_or(GpuError::NoDevice(device.id))?;
 
         let created = create_logical_device(
             &instance,
@@ -119,6 +112,21 @@ impl VulkanContext {
             allocation_sizes: Default::default(),
         })?;
 
+        let oneshot_cmd_pool = unsafe {
+            created.device.create_command_pool(
+                &vk::CommandPoolCreateInfo::default()
+                    .queue_family_index(queue_family_index)
+                    .flags(
+                        vk::CommandPoolCreateFlags::TRANSIENT
+                            | vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER,
+                    ),
+                None,
+            )?
+        };
+        let oneshot_fence = unsafe {
+            created.device.create_fence(&vk::FenceCreateInfo::default(), None)?
+        };
+
         Ok(Self {
             entry,
             instance,
@@ -127,42 +135,12 @@ impl VulkanContext {
             queue: created.queue,
             queue_family_index,
             queue_lock: Mutex::new(()),
+            oneshot_lock: Mutex::new(()),
+            oneshot_cmd_pool,
+            oneshot_fence,
             allocator: Mutex::new(Some(allocator)),
             owns_device: true,
             logical: device.clone(),
-        })
-    }
-
-    /// Wrap existing Vulkan handles. Does not create an instance or device.
-    pub fn from_raw(logical: Device, handles: VulkanHandles) -> Result<Self, GpuContextError> {
-        if logical.kind != DeviceKind::Gpu {
-            return Err(GpuContextError::NotGpu(logical));
-        }
-
-        let entry = unsafe { ash::Entry::load() }.map_err(|err| GpuContextError::Loader(err.to_string()))?;
-        let instance = unsafe { ash::Instance::load(entry.static_fn(), handles.instance) };
-        let device = unsafe { ash::Device::load(instance.fp_v1_0(), handles.device) };
-
-        let allocator = Allocator::new(&AllocatorCreateDesc {
-            instance: instance.clone(),
-            device: device.clone(),
-            physical_device: handles.physical_device,
-            debug_settings: Default::default(),
-            buffer_device_address: false,
-            allocation_sizes: Default::default(),
-        })?;
-
-        Ok(Self {
-            entry,
-            instance,
-            physical_device: handles.physical_device,
-            device,
-            queue: handles.queue,
-            queue_family_index: handles.queue_family_index,
-            queue_lock: Mutex::new(()),
-            allocator: Mutex::new(Some(allocator)),
-            owns_device: handles.owns_device,
-            logical,
         })
     }
 
@@ -208,30 +186,91 @@ impl VulkanContext {
         &self,
         command_buffer: vk::CommandBuffer,
         fence: vk::Fence,
-    ) -> Result<(), GpuContextError> {
+    ) -> Result<(), GpuError> {
         let buffers = [command_buffer];
         let submit = vk::SubmitInfo::default().command_buffers(&buffers);
-        let _guard = self.queue_lock.lock().unwrap();
+        // Vulkan queues are not thread-safe; serialise submissions on this one.
+        let _guard = self.queue_lock.lock();
+        // SAFETY: `command_buffer` and `fence` belong to this device, the queue
+        // is exclusively held for this call, and `submit` borrows `buffers`,
+        // which outlives it.
         unsafe {
             self.device.queue_submit(self.queue, &[submit], fence)?;
         }
         Ok(())
     }
 
-    pub fn wait_fence(&self, fence: vk::Fence) -> Result<(), GpuContextError> {
+    pub fn wait_fence(&self, fence: vk::Fence) -> Result<(), GpuError> {
+        // SAFETY: `fence` belongs to this device and waiting on it is valid from
+        // any thread.
         unsafe {
             self.device.wait_for_fences(&[fence], true, u64::MAX)?;
         }
+        Ok(())
+    }
+
+    /// Record a one-shot command buffer with `record`, submit it, and block until
+    /// the GPU has finished.
+    pub fn record_and_wait<F>(&self, record: F) -> Result<(), GpuError>
+    where
+        F: FnOnce(&ash::Device, vk::CommandBuffer) -> Result<(), GpuError>,
+    {
+        let _guard = self.oneshot_lock.lock();
+        let device = self.device();
+
+        // SAFETY: `oneshot_cmd_pool` belongs to this device and is exclusively
+        // held under `oneshot_lock`.
+        unsafe {
+            device.reset_command_pool(
+                self.oneshot_cmd_pool,
+                vk::CommandPoolResetFlags::empty(),
+            )?;
+            device.reset_fences(&[self.oneshot_fence])?;
+        }
+
+        let cmd = unsafe {
+            device.allocate_command_buffers(
+                &vk::CommandBufferAllocateInfo::default()
+                    .command_pool(self.oneshot_cmd_pool)
+                    .level(vk::CommandBufferLevel::PRIMARY)
+                    .command_buffer_count(1),
+            )?
+        }[0];
+
+        // SAFETY: `cmd` was freshly allocated and is not recording or pending.
+        unsafe {
+            device.begin_command_buffer(
+                cmd,
+                &vk::CommandBufferBeginInfo::default()
+                    .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT),
+            )?;
+        }
+
+        record(device, cmd)?;
+
+        // SAFETY: `cmd` is in the recording state, opened just above.
+        unsafe { device.end_command_buffer(cmd)? };
+
+        self.submit(cmd, self.oneshot_fence)?;
+        self.wait_fence(self.oneshot_fence)?;
         Ok(())
     }
 }
 
 impl Drop for VulkanContext {
     fn drop(&mut self) {
+        // SAFETY: waiting for idle before teardown ensures no queued work still
+        // references the allocator's memory or the device itself.
         let _ = unsafe { self.device.device_wait_idle() };
-        drop(self.allocator.lock().unwrap().take());
+        // The allocator must release its memory before the device is destroyed.
+        drop(self.allocator.lock().take());
         if self.owns_device {
+            // SAFETY: this context created both objects and, per its documented
+            // contract, outlives every buffer, image and session using them. The
+            // device is destroyed before the instance that created it.
             unsafe {
+                self.device.destroy_fence(self.oneshot_fence, None);
+                self.device.destroy_command_pool(self.oneshot_cmd_pool, None);
                 self.device.destroy_device(None);
                 self.instance.destroy_instance(None);
             }
@@ -264,12 +303,14 @@ fn create_logical_device(
     physical_device: vk::PhysicalDevice,
     queue_family_index: u32,
     options: &VulkanContextOptions,
-) -> Result<CreatedDevice, GpuContextError> {
+) -> Result<CreatedDevice, GpuError> {
     let available = unsafe { instance.enumerate_device_extension_properties(physical_device) }?;
     let props = unsafe { instance.get_physical_device_properties(physical_device) };
     let api_minor = vk::api_version_minor(props.api_version);
 
-    let mut enabled_exts: Vec<*const i8> = Vec::new();
+    // `c_char` is signed on most targets but unsigned on Android/aarch64, so the
+    // element type must follow the platform rather than being spelled `i8`.
+    let mut enabled_exts: Vec<*const c_char> = Vec::new();
 
     let mut features_8bit = vk::PhysicalDevice8BitStorageFeatures::default()
         .storage_buffer8_bit_access(true)
@@ -292,10 +333,10 @@ fn create_logical_device(
 
     if api_minor < 2 {
         if !ext_available(&available, vk::KHR_8BIT_STORAGE_NAME) {
-            return Err(GpuContextError::MissingFeature("VK_KHR_8bit_storage".into()));
+            return Err(GpuError::MissingFeature("VK_KHR_8bit_storage".into()));
         }
         if !ext_available(&available, vk::KHR_SHADER_FLOAT16_INT8_NAME) {
-            return Err(GpuContextError::MissingFeature("VK_KHR_shader_float16_int8".into()));
+            return Err(GpuError::MissingFeature("VK_KHR_shader_float16_int8".into()));
         }
         enabled_exts.push(vk::KHR_8BIT_STORAGE_NAME.as_ptr());
         enabled_exts.push(vk::KHR_SHADER_FLOAT16_INT8_NAME.as_ptr());

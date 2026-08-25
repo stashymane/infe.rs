@@ -5,3 +5,6 @@ edition.workspace = true
 
 [dependencies]
 infers-core = { path = "../core" }
+
+[lints]
+workspace = true

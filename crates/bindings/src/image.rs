@@ -3,8 +3,6 @@ use crate::error::InfersError;
 use crate::tensor::TensorBuffer;
 use infers_core::CpuImageBuffer;
 #[cfg(target_os = "android")]
-use infers_core::ImageInputBuffer;
-#[cfg(target_os = "android")]
 use platform_android::AndroidHardwareBufferHandle as CoreHardwareBuffer;
 use processing::{CpuImageProcessor, GpuImageProcessor};
 use processing_core::{
@@ -21,26 +19,9 @@ pub enum ImageFormat {
     I420,
 }
 
-impl From<CoreImageFormat> for ImageFormat {
-    fn from(format: CoreImageFormat) -> Self {
-        match format {
-            CoreImageFormat::RGB888 => ImageFormat::Rgb888,
-            CoreImageFormat::RGBF32 => ImageFormat::Rgbf32,
-            CoreImageFormat::NV12 => ImageFormat::Nv12,
-            CoreImageFormat::I420 => ImageFormat::I420,
-        }
-    }
-}
-
-impl From<ImageFormat> for CoreImageFormat {
-    fn from(format: ImageFormat) -> Self {
-        match format {
-            ImageFormat::Rgb888 => CoreImageFormat::RGB888,
-            ImageFormat::Rgbf32 => CoreImageFormat::RGBF32,
-            ImageFormat::Nv12 => CoreImageFormat::NV12,
-            ImageFormat::I420 => CoreImageFormat::I420,
-        }
-    }
+uniffi_mirror! {
+    ImageFormat <=> CoreImageFormat,
+    [Rgb888, Rgbf32, Nv12, I420]
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, uniffi::Enum)]
@@ -50,54 +31,22 @@ pub enum FitMode {
     Crop,
 }
 
-impl From<CoreFitMode> for FitMode {
-    fn from(mode: CoreFitMode) -> Self {
-        match mode {
-            CoreFitMode::STRETCH => FitMode::Stretch,
-            CoreFitMode::CONTAIN => FitMode::Contain,
-            CoreFitMode::CROP => FitMode::Crop,
-        }
-    }
-}
-
-impl From<FitMode> for CoreFitMode {
-    fn from(mode: FitMode) -> Self {
-        match mode {
-            FitMode::Stretch => CoreFitMode::STRETCH,
-            FitMode::Contain => CoreFitMode::CONTAIN,
-            FitMode::Crop => CoreFitMode::CROP,
-        }
-    }
+uniffi_mirror! {
+    FitMode <=> CoreFitMode,
+    [Stretch, Contain, Crop]
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, uniffi::Enum)]
 pub enum Rotation {
     None,
-    R90deg,
-    R180deg,
-    R270deg,
+    Rot90,
+    Rot180,
+    Rot270,
 }
 
-impl From<CoreRotation> for Rotation {
-    fn from(rot: CoreRotation) -> Self {
-        match rot {
-            CoreRotation::None => Rotation::None,
-            CoreRotation::R90DEG => Rotation::R90deg,
-            CoreRotation::R180DEG => Rotation::R180deg,
-            CoreRotation::R270DEG => Rotation::R270deg,
-        }
-    }
-}
-
-impl From<Rotation> for CoreRotation {
-    fn from(rot: Rotation) -> Self {
-        match rot {
-            Rotation::None => CoreRotation::None,
-            Rotation::R90deg => CoreRotation::R90DEG,
-            Rotation::R180deg => CoreRotation::R180DEG,
-            Rotation::R270deg => CoreRotation::R270DEG,
-        }
-    }
+uniffi_mirror! {
+    Rotation <=> CoreRotation,
+    [None, Rot90, Rot180, Rot270]
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
@@ -114,25 +63,6 @@ pub struct ProcessingOptions {
     pub dest_format: ImageFormat,
     pub fit_mode: FitMode,
     pub rotation: Rotation,
-}
-
-impl From<CoreProcessingOptions> for ProcessingOptions {
-    fn from(opts: CoreProcessingOptions) -> Self {
-        Self {
-            src_w: opts.src_w,
-            src_h: opts.src_h,
-            crop_x: opts.crop_x,
-            crop_y: opts.crop_y,
-            crop_w: opts.crop_w,
-            crop_h: opts.crop_h,
-            dest_w: opts.dest_w,
-            dest_h: opts.dest_h,
-            src_format: opts.src_format.into(),
-            dest_format: opts.dest_format.into(),
-            fit_mode: opts.fit_mode.into(),
-            rotation: opts.rotation.into(),
-        }
-    }
 }
 
 impl From<ProcessingOptions> for CoreProcessingOptions {

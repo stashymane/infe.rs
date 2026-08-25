@@ -10,6 +10,7 @@ pub struct SessionConfig {
 }
 
 impl SessionConfig {
+    #[must_use]
     pub fn new(device: Device) -> Self {
         Self {
             device,
@@ -18,15 +19,6 @@ impl SessionConfig {
         }
     }
 
-    pub fn with_threads(mut self, threads: usize) -> Self {
-        self.num_threads = threads;
-        self
-    }
-
-    pub fn with_option(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
-        self.extra_options.insert(key.into(), value.into());
-        self
-    }
 }
 
 pub trait ModelSession: Send + Sync {
@@ -48,17 +40,6 @@ pub trait Backend: Send + Sync {
         device: &Device,
     ) -> Result<Box<dyn ModelSession>, CoreError> {
         self.load_model_with_config(model_bytes, &SessionConfig::new(device.clone()))
-    }
-
-    fn load_model_from_file(
-        &self,
-        path: &str,
-        device: &Device,
-    ) -> Result<Box<dyn ModelSession>, CoreError> {
-        let bytes = std::fs::read(path).map_err(|e| {
-            CoreError::ModelLoadFailed(format!("Failed to read model file {}: {}", path, e))
-        })?;
-        self.load_model(&bytes, device)
     }
 
     fn load_model_with_config(

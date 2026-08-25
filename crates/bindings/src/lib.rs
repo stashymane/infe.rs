@@ -1,3 +1,7 @@
+#![feature(variant_count)]
+
+#[macro_use]
+mod mirror;
 pub mod backend;
 pub mod device;
 pub mod error;

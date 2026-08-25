@@ -43,7 +43,8 @@ impl MockGpuImageProcessor {
         options: &ProcessingOptions,
     ) -> Result<Box<dyn TensorBuffer>, CoreError> {
         // Output tensor shaped [1, 3, dest_h, dest_w]
-        let shape = TensorShape::from([1, 3, options.dest_h as usize, options.dest_w as usize]);
+        let shape = TensorShape::new([1, 3, options.dest_h as usize, options.dest_w as usize])
+            .expect("valid shape");
         let element_count = shape.element_count();
         let dummy_data = vec![0.5f32; element_count];
         let tensor = MockDeviceTensor::from_f32_slice(self.device.clone(), shape, &dummy_data);
@@ -64,7 +65,7 @@ impl FaceAnalysisPipeline {
         let detector_dev = device.clone();
         let detector_forward = Arc::new(move |_inputs: &[&dyn TensorBuffer]| {
             // Detector outputs 1 face bounding box: [x, y, w, h]
-            let shape = TensorShape::from([1, 4]);
+            let shape = TensorShape::new([1, 4]).expect("valid shape");
             let boxes = vec![50.0f32, 50.0, 100.0, 100.0];
             let tensor = MockDeviceTensor::from_f32_slice(detector_dev.clone(), shape, &boxes);
             Ok(vec![Box::new(tensor) as Box<dyn TensorBuffer>])
@@ -72,8 +73,8 @@ impl FaceAnalysisPipeline {
 
         let detector_session = Box::new(MockSession::new(
             device.clone(),
-            vec![TensorShape::from([1, 3, 256, 256])],
-            vec![TensorShape::from([1, 4])],
+            vec![TensorShape::new([1, 3, 256, 256]).expect("valid shape")],
+            vec![TensorShape::new([1, 4]).expect("valid shape")],
             detector_forward,
         ));
 
@@ -81,7 +82,7 @@ impl FaceAnalysisPipeline {
         let landmarker_dev = device.clone();
         let landmarker_forward = Arc::new(move |_inputs: &[&dyn TensorBuffer]| {
             // Landmarker outputs 5 facial points (10 f32 values)
-            let shape = TensorShape::from([1, 10]);
+            let shape = TensorShape::new([1, 10]).expect("valid shape");
             let points = vec![
                 60.0f32, 60.0, // Left eye
                 80.0, 60.0,    // Right eye
@@ -95,8 +96,8 @@ impl FaceAnalysisPipeline {
 
         let landmarker_session = Box::new(MockSession::new(
             device.clone(),
-            vec![TensorShape::from([1, 3, 192, 192])],
-            vec![TensorShape::from([1, 10])],
+            vec![TensorShape::new([1, 3, 192, 192]).expect("valid shape")],
+            vec![TensorShape::new([1, 10]).expect("valid shape")],
             landmarker_forward,
         ));
 
@@ -125,9 +126,9 @@ impl FaceAnalysisPipeline {
                 crop_h: 0,
                 dest_w: 256,
                 dest_h: 256,
-                src_format: ImageFormat::RGB888,
-                dest_format: ImageFormat::RGBF32,
-                fit_mode: FitMode::CONTAIN,
+                src_format: ImageFormat::Rgb888,
+                dest_format: ImageFormat::Rgbf32,
+                fit_mode: FitMode::Contain,
                 rotation: Rotation::None,
             },
         )?;
@@ -160,9 +161,9 @@ impl FaceAnalysisPipeline {
                     crop_h: bbox.height as u32,
                     dest_w: 192,
                     dest_h: 192,
-                    src_format: ImageFormat::RGB888,
-                    dest_format: ImageFormat::RGBF32,
-                    fit_mode: FitMode::STRETCH,
+                    src_format: ImageFormat::Rgb888,
+                    dest_format: ImageFormat::Rgbf32,
+                    fit_mode: FitMode::Stretch,
                     rotation: Rotation::None,
                 },
             )?;
@@ -200,7 +201,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create a 1920x1080 input image buffer
     let raw_image_bytes = vec![128u8; 1920 * 1080 * 3];
-    let input_frame = CpuImageBuffer::new(1920, 1080, ImageFormat::RGB888, raw_image_bytes)?;
+    let input_frame = CpuImageBuffer::new(1920, 1080, ImageFormat::Rgb888, raw_image_bytes)?;
 
     println!("Running frame through FaceAnalysisPipeline...");
     let result = pipeline.process_frame(&input_frame)?;

@@ -1,7 +1,9 @@
+#![cfg(feature = "vulkan")]
+
 use infers_core::{CpuImageBuffer, DataType, Device, ImageFormat, ProcessingOptions};
 use infers_gpu::VulkanContext;
 use processing_core::FitMode;
-use processing_gpu::GpuImageProcessor;
+use processing::GpuImageProcessor;
 use std::sync::Arc;
 
 fn rgb_to_nv12(width: u32, height: u32, rgb: &[u8]) -> Vec<u8> {
@@ -80,7 +82,7 @@ fn test_gpu_nv12_to_rgb888() {
         }
     }
     let nv12 = rgb_to_nv12(width, height, &rgb);
-    let input = CpuImageBuffer::new(width, height, ImageFormat::NV12, nv12).unwrap();
+    let input = CpuImageBuffer::new(width, height, ImageFormat::Nv12, nv12).unwrap();
     let processor = match try_gpu_processor() {
         Some(p) => p,
         None => {
@@ -93,8 +95,8 @@ fn test_gpu_nv12_to_rgb888() {
         src_h: height,
         dest_w: width,
         dest_h: height,
-        dest_format: ImageFormat::RGB888,
-        fit_mode: FitMode::STRETCH,
+        dest_format: ImageFormat::Rgb888,
+        fit_mode: FitMode::Stretch,
         ..Default::default()
     };
     let out = processor.process(&input, &opts).unwrap();
@@ -113,7 +115,7 @@ fn test_gpu_nv12_to_rgb888() {
 fn test_gpu_i420_to_rgbf32() {
     let width = 16u32;
     let height = 16u32;
-    let rgb = vec![200u8, 40, 40].repeat((width * height) as usize);
+    let rgb = [200u8, 40, 40].repeat((width * height) as usize);
     let i420 = rgb_to_i420(width, height, &rgb);
     let input = CpuImageBuffer::new(width, height, ImageFormat::I420, i420).unwrap();
     let processor = match try_gpu_processor() {
@@ -128,8 +130,8 @@ fn test_gpu_i420_to_rgbf32() {
         src_h: height,
         dest_w: 8,
         dest_h: 8,
-        dest_format: ImageFormat::RGBF32,
-        fit_mode: FitMode::STRETCH,
+        dest_format: ImageFormat::Rgbf32,
+        fit_mode: FitMode::Stretch,
         ..Default::default()
     };
     let out = processor.process(&input, &opts).unwrap();

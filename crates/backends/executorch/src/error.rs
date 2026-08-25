@@ -1,4 +1,4 @@
-use infers_core::{CoreError, DataType, Device};
+use infers_core::{CoreError, DataType};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -9,23 +9,11 @@ pub enum ExecuTorchError {
     #[error("Method '{0}' not found in ExecuTorch program")]
     MethodNotFound(String),
 
-    #[error("Device mismatch: expected device {expected:?}, but received input on {actual:?}")]
-    DeviceMismatch {
-        expected: Device,
-        actual: Device,
-    },
-
-    #[error("Tensor shape mismatch: expected {expected}, got {actual}")]
-    ShapeMismatch { expected: String, actual: String },
-
     #[error("Tensor data type mismatch: expected {expected:?}, got {actual:?}")]
     DataTypeMismatch {
         expected: DataType,
         actual: DataType,
     },
-
-    #[error("Input count mismatch: expected {expected}, got {actual}")]
-    InputCountMismatch { expected: usize, actual: usize },
 
     #[error("Execution error: {0}")]
     Execution(String),
@@ -46,20 +34,8 @@ pub enum ExecuTorchError {
 impl From<ExecuTorchError> for CoreError {
     fn from(err: ExecuTorchError) -> Self {
         match err {
-            ExecuTorchError::DeviceMismatch { expected, actual } => {
-                CoreError::DeviceMismatch { expected, actual }
-            }
-            ExecuTorchError::ShapeMismatch { expected, actual } => {
-                CoreError::InvalidShape(format!("Expected shape {}, got {}", expected, actual))
-            }
             ExecuTorchError::DataTypeMismatch { expected, actual } => {
                 CoreError::InvalidDataType { expected, actual }
-            }
-            ExecuTorchError::InputCountMismatch { expected, actual } => {
-                CoreError::InferenceFailed(format!(
-                    "Input count mismatch: expected {}, got {}",
-                    expected, actual
-                ))
             }
             ExecuTorchError::MethodNotFound(name) => {
                 CoreError::ModelLoadFailed(format!("Method '{}' not found", name))

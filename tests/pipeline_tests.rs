@@ -1,5 +1,3 @@
-mod common;
-
 use std::sync::Arc;
 
 use infers::{
@@ -7,7 +5,10 @@ use infers::{
     ExecuTorchBackendConfig, GpuImageProcessor, ModelSession, VulkanContext,
 };
 use infers_gpu::ash::vk::Handle;
-use infers_test_utils::MockBackend;
+use infers_test_utils::{
+    camera_frame_640x480, detector_preprocess_options, landmarker_preprocess_options,
+    mock_gpu_detector, mock_gpu_landmarker, read_f32_output, MockBackend,
+};
 
 #[test]
 fn test_cpu_face_pipeline() {
@@ -28,9 +29,9 @@ fn test_cpu_face_pipeline() {
         )
         .expect("mock landmarker");
 
-    let frame = common::camera_frame_640x480(128);
+    let frame = camera_frame_640x480(128);
     let detector_input = image_proc
-        .process(&frame, &common::detector_preprocess_options(224))
+        .process(&frame, &detector_preprocess_options(224))
         .expect("detector preprocess");
 
     assert_eq!(detector_input.shape().dims(), &[1, 224, 224, 3]);
@@ -40,20 +41,20 @@ fn test_cpu_face_pipeline() {
     let detector_outputs = detector
         .run(&[detector_input.as_ref()])
         .expect("detector run");
-    let boxes = common::read_f32_output(&detector_outputs).expect("read boxes");
+    let boxes = read_f32_output(&detector_outputs).expect("read boxes");
     assert_eq!(boxes.len(), 4);
 
     let landmarker_input = image_proc
         .process(
             &frame,
-            &common::landmarker_preprocess_options(boxes[0], boxes[1], boxes[2], boxes[3], 224),
+            &landmarker_preprocess_options(boxes[0], boxes[1], boxes[2], boxes[3], 224),
         )
         .expect("landmarker preprocess");
 
     let landmarker_outputs = landmarker
         .run(&[landmarker_input.as_ref()])
         .expect("landmarker run");
-    let landmarks = common::read_f32_output(&landmarker_outputs).expect("read landmarks");
+    let landmarks = read_f32_output(&landmarker_outputs).expect("read landmarks");
     assert_eq!(landmarks.len(), 4);
 }
 
@@ -68,9 +69,9 @@ fn test_cpu_tensor_rejected_by_gpu_session() {
         .expect("mock gpu session");
 
     let image_proc = CpuImageProcessor::new();
-    let frame = common::camera_frame_640x480(200);
+    let frame = camera_frame_640x480(200);
     let cpu_tensor = image_proc
-        .process(&frame, &common::detector_preprocess_options(224))
+        .process(&frame, &detector_preprocess_options(224))
         .expect("cpu preprocess");
 
     let err = gpu_session.run(&[cpu_tensor.as_ref()]).unwrap_err();
@@ -109,8 +110,8 @@ fn test_gpu_shared_vulkan_face_pipeline() {
         return;
     };
 
-    let mut detector = common::mock_gpu_detector(224, gpu.clone());
-    let mut landmarker = common::mock_gpu_landmarker(224, gpu.clone());
+    let mut detector = mock_gpu_detector(224, gpu.clone());
+    let mut landmarker = mock_gpu_landmarker(224, gpu.clone());
 
     let image_proc = GpuImageProcessor::new(Arc::clone(&ctx)).expect("gpu processor");
     assert_eq!(
@@ -119,9 +120,9 @@ fn test_gpu_shared_vulkan_face_pipeline() {
         "processor must use the shared Vulkan context"
     );
 
-    let frame = common::camera_frame_640x480(128);
+    let frame = camera_frame_640x480(128);
     let detector_input = image_proc
-        .process(&frame, &common::detector_preprocess_options(224))
+        .process(&frame, &detector_preprocess_options(224))
         .expect("gpu detector preprocess");
 
     assert_eq!(detector_input.device(), &gpu);
@@ -131,13 +132,13 @@ fn test_gpu_shared_vulkan_face_pipeline() {
     let detector_outputs = detector
         .run(&[detector_input.as_ref()])
         .expect("gpu detector run");
-    let boxes = common::read_f32_output(&detector_outputs).expect("read boxes");
+    let boxes = read_f32_output(&detector_outputs).expect("read boxes");
     assert_eq!(boxes, vec![10.0, 20.0, 100.0, 120.0]);
 
     let landmarker_input = image_proc
         .process(
             &frame,
-            &common::landmarker_preprocess_options(boxes[0], boxes[1], boxes[2], boxes[3], 224),
+            &landmarker_preprocess_options(boxes[0], boxes[1], boxes[2], boxes[3], 224),
         )
         .expect("gpu landmarker preprocess");
     assert_eq!(landmarker_input.device(), &gpu);
@@ -145,7 +146,7 @@ fn test_gpu_shared_vulkan_face_pipeline() {
     let landmarker_outputs = landmarker
         .run(&[landmarker_input.as_ref()])
         .expect("gpu landmarker run");
-    let landmarks = common::read_f32_output(&landmarker_outputs).expect("read landmarks");
+    let landmarks = read_f32_output(&landmarker_outputs).expect("read landmarks");
     assert_eq!(landmarks, vec![30.0, 40.0, 50.0, 60.0]);
 
     // Teardown order: sessions and processor before the shared context Arc.
@@ -182,8 +183,8 @@ fn test_execu_torch_vulkan_config_uses_same_context_as_processor() {
     assert!(result.is_err());
 
     let _ = image_proc.process(
-        &common::camera_frame_640x480(64),
-        &common::detector_preprocess_options(64),
+        &camera_frame_640x480(64),
+        &detector_preprocess_options(64),
     );
 
     drop(image_proc);

@@ -1,13 +1,12 @@
 //! GPU-direct ExecuTorch Vulkan input path (Phase 1).
 
 use crate::error::ExecuTorchError;
-use crate::tensor::{ExecuTorchTensorBuffer, scalar_type_to_data_type};
-use executorch::evalue::{EValue, IntoEValue, Tag};
-use executorch::ndarray;
-use executorch::tensor::{TensorPtr, TensorPtrBuilder, View};
-use infers_core::{CoreError, DataType, Device, TensorBuffer, TensorShape};
+pub use crate::tensor_ptr::{evalue_to_tensor_buffer, OwnedTensorPtr};
+use crate::tensor_ptr::tensor_ptr_from_host;
+use executorch::tensor::{TensorPtrBuilder, View};
+use infers_core::{CoreError, DataType, TensorBuffer, TensorShape};
 use infers_gpu::{VulkanBufferHandle, VulkanContext};
-use processing_gpu::GpuTensorBuffer;
+use processing::GpuTensorBuffer;
 use std::sync::Arc;
 
 #[link(name = "infers_et_vulkan_ffi")]
@@ -24,16 +23,26 @@ unsafe extern "C" {
 }
 
 /// Handle to a Vulkan-delegated model's `ComputeGraph`, captured after `load_method`.
+///
+/// Borrowed, not owned: the graph belongs to the ExecuTorch `Module` and this
+/// handle is only valid while that module is loaded.
 #[derive(Clone, Copy)]
 pub struct VulkanComputeGraph {
     ptr: *mut std::ffi::c_void,
 }
 
+// SAFETY: the pointer refers to a `ComputeGraph` owned by the ExecuTorch module.
+// Every use goes through `staging_target`, which only reads buffer metadata, and
+// the session serialises calls behind the mutex guarding its module, so the
+// graph is never touched concurrently through this handle.
 unsafe impl Send for VulkanComputeGraph {}
 unsafe impl Sync for VulkanComputeGraph {}
 
 impl VulkanComputeGraph {
+    /// Claim the graph registered by the most recent Vulkan `load_method`, if any.
     pub fn take_registered() -> Option<Self> {
+        // SAFETY: returns either null or a pointer to the graph owned by the
+        // module just loaded; the callee only reads a global set by the delegate.
         let ptr = unsafe { infers_et_take_registered_vulkan_graph() };
         if ptr.is_null() {
             None
@@ -42,10 +51,17 @@ impl VulkanComputeGraph {
         }
     }
 
-    fn staging_target(&self, input_index: usize) -> Result<(VulkanBufferHandle, u64), ExecuTorchError> {
+    fn staging_target(
+        &self,
+        input_index: usize,
+    ) -> Result<(VulkanBufferHandle, u64), ExecuTorchError> {
         let mut buffer = infers_gpu::ash::vk::Buffer::null();
         let mut offset = 0u64;
         let mut size = 0u64;
+        // SAFETY: `self.ptr` is non-null and refers to a graph that is still
+        // loaded (see the type's docs); the three out-parameters are valid,
+        // uniquely borrowed locals. The callee reports failure via its return
+        // code rather than unwinding.
         let rc = unsafe {
             infers_et_vulkan_input_staging_buffer(
                 self.ptr,
@@ -103,31 +119,57 @@ impl HostVisibleInput {
         context: &VulkanContext,
         src: VulkanBufferHandle,
     ) -> Result<(), ExecuTorchError> {
-        let copy_size = src.size.min(self.buffer.size);
+        // This buffer was sized to hold the whole tensor, so a shorter source
+        // would leave part of the input undefined. Truncating the copy silently
+        // would feed the model partial data, so reject it instead.
+        require_transfer_bytes(self.buffer.size, src.size, "GPU input buffer")
+            .map_err(|err| ExecuTorchError::Execution(err.to_string()))?;
         context
-            .copy_buffer(src.buffer, src.offset, self.buffer.buffer, 0, copy_size)
+            .copy_buffer(src.buffer, src.offset, self.buffer.buffer, 0, self.buffer.size)
             .map_err(|err| ExecuTorchError::Execution(err.to_string()))
     }
 
+    /// Build an ExecuTorch tensor that points directly at this buffer's mapping.
+    ///
+    /// The returned [`OwnedTensorPtr`] is typed `'static` because ExecuTorch has
+    /// no lifetime parameter to thread the borrow through, so the pointer's
+    /// validity is this module's responsibility: the returned value must not
+    /// outlive `self`. [`GpuInputPlan`] upholds that by owning both and dropping
+    /// the tensor pointers first.
     fn tensor_ptr(&self) -> Result<OwnedTensorPtr, CoreError> {
-        let mapped = self
-            .buffer
-            .allocation
-            .mapped_slice()
-            .ok_or_else(|| {
-                CoreError::BufferTransferFailed("ET host-visible input is not mapped".into())
-            })?;
-        let dims: Vec<i32> = self
-            .shape
-            .dims()
-            .iter()
-            .map(|&d| d as i32)
-            .collect();
+        let mapped = self.buffer.allocation.mapped_slice().ok_or_else(|| {
+            CoreError::BufferTransferFailed("ET host-visible input is not mapped".into())
+        })?;
+
+        let needed = self.shape.byte_size(self.dtype);
+        if mapped.len() < needed {
+            return Err(CoreError::BufferTransferFailed(format!(
+                "ET host-visible mapping is {} bytes, need {}",
+                mapped.len(),
+                needed
+            )));
+        }
+
+        let dims: Vec<i32> = self.shape.dims().iter().map(|&d| d as i32).collect();
         match self.dtype {
             DataType::F32 => {
-                let ptr = mapped.as_ptr() as *const f32;
+                let ptr = mapped.as_ptr();
+                // Reading `f32` through a misaligned pointer is undefined
+                // behaviour. Vulkan guarantees generous alignment for mapped
+                // memory, but verify rather than assume.
+                if !ptr.cast::<f32>().is_aligned() {
+                    return Err(CoreError::BufferTransferFailed(
+                        "ET host-visible mapping is not f32-aligned".into(),
+                    ));
+                }
+                // SAFETY: `ptr` is the start of a mapping of at least `needed`
+                // bytes (checked above), correctly aligned for `f32`, and stays
+                // valid and unaliased while `self` lives. `dims` describes
+                // exactly `needed` bytes, so ExecuTorch reads within the
+                // mapping. See this method's doc comment for the lifetime
+                // obligation the `'static` type erases.
                 let ptr = unsafe {
-                    TensorPtrBuilder::<View<f32>>::from_ptr(ptr, dims.clone())
+                    TensorPtrBuilder::<View<f32>>::from_ptr(ptr.cast::<f32>(), dims)
                         .build()
                         .map_err(|e| {
                             CoreError::InferenceFailed(format!("TensorPtr build failed: {e:?}"))
@@ -136,9 +178,9 @@ impl HostVisibleInput {
                 Ok(OwnedTensorPtr::F32(ptr))
             }
             DataType::U8 => {
-                let ptr = mapped.as_ptr();
+                // SAFETY: as above; `u8` has no alignment requirement.
                 let ptr = unsafe {
-                    TensorPtrBuilder::<View<u8>>::from_ptr(ptr, dims.clone())
+                    TensorPtrBuilder::<View<u8>>::from_ptr(mapped.as_ptr(), dims)
                         .build()
                         .map_err(|e| {
                             CoreError::InferenceFailed(format!("TensorPtr build failed: {e:?}"))
@@ -153,29 +195,29 @@ impl HostVisibleInput {
     }
 }
 
-pub enum OwnedTensorPtr {
-    F32(TensorPtr<'static, View<f32>>),
-    U8(TensorPtr<'static, View<u8>>),
-    I32(TensorPtr<'static, View<i32>>),
-    I64(TensorPtr<'static, View<i64>>),
-}
-
-impl OwnedTensorPtr {
-    pub fn into_evalue(&self) -> EValue<'_> {
-        match self {
-            Self::F32(p) => p.into_evalue(),
-            Self::U8(p) => p.into_evalue(),
-            Self::I32(p) => p.into_evalue(),
-            Self::I64(p) => p.into_evalue(),
-        }
-    }
-}
-
+/// Tell the patched Vulkan delegate which inputs already have their staging
+/// they borrow from.
+///
+/// `tensor_ptrs` may contain raw pointers into `host_fallback`'s mapped memory
+/// (see [`HostVisibleInput::tensor_ptr`]), typed `'static` because ExecuTorch
+/// cannot express the borrow. The [`Drop`] impl releases the tensor pointers
+/// before the buffers they point into, so the ordering does not silently depend
+/// on field declaration order.
 pub struct GpuInputPlan {
     pub tensor_ptrs: Vec<OwnedTensorPtr>,
     pub skip_staging_mask: u64,
-    _host_fallback: Vec<HostVisibleInput>,
+    host_fallback: Vec<HostVisibleInput>,
+    /// Keeps caller-supplied GPU buffers alive for the duration of the call.
     _gpu_pins: Vec<GpuTensorBuffer>,
+}
+
+impl Drop for GpuInputPlan {
+    fn drop(&mut self) {
+        // Drop the tensor pointers first: some alias `host_fallback`'s mappings,
+        // which are unmapped when those buffers are freed.
+        self.tensor_ptrs.clear();
+        self.host_fallback.clear();
+    }
 }
 
 pub fn prepare_inputs(
@@ -195,22 +237,29 @@ pub fn prepare_inputs(
             })?;
             gpu_pins.push(gpu.clone());
 
-            if let Some(graph) = vulkan_graph {
-                if let Ok((dst, staging_size)) = graph.staging_target(index) {
-                    let copy_size = src.size.min(staging_size);
-                    context
-                        .copy_buffer(
-                            src.buffer,
-                            src.offset,
-                            dst.buffer,
-                            dst.offset,
-                            copy_size,
-                        )
-                        .map_err(|err| CoreError::BufferTransferFailed(err.to_string()))?;
-                    skip_staging_mask |= 1u64 << index;
-                    tensor_ptrs.push(placeholder_tensor_ptr(*input)?);
-                    continue;
-                }
+            let needed = input.shape().byte_size(input.dtype()) as u64;
+
+            // `skip_staging_mask` only fits one bit per input, so inputs beyond
+            // that cannot be marked and must take the host-visible path.
+            let staging = if index < u64::BITS as usize {
+                vulkan_graph.and_then(|graph| graph.staging_target(index).ok())
+            } else {
+                None
+            };
+
+            if let Some((dst, staging_size)) = staging {
+                require_transfer_bytes(needed, src.size, &format!("input {index} source"))?;
+                require_transfer_bytes(
+                    needed,
+                    staging_size,
+                    &format!("input {index} ET-VK staging"),
+                )?;
+                context
+                    .copy_buffer(src.buffer, src.offset, dst.buffer, dst.offset, needed)
+                    .map_err(|err| CoreError::BufferTransferFailed(err.to_string()))?;
+                skip_staging_mask |= 1u64 << index;
+                tensor_ptrs.push(placeholder_tensor_ptr(*input)?);
+                continue;
             }
 
             let host = HostVisibleInput::new(context, input.shape().clone(), input.dtype())?;
@@ -221,45 +270,61 @@ pub fn prepare_inputs(
             continue;
         }
 
-        tensor_ptrs.push(cpu_tensor_ptr(*input)?);
+        tensor_ptrs.push(tensor_ptr_from_host(*input)?);
     }
 
     Ok(GpuInputPlan {
         tensor_ptrs,
         skip_staging_mask,
-        _host_fallback: host_fallback,
+        host_fallback,
         _gpu_pins: gpu_pins,
     })
 }
 
+/// Tell the patched Vulkan delegate which inputs already have their staging
+/// buffers filled, so it skips its own host-to-staging copy.
+///
+/// The mask is thread-local on the C++ side, so this must be called on the same
+/// thread that goes on to run `execute`.
 pub fn set_skip_staging_copy_mask(mask: u64) {
+    // SAFETY: the callee only stores `mask` in a thread-local and cannot fail or
+    // unwind.
     unsafe { infers_et_vulkan_set_skip_staging_copy_mask(mask) };
 }
 
+/// A correctly-shaped tensor whose data the delegate never reads.
+///
+/// Used for inputs whose bytes were copied straight into the delegate's staging
+/// buffer; the corresponding bit in the skip-staging mask tells the patched
+/// backend to ignore this tensor's memory and use what is already staged.
+/// A minimal placeholder tensor for skip-staging inputs. The patched delegate
+/// reads staged GPU memory instead; ExecuTorch still requires a tensor with
+/// matching rank/dtype but does not validate the data buffer size when the
+/// skip-staging mask is set.
 fn placeholder_tensor_ptr(input: &dyn TensorBuffer) -> Result<OwnedTensorPtr, CoreError> {
-    let count = input.shape().element_count();
+    let dims: Vec<i32> = input.shape().dims().iter().map(|&d| d as i32).collect();
     match input.dtype() {
         DataType::F32 => {
-            let data = vec![0.0f32; count];
-            let dims: Vec<usize> = input.shape().dims().to_vec();
-            let arr = ndarray::ArrayD::from_shape_vec(ndarray::IxDyn(&dims), data)
-                .map_err(|e| CoreError::InferenceFailed(e.to_string()))?;
-            Ok(OwnedTensorPtr::F32(
-                TensorPtr::from_array(arr).map_err(|e| {
-                    CoreError::InferenceFailed(format!("TensorPtr::from_array failed: {:?}", e))
-                })?,
-            ))
+            let ptr = unsafe {
+                TensorPtrBuilder::<View<f32>>::from_vec(vec![0.0f32])
+                    .sizes(dims.iter().copied())
+                    .build()
+                    .map_err(|e| {
+                        CoreError::InferenceFailed(format!("TensorPtr build failed: {e:?}"))
+                    })?
+            };
+            Ok(OwnedTensorPtr::F32(ptr))
         }
         DataType::U8 => {
-            let data = vec![0u8; count];
-            let dims: Vec<usize> = input.shape().dims().to_vec();
-            let arr = ndarray::ArrayD::from_shape_vec(ndarray::IxDyn(&dims), data)
-                .map_err(|e| CoreError::InferenceFailed(e.to_string()))?;
-            Ok(OwnedTensorPtr::U8(
-                TensorPtr::from_array(arr).map_err(|e| {
-                    CoreError::InferenceFailed(format!("TensorPtr::from_array failed: {:?}", e))
-                })?,
-            ))
+            let ptr = unsafe {
+                TensorPtrBuilder::<View<u8>>::from_vec(vec![0u8])
+                    .sizes(dims.iter().copied())
+                    .build()
+                    .map_err(|e| {
+                        CoreError::InferenceFailed(format!("TensorPtr build failed: {e:?}"))
+                    })?
+            };
+            Ok(OwnedTensorPtr::U8(ptr))
         }
         other => Err(CoreError::InferenceFailed(format!(
             "Unsupported placeholder dtype: {other:?}"
@@ -267,124 +332,16 @@ fn placeholder_tensor_ptr(input: &dyn TensorBuffer) -> Result<OwnedTensorPtr, Co
     }
 }
 
-fn cpu_tensor_ptr(input: &dyn TensorBuffer) -> Result<OwnedTensorPtr, CoreError> {
-    let host = input.read_to_cpu()?;
-    let dims: Vec<usize> = host.shape().dims().to_vec();
-    match host.dtype() {
-        DataType::F32 => {
-            let data = bytes_as_vec_f32(host.as_bytes(), host.shape().element_count())?;
-            let arr = ndarray::ArrayD::from_shape_vec(ndarray::IxDyn(&dims), data)
-                .map_err(|e| CoreError::InferenceFailed(e.to_string()))?;
-            Ok(OwnedTensorPtr::F32(
-                TensorPtr::from_array(arr).map_err(|e| {
-                    CoreError::InferenceFailed(format!("TensorPtr::from_array failed: {:?}", e))
-                })?,
-            ))
-        }
-        DataType::U8 => {
-            let arr = ndarray::ArrayD::from_shape_vec(ndarray::IxDyn(&dims), host.as_bytes().to_vec())
-                .map_err(|e| CoreError::InferenceFailed(e.to_string()))?;
-            Ok(OwnedTensorPtr::U8(
-                TensorPtr::from_array(arr).map_err(|e| {
-                    CoreError::InferenceFailed(format!("TensorPtr::from_array failed: {:?}", e))
-                })?,
-            ))
-        }
-        DataType::I32 => {
-            let data = bytes_as_vec_i32(host.as_bytes(), host.shape().element_count())?;
-            let arr = ndarray::ArrayD::from_shape_vec(ndarray::IxDyn(&dims), data)
-                .map_err(|e| CoreError::InferenceFailed(e.to_string()))?;
-            Ok(OwnedTensorPtr::I32(
-                TensorPtr::from_array(arr).map_err(|e| {
-                    CoreError::InferenceFailed(format!("TensorPtr::from_array failed: {:?}", e))
-                })?,
-            ))
-        }
-        DataType::I64 => {
-            let data = bytes_as_vec_i64(host.as_bytes(), host.shape().element_count())?;
-            let arr = ndarray::ArrayD::from_shape_vec(ndarray::IxDyn(&dims), data)
-                .map_err(|e| CoreError::InferenceFailed(e.to_string()))?;
-            Ok(OwnedTensorPtr::I64(
-                TensorPtr::from_array(arr).map_err(|e| {
-                    CoreError::InferenceFailed(format!("TensorPtr::from_array failed: {:?}", e))
-                })?,
-            ))
-        }
-        other => Err(CoreError::InferenceFailed(format!(
-            "Unsupported input dtype for ExecuTorch Module: {:?}",
-            other
-        ))),
-    }
-}
-
-fn bytes_as_vec_f32(bytes: &[u8], count: usize) -> Result<Vec<f32>, CoreError> {
-    if bytes.len() < count * 4 {
-        return Err(CoreError::BufferTransferFailed(
-            "f32 buffer too small".into(),
-        ));
-    }
-    let mut out = Vec::with_capacity(count);
-    for chunk in bytes.chunks_exact(4).take(count) {
-        out.push(f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]));
-    }
-    Ok(out)
-}
-
-fn bytes_as_vec_i32(bytes: &[u8], count: usize) -> Result<Vec<i32>, CoreError> {
-    if bytes.len() < count * 4 {
-        return Err(CoreError::BufferTransferFailed(
-            "i32 buffer too small".into(),
-        ));
-    }
-    let mut out = Vec::with_capacity(count);
-    for chunk in bytes.chunks_exact(4).take(count) {
-        out.push(i32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]));
-    }
-    Ok(out)
-}
-
-fn bytes_as_vec_i64(bytes: &[u8], count: usize) -> Result<Vec<i64>, CoreError> {
-    if bytes.len() < count * 8 {
-        return Err(CoreError::BufferTransferFailed(
-            "i64 buffer too small".into(),
-        ));
-    }
-    let mut out = Vec::with_capacity(count);
-    for chunk in bytes.chunks_exact(8).take(count) {
-        out.push(i64::from_le_bytes(chunk.try_into().unwrap()));
-    }
-    Ok(out)
-}
-
-pub fn evalue_to_tensor_buffer(
-    value: &EValue<'_>,
-    device: &Device,
-    desc: &crate::program::TensorDescriptor,
-) -> Result<ExecuTorchTensorBuffer, ExecuTorchError> {
-    if value.tag() != Tag::Tensor {
-        return Err(ExecuTorchError::Execution(format!(
-            "Expected tensor output for '{}', got {:?}",
-            desc.name,
-            value.tag()
-        )));
-    }
-    let tensor = value.as_tensor();
-    let nbytes = tensor.nbytes();
-    let ptr = tensor.as_data_ptr_raw() as *const u8;
-    if ptr.is_null() && nbytes > 0 {
-        return Err(ExecuTorchError::BufferError(
-            "Output tensor has null data pointer".into(),
-        ));
-    }
-    let bytes = if nbytes == 0 {
-        Vec::new()
+fn require_transfer_bytes(
+    needed: u64,
+    available: u64,
+    label: &str,
+) -> Result<(), CoreError> {
+    if available < needed {
+        Err(CoreError::BufferTransferFailed(format!(
+            "{label} needs {needed} bytes but only {available} are available"
+        )))
     } else {
-        unsafe { std::slice::from_raw_parts(ptr, nbytes).to_vec() }
-    };
-
-    let sizes = tensor.sizes();
-    let shape = TensorShape::new(sizes.iter().map(|&d| d as usize).collect::<Vec<_>>())?;
-    let dtype = scalar_type_to_data_type(tensor.scalar_type())?;
-
-    ExecuTorchTensorBuffer::new(device.clone(), shape, dtype, bytes)
+        Ok(())
+    }
 }

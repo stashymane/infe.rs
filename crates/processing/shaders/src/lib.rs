@@ -153,9 +153,9 @@ fn sample_i420_bilinear(src: &[u8], src_w: u32, src_h: u32, fx: f32, fy: f32) ->
 
 fn sample_src(src: &[u8], params: &ProcessingOptions, fx: f32, fy: f32) -> (f32, f32, f32) {
     match params.src_format {
-        ImageFormat::RGB888 => sample_rgb888_bilinear(src, params.src_w, params.src_h, fx, fy),
-        ImageFormat::RGBF32 => (0.0, 0.0, 0.0),
-        ImageFormat::NV12 => sample_nv12_bilinear(src, params.src_w, params.src_h, fx, fy),
+        ImageFormat::Rgb888 => sample_rgb888_bilinear(src, params.src_w, params.src_h, fx, fy),
+        ImageFormat::Rgbf32 => (0.0, 0.0, 0.0),
+        ImageFormat::Nv12 => sample_nv12_bilinear(src, params.src_w, params.src_h, fx, fy),
         ImageFormat::I420 => sample_i420_bilinear(src, params.src_w, params.src_h, fx, fy),
     }
 }
@@ -167,16 +167,16 @@ fn map_dst_to_src(params: &ProcessingOptions, dx: f32, dy: f32) -> (f32, f32, bo
     };
 
     let (rot_w, rot_h) = match params.rotation {
-        Rotation::None | Rotation::R180DEG => (crop_w, crop_h),
-        Rotation::R90DEG | Rotation::R270DEG => (crop_h, crop_w),
+        Rotation::None | Rotation::Rot180 => (crop_w, crop_h),
+        Rotation::Rot90 | Rotation::Rot270 => (crop_h, crop_w),
     };
 
     let dst_w = params.dest_w as f32;
     let dst_h = params.dest_h as f32;
 
     let (scale_x, scale_y, pad_x, pad_y) = match params.fit_mode {
-        FitMode::STRETCH => (dst_w / rot_w, dst_h / rot_h, 0.0, 0.0),
-        FitMode::CONTAIN => {
+        FitMode::Stretch => (dst_w / rot_w, dst_h / rot_h, 0.0, 0.0),
+        FitMode::Contain => {
             let sx = dst_w / rot_w;
             let sy = dst_h / rot_h;
             let s = if sx < sy { sx } else { sy };
@@ -184,7 +184,7 @@ fn map_dst_to_src(params: &ProcessingOptions, dx: f32, dy: f32) -> (f32, f32, bo
             let pad_y = (dst_h - rot_h * s) * 0.5;
             (s, s, pad_x, pad_y)
         }
-        FitMode::CROP => {
+        FitMode::Crop => {
             let sx = dst_w / rot_w;
             let sy = dst_h / rot_h;
             let s = if sx > sy { sx } else { sy };
@@ -207,9 +207,9 @@ fn map_dst_to_src(params: &ProcessingOptions, dx: f32, dy: f32) -> (f32, f32, bo
 
     let (cx, cy) = match params.rotation {
         Rotation::None => (rx, ry),
-        Rotation::R90DEG => (ry, crop_h - (rx + 1.0)),
-        Rotation::R180DEG => (crop_w - (rx + 1.0), crop_h - (ry + 1.0)),
-        Rotation::R270DEG => (crop_w - (ry + 1.0), rx),
+        Rotation::Rot90 => (ry, crop_h - (rx + 1.0)),
+        Rotation::Rot180 => (crop_w - (rx + 1.0), crop_h - (ry + 1.0)),
+        Rotation::Rot270 => (crop_w - (ry + 1.0), rx),
     };
 
     // Clamp rather than reject: rust-gpu rotation can land 1 ulp past the last source row.
@@ -265,9 +265,9 @@ fn write_dest_pixel(
     b: f32,
 ) {
     match params.dest_format {
-        ImageFormat::RGB888 => write_rgb888(dst, params.dest_w, dx, dy, r, g, b),
-        ImageFormat::RGBF32 => write_rgbf32(dst, params.dest_w, dx, dy, r, g, b),
-        ImageFormat::NV12 | ImageFormat::I420 => {}
+        ImageFormat::Rgb888 => write_rgb888(dst, params.dest_w, dx, dy, r, g, b),
+        ImageFormat::Rgbf32 => write_rgbf32(dst, params.dest_w, dx, dy, r, g, b),
+        ImageFormat::Nv12 | ImageFormat::I420 => {}
     }
 }
 

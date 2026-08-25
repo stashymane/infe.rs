@@ -3,11 +3,22 @@ name = "processing"
 version.workspace = true
 edition.workspace = true
 
+[features]
+default = ["vulkan"]
+vulkan = ["dep:infers-gpu", "dep:ash", "dep:spirv-builder"]
+
 [dependencies]
 processing-core = { path = "core" }
-processing-gpu = { path = "gpu" }
 infers-core = { path = "../core" }
-infers-gpu = { path = "../gpu" }
+infers-gpu = { path = "../gpu", optional = true }
+ash = { workspace = true, optional = true }
 fast_image_resize = "5"
 image = { version = "0.25", default-features = false }
-thiserror = "2"
+parking_lot.workspace = true
+thiserror.workspace = true
+
+[build-dependencies]
+spirv-builder = { version = "=0.10.0-alpha.1", optional = true }
+
+[lints]
+workspace = true

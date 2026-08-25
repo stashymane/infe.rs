@@ -7,8 +7,11 @@ edition.workspace = true
 infers-core = { path = "../../core" }
 infers-gpu = { path = "../../gpu" }
 ash = "0.38"
-thiserror = "2"
+thiserror.workspace = true
 
 [target.'cfg(target_os = "android")'.dev-dependencies]
 processing = { path = "../../processing" }
 infers-gpu = { path = "../../gpu" }
+
+[lints]
+workspace = true

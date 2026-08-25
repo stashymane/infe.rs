@@ -29,9 +29,9 @@ fn test_tensor_shape_validation() {
     let shape = TensorShape::new(vec![1, 3, 224, 224]).unwrap();
     assert_eq!(shape.dims(), &[1, 3, 224, 224]);
     assert_eq!(shape.rank(), 4);
-    assert_eq!(shape.element_count(), 1 * 3 * 224 * 224);
-    assert_eq!(shape.byte_size(DataType::F32), 1 * 3 * 224 * 224 * 4);
-    assert_eq!(shape.byte_size(DataType::U8), 1 * 3 * 224 * 224 * 1);
+    assert_eq!(shape.element_count(), 3 * 224 * 224);
+    assert_eq!(shape.byte_size(DataType::F32), 3 * 224 * 224 * 4);
+    assert_eq!(shape.byte_size(DataType::U8), 3 * 224 * 224);
 
     assert!(TensorShape::new(vec![]).is_err());
     assert!(TensorShape::new(vec![1, 0, 224]).is_err());
@@ -39,7 +39,7 @@ fn test_tensor_shape_validation() {
 
 #[test]
 fn test_cpu_tensor_operations() {
-    let shape = TensorShape::from([2, 3]);
+    let shape = TensorShape::new([2, 3]).expect("valid shape");
     let data = vec![1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0];
     let tensor = CpuTensor::from_f32(shape.clone(), data.clone()).unwrap();
 
@@ -56,7 +56,7 @@ fn test_cpu_tensor_operations() {
 #[test]
 fn test_opaque_device_tensor_residency_and_explicit_read() {
     let gpu = Device::gpu(0);
-    let shape = TensorShape::from([1, 4]);
+    let shape = TensorShape::new([1, 4]).expect("valid shape");
     let initial_values = vec![12.5f32, 25.0, 50.0, 100.0];
 
     let gpu_tensor = MockDeviceTensor::from_f32_slice(gpu.clone(), shape.clone(), &initial_values);
@@ -85,8 +85,8 @@ fn test_mock_backend_and_session_device_mismatch() {
 
     // Passing CPU tensor to GPU session must return DeviceMismatch
     let cpu_tensor = CpuTensor::from_f32(
-        TensorShape::from([1, 3, 224, 224]),
-        vec![0.0f32; 1 * 3 * 224 * 224],
+        TensorShape::new([1, 3, 224, 224]).expect("valid shape"),
+        vec![0.0f32; 3 * 224 * 224],
     )
     .unwrap();
 
@@ -102,8 +102,8 @@ fn test_mock_backend_and_session_device_mismatch() {
     // Passing matching GPU tensor must succeed
     let gpu_tensor = MockDeviceTensor::from_f32_slice(
         gpu.clone(),
-        TensorShape::from([1, 3, 224, 224]),
-        &vec![0.0f32; 1 * 3 * 224 * 224],
+        TensorShape::new([1, 3, 224, 224]).expect("valid shape"),
+        &vec![0.0f32; 3 * 224 * 224],
     );
 
     let outputs = session.run(&[&gpu_tensor]).unwrap();
@@ -114,10 +114,19 @@ fn test_mock_backend_and_session_device_mismatch() {
 }
 
 #[test]
+fn test_cpu_image_buffer_rejects_size_mismatch() {
+    let err = CpuImageBuffer::new(64, 64, ImageFormat::Rgb888, vec![0u8; 8]).unwrap_err();
+    match err {
+        CoreError::InvalidArgument(msg) => assert!(msg.contains("size mismatch")),
+        other => panic!("expected InvalidArgument, got {other:?}"),
+    }
+}
+
+#[test]
 fn test_cpu_image_buffer() {
     let raw = vec![255u8; 64 * 64 * 3];
-    let img = CpuImageBuffer::new(64, 64, ImageFormat::RGB888, raw).unwrap();
+    let img = CpuImageBuffer::new(64, 64, ImageFormat::Rgb888, raw).unwrap();
     assert_eq!(img.width(), 64);
     assert_eq!(img.height(), 64);
-    assert_eq!(img.format(), ImageFormat::RGB888);
+    assert_eq!(img.format(), ImageFormat::Rgb888);
 }

@@ -1,3 +1,5 @@
+//! ExecuTorch backend: model loading, Vulkan delegate integration, and tensor bridging.
+
 pub mod backend;
 pub mod config;
 pub mod delegate;
@@ -5,6 +7,7 @@ pub mod error;
 pub mod program;
 pub mod session;
 pub mod tensor;
+mod tensor_ptr;
 #[cfg(feature = "vulkan")]
 pub mod gpu_input;
 #[cfg(feature = "vulkan")]

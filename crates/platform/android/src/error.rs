@@ -3,9 +3,6 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum AndroidPlatformError {
-    #[error("AHardwareBuffer allocation failed with error code {0}")]
-    AllocationFailed(i32),
-
     #[error("AHardwareBuffer lock failed with error code {0}")]
     LockFailed(i32),
 
@@ -21,9 +18,15 @@ pub enum AndroidPlatformError {
     #[error("Vulkan external memory import error: {0}")]
     VulkanImportError(String),
 
-    #[error("JNI error: {0}")]
-    JniError(String),
-
     #[error("Core error: {0}")]
     Core(#[from] CoreError),
+}
+
+impl From<AndroidPlatformError> for CoreError {
+    fn from(err: AndroidPlatformError) -> Self {
+        match err {
+            AndroidPlatformError::Core(c) => c,
+            other => CoreError::Platform(other.to_string()),
+        }
+    }
 }

@@ -1,4 +1,3 @@
-use crate::delegate::ExecuTorchDelegate;
 use crate::error::ExecuTorchError;
 use crate::tensor::scalar_type_to_data_type;
 pub use executorch::data_loader::{BufferDataLoader, DataLoader};
@@ -72,7 +71,6 @@ pub struct MethodDescriptor {
     pub name: String,
     pub inputs: Vec<TensorDescriptor>,
     pub outputs: Vec<TensorDescriptor>,
-    pub delegate: Option<ExecuTorchDelegate>,
 }
 
 impl MethodDescriptor {
@@ -85,7 +83,6 @@ impl MethodDescriptor {
             name: name.into(),
             inputs,
             outputs,
-            delegate: None,
         }
     }
 
@@ -113,7 +110,6 @@ impl MethodDescriptor {
             name,
             inputs,
             outputs,
-            delegate: None,
         })
     }
 }
@@ -125,26 +121,18 @@ pub struct ProgramMetadata {
 }
 
 impl ProgramMetadata {
-    pub fn new() -> Self {
-        Self {
-            methods: HashMap::new(),
-        }
-    }
-
     /// Extract metadata for all methods from a native ExecuTorch Program.
     pub fn from_native_program(program: &NativeProgram<'_>) -> Result<Self, ExecuTorchError> {
         let mut methods = HashMap::new();
         let num_methods = program.num_methods();
 
         for i in 0..num_methods {
-            if let Ok(name) = program.get_method_name(i) {
-                if let Ok(c_name) = std::ffi::CString::new(name) {
-                    if let Ok(meta) = program.method_meta(&c_name) {
-                        if let Ok(method_desc) = MethodDescriptor::from_method_meta(&meta) {
-                            methods.insert(name.to_string(), method_desc);
-                        }
-                    }
-                }
+            if let Ok(name) = program.get_method_name(i)
+                && let Ok(c_name) = std::ffi::CString::new(name)
+                && let Ok(meta) = program.method_meta(&c_name)
+                && let Ok(method_desc) = MethodDescriptor::from_method_meta(&meta)
+            {
+                methods.insert(name.to_string(), method_desc);
             }
         }
 
@@ -159,10 +147,6 @@ impl ProgramMetadata {
             Ok(prog) => Self::from_native_program(&prog),
             Err(e) => Err(ExecuTorchError::Native(e)),
         }
-    }
-
-    pub fn add_method(&mut self, method: MethodDescriptor) {
-        self.methods.insert(method.name.clone(), method);
     }
 
     pub fn method(&self, name: &str) -> Option<&MethodDescriptor> {

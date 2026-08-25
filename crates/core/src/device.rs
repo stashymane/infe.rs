@@ -14,6 +14,7 @@ pub struct Device {
 
 impl Device {
     #[inline]
+    #[must_use]
     pub fn cpu() -> Self {
         Self {
             kind: DeviceKind::Cpu,
@@ -23,6 +24,7 @@ impl Device {
     }
 
     #[inline]
+    #[must_use]
     pub fn gpu(id: usize) -> Self {
         Self {
             kind: DeviceKind::Gpu,
@@ -32,6 +34,7 @@ impl Device {
     }
 
     #[inline]
+    #[must_use]
     pub fn npu(id: usize) -> Self {
         Self {
             kind: DeviceKind::Npu,
@@ -60,4 +63,11 @@ impl std::fmt::Display for Device {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.name)
     }
+}
+
+static CPU_DEVICE: std::sync::OnceLock<Device> = std::sync::OnceLock::new();
+
+#[inline]
+pub(crate) fn cpu_device() -> &'static Device {
+    CPU_DEVICE.get_or_init(Device::cpu)
 }

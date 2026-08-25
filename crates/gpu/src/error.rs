@@ -2,7 +2,7 @@ use infers_core::Device;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
-pub enum GpuContextError {
+pub enum GpuError {
     #[error("Vulkan loader failed: {0}")]
     Loader(String),
 
@@ -25,8 +25,14 @@ pub enum GpuContextError {
     Other(String),
 }
 
-impl From<gpu_allocator::AllocationError> for GpuContextError {
+impl From<gpu_allocator::AllocationError> for GpuError {
     fn from(err: gpu_allocator::AllocationError) -> Self {
-        GpuContextError::Allocator(err.to_string())
+        GpuError::Allocator(err.to_string())
+    }
+}
+
+impl From<GpuError> for infers_core::CoreError {
+    fn from(err: GpuError) -> Self {
+        infers_core::CoreError::Gpu(Box::new(err))
     }
 }

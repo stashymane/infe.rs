@@ -1,9 +1,15 @@
-pub mod cpu;
-pub mod error;
+//! Vulkan image preprocessing and GPU tensor buffers built on a shared [`VulkanContext`].
 
-pub use cpu::{CpuImageProcessor, CpuTensorBuffer};
-pub use error::ProcessingError;
-pub use processing_core as core;
+pub mod cpu;
+
+#[cfg(feature = "vulkan")]
+pub mod gpu;
+
+pub use cpu::CpuImageProcessor;
 pub use processing_core::*;
-pub use processing_gpu::{GpuError, GpuImageProcessor, GpuTensorBuffer, SHADERS};
-pub use infers_gpu::{VulkanContext, VulkanHandles, VulkanSampledImage};
+
+#[cfg(feature = "vulkan")]
+pub use gpu::{GpuImageProcessor, GpuTensorBuffer};
+
+#[cfg(feature = "vulkan")]
+pub use infers_gpu::{GpuError, VulkanContext, VulkanSampledImage};

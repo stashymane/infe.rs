@@ -7,10 +7,12 @@
 //! ends, **while** the shared [`VulkanContext`] is still alive, and only after
 //! all sessions / `Module`s that reference the adapter have been dropped.
 
-use infers_gpu::ash::vk::Handle;
 use infers_gpu::VulkanContext;
-use std::sync::{Arc, Mutex, OnceLock};
+use infers_gpu::ash::vk::Handle;
+use parking_lot::{Mutex, MutexGuard};
+use std::sync::{Arc, OnceLock};
 
+// Implemented in `cpp/vulkan_external_adapter.cpp` against patched ExecuTorch.
 unsafe extern "C" {
     fn infers_et_set_external_vulkan_adapter(
         instance: *mut std::ffi::c_void,
@@ -36,6 +38,16 @@ fn registration_state() -> &'static Mutex<RegistrationState> {
     })
 }
 
+/// Lock the registration state.
+///
+/// Uses a non-poisoning mutex deliberately: if a panic ever unwound while this
+/// lock was held, a poisoning mutex would make every later lock fail, and the
+/// teardown path below would then never call `clear_external_adapter`, leaving
+/// ExecuTorch holding a dangling `VkDevice`.
+fn lock_state() -> MutexGuard<'static, RegistrationState> {
+    registration_state().lock()
+}
+
 /// RAII guard for one live registration of the process-global external adapter.
 ///
 /// Dropping the last guard calls `clear_external_adapter` while this guard still
@@ -54,9 +66,7 @@ impl ExternalAdapterRegistration {
 impl Drop for ExternalAdapterRegistration {
     fn drop(&mut self) {
         let should_clear = {
-            let Ok(mut state) = registration_state().lock() else {
-                return;
-            };
+            let mut state = lock_state();
             if state.count > 0 {
                 state.count -= 1;
             }
@@ -88,23 +98,29 @@ pub fn register_external_adapter(
     context: &Arc<VulkanContext>,
 ) -> Result<ExternalAdapterRegistration, crate::ExecuTorchError> {
     let device_raw = context.device_handle().as_raw();
+
+    // Held across the C++ call so the process-global adapter and this state can
+    // never disagree: if registration fails we return with the state untouched,
+    // and if it succeeds the refcount is bumped before any other thread can
+    // observe a registered adapter with no guard.
+    let mut state = lock_state();
+
+    if let Some(existing) = state.device_raw
+        && existing != device_raw
     {
-        let state = registration_state().lock().map_err(|_| {
-            crate::ExecuTorchError::Execution("Vulkan registration lock poisoned".into())
-        })?;
-        if let Some(existing) = state.device_raw {
-            if existing != device_raw {
-                return Err(crate::ExecuTorchError::Execution(
-                    "ExecuTorch external Vulkan adapter is already registered for a different VkDevice"
-                        .into(),
-                ));
-            }
-        }
+        return Err(crate::ExecuTorchError::Execution(
+            "ExecuTorch external Vulkan adapter is already registered for a different VkDevice"
+                .into(),
+        ));
     }
 
     let instance = context.instance_handle().as_raw() as usize as *mut std::ffi::c_void;
     let physical = context.physical_device().as_raw() as usize as *mut std::ffi::c_void;
     let device = context.device_handle().as_raw() as usize as *mut std::ffi::c_void;
+    // SAFETY: the three handles come from a live `VulkanContext` that this
+    // function's caller keeps alive through the returned guard's `Arc`. The
+    // callee validates them for null and returns null on failure rather than
+    // unwinding.
     let adapter = unsafe { infers_et_set_external_vulkan_adapter(instance, physical, device) };
     if adapter.is_null() {
         return Err(crate::ExecuTorchError::Execution(
@@ -112,13 +128,9 @@ pub fn register_external_adapter(
         ));
     }
 
-    {
-        let mut state = registration_state().lock().map_err(|_| {
-            crate::ExecuTorchError::Execution("Vulkan registration lock poisoned".into())
-        })?;
-        state.device_raw = Some(device_raw);
-        state.count += 1;
-    }
+    state.device_raw = Some(device_raw);
+    state.count += 1;
+    drop(state);
 
     Ok(ExternalAdapterRegistration {
         context: Arc::clone(context),

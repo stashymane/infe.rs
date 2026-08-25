@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use infers_core::{
-    AnyHostTensor, Backend, CoreError, CpuTensor, DataType, Device, ModelSession, SessionConfig,
-    TensorBuffer, TensorShape,
+    AnyHostTensor, Backend, CoreError, CpuImageBuffer, CpuTensor, DataType, Device, FitMode,
+    ImageFormat, ModelSession, ProcessingOptions, Rotation, SessionConfig, TensorBuffer, TensorShape,
 };
 
 /// Simulated device-resident tensor (e.g. on GPU or NPU) for tests and examples.
@@ -15,21 +15,17 @@ pub struct MockDeviceTensor {
 }
 
 impl MockDeviceTensor {
-    pub fn new(device: Device, shape: TensorShape, dtype: DataType, raw_payload: Vec<u8>) -> Self {
-        Self {
-            device,
-            shape,
-            dtype,
-            raw_payload,
-        }
-    }
-
     pub fn from_f32_slice(device: Device, shape: TensorShape, values: &[f32]) -> Self {
         let mut raw_payload = Vec::with_capacity(values.len() * 4);
         for &v in values {
             raw_payload.extend_from_slice(&v.to_ne_bytes());
         }
-        Self::new(device, shape, DataType::F32, raw_payload)
+        Self {
+            device,
+            shape,
+            dtype: DataType::F32,
+            raw_payload,
+        }
     }
 }
 
@@ -173,16 +169,6 @@ impl MockBackend {
             default_forward: None,
         }
     }
-
-    pub fn with_devices(mut self, devices: Vec<Device>) -> Self {
-        self.devices = devices;
-        self
-    }
-
-    pub fn with_default_forward(mut self, forward: ForwardFn) -> Self {
-        self.default_forward = Some(forward);
-        self
-    }
 }
 
 impl Backend for MockBackend {
@@ -202,7 +188,7 @@ impl Backend for MockBackend {
         let forward = self.default_forward.clone().unwrap_or_else(|| {
             let dev = config.device.clone();
             Arc::new(move |_inputs: &[&dyn TensorBuffer]| {
-                let out_shape = TensorShape::from([1, 4]);
+                let out_shape = TensorShape::new([1, 4]).expect("valid shape");
                 let dummy_data = vec![10.0f32, 20.0, 100.0, 150.0];
                 let out_tensor = MockDeviceTensor::from_f32_slice(dev.clone(), out_shape, &dummy_data);
                 Ok(vec![Box::new(out_tensor) as Box<dyn TensorBuffer>])
@@ -211,9 +197,100 @@ impl Backend for MockBackend {
 
         Ok(Box::new(MockSession::new(
             config.device.clone(),
-            vec![TensorShape::from([1, 3, 224, 224])],
-            vec![TensorShape::from([1, 4])],
+            vec![TensorShape::new([1, 3, 224, 224]).expect("valid shape")],
+            vec![TensorShape::new([1, 4]).expect("valid shape")],
             forward,
         )))
     }
+}
+
+/// Solid-color 640×480 RGB camera frame for pipeline tests.
+pub fn camera_frame_640x480(fill: u8) -> CpuImageBuffer {
+    let bytes = vec![fill; 640 * 480 * 3];
+    CpuImageBuffer::new(640, 480, ImageFormat::Rgb888, bytes).expect("valid frame buffer")
+}
+
+pub fn detector_preprocess_options(dest: u32) -> ProcessingOptions {
+    ProcessingOptions {
+        src_w: 640,
+        src_h: 480,
+        crop_x: 0,
+        crop_y: 0,
+        crop_w: 640,
+        crop_h: 480,
+        dest_w: dest,
+        dest_h: dest,
+        src_format: ImageFormat::Rgb888,
+        dest_format: ImageFormat::Rgbf32,
+        fit_mode: FitMode::Contain,
+        rotation: Rotation::None,
+    }
+}
+
+pub fn landmarker_preprocess_options(
+    box_x: f32,
+    box_y: f32,
+    box_w: f32,
+    box_h: f32,
+    dest: u32,
+) -> ProcessingOptions {
+    ProcessingOptions {
+        src_w: 640,
+        src_h: 480,
+        crop_x: box_x.max(0.0) as u32,
+        crop_y: box_y.max(0.0) as u32,
+        crop_w: box_w.max(1.0) as u32,
+        crop_h: box_h.max(1.0) as u32,
+        dest_w: dest,
+        dest_h: dest,
+        src_format: ImageFormat::Rgb888,
+        dest_format: ImageFormat::Rgbf32,
+        fit_mode: FitMode::Stretch,
+        rotation: Rotation::None,
+    }
+}
+
+/// Mock GPU detector: one input `[1, H, W, 3]`, one output `[1, 4]` bounding box.
+pub fn mock_gpu_detector(input_side: u32, device: Device) -> MockSession {
+    let session_device = device.clone();
+    let forward = Arc::new(move |_inputs: &[&dyn TensorBuffer]| {
+        let shape = TensorShape::new([1, 4]).expect("valid shape");
+        let boxes = vec![10.0f32, 20.0, 100.0, 120.0];
+        Ok(vec![Box::new(MockDeviceTensor::from_f32_slice(
+            session_device.clone(),
+            shape,
+            &boxes,
+        )) as Box<dyn TensorBuffer>])
+    });
+    MockSession::new(
+        device,
+        vec![TensorShape::new([1, input_side as usize, input_side as usize, 3]).expect("valid shape")],
+        vec![TensorShape::new([1, 4]).expect("valid shape")],
+        forward,
+    )
+}
+
+/// Mock GPU landmarker: one input `[1, H, W, 3]`, one output `[1, 4]` landmark pairs.
+pub fn mock_gpu_landmarker(input_side: u32, device: Device) -> MockSession {
+    let session_device = device.clone();
+    let forward = Arc::new(move |_inputs: &[&dyn TensorBuffer]| {
+        let shape = TensorShape::new([1, 4]).expect("valid shape");
+        let points = vec![30.0f32, 40.0, 50.0, 60.0];
+        Ok(vec![Box::new(MockDeviceTensor::from_f32_slice(
+            session_device.clone(),
+            shape,
+            &points,
+        )) as Box<dyn TensorBuffer>])
+    });
+    MockSession::new(
+        device,
+        vec![TensorShape::new([1, input_side as usize, input_side as usize, 3]).expect("valid shape")],
+        vec![TensorShape::new([1, 4]).expect("valid shape")],
+        forward,
+    )
+}
+
+pub fn read_f32_output(outputs: &[Box<dyn TensorBuffer>]) -> Result<Vec<f32>, CoreError> {
+    let host = outputs[0].read_to_cpu()?;
+    Ok(host.as_slice_f32()?.to_vec())
 }

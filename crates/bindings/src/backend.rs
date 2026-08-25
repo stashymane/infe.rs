@@ -22,18 +22,18 @@ pub enum BackendConfig {
 }
 
 #[derive(uniffi::Object)]
-pub struct ExecuTorchBackend {
+pub struct FfiBackend {
     inner: CoreExecuTorchBackend,
 }
 
-impl std::fmt::Debug for ExecuTorchBackend {
+impl std::fmt::Debug for FfiBackend {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("ExecuTorchBackend").finish()
+        f.debug_struct("FfiBackend").finish()
     }
 }
 
 #[uniffi::export]
-impl ExecuTorchBackend {
+impl FfiBackend {
     #[uniffi::constructor]
     pub fn new() -> Arc<Self> {
         Arc::new(Self {

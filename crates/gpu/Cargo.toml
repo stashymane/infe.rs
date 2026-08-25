@@ -4,10 +4,11 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
-infers-core = { path = "../core" }
-ash = "0.38"
+infers-core = { path = "../core", default-features = false }
+ash.workspace = true
 gpu-allocator = "0.28"
-thiserror = "2"
+parking_lot.workspace = true
+thiserror.workspace = true
 
 [lints]
 workspace = true

@@ -7,9 +7,10 @@ members = [
     "crates/platform/android",
     "crates/processing",
     "crates/processing/core",
-    "crates/processing/gpu",
-    "crates/processing/shaders",
     "crates/test-utils",
+]
+exclude = [
+    "crates/processing/shaders",
 ]
 resolver = "3"
 
@@ -21,6 +22,11 @@ edition = "2024"
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_arch, values("spirv"))'] }
 
 [workspace.dependencies]
+ash = "0.38"
+# Used instead of `std::sync::Mutex` so that a panic while a lock is held cannot
+# poison it and turn every later access into an error or panic.
+parking_lot = "0.12"
+thiserror = "2"
 
 [package]
 name = "infers"
@@ -29,19 +35,21 @@ edition.workspace = true
 
 [dependencies]
 infers-core = { path = "crates/core" }
-infers-gpu = { path = "crates/gpu" }
+infers-gpu = { path = "crates/gpu", optional = true }
 processing = { path = "crates/processing" }
-processing-gpu = { path = "crates/processing/gpu" }
 infers-backend-executorch = { path = "crates/backends/executorch", default-features = false }
 
 [features]
 default = ["portable", "xnnpack", "vulkan"]
 portable = ["infers-backend-executorch/portable"]
 xnnpack = ["infers-backend-executorch/xnnpack"]
-vulkan = ["infers-backend-executorch/vulkan"]
+vulkan = ["infers-backend-executorch/vulkan", "processing/vulkan", "dep:infers-gpu"]
 
 [dev-dependencies]
 infers-test-utils = { path = "crates/test-utils" }
 
 [target.'cfg(target_os = "android")'.dependencies]
 platform-android = { path = "crates/platform/android" }
+
+[lints]
+workspace = true

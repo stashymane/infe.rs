@@ -7,6 +7,7 @@ use infers_core::{Backend, CoreError, Device, ModelSession, SessionConfig};
 pub struct ExecuTorchBackend;
 
 impl ExecuTorchBackend {
+    #[must_use]
     pub fn new() -> Self {
         Self
     }
@@ -44,7 +45,13 @@ impl Backend for ExecuTorchBackend {
     }
 
     fn available_devices(&self) -> Vec<Device> {
-        vec![Device::cpu(), Device::gpu(0), Device::npu(0)]
+        let mut devices = vec![Device::cpu()];
+        #[cfg(feature = "vulkan")]
+        {
+            devices.push(Device::gpu(0));
+            devices.push(Device::npu(0));
+        }
+        devices
     }
 
     fn load_model_with_config(

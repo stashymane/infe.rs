@@ -15,34 +15,9 @@ pub enum DataType {
     F64,
 }
 
-impl From<CoreDataType> for DataType {
-    fn from(dtype: CoreDataType) -> Self {
-        match dtype {
-            CoreDataType::U8 => DataType::U8,
-            CoreDataType::I8 => DataType::I8,
-            CoreDataType::I16 => DataType::I16,
-            CoreDataType::I32 => DataType::I32,
-            CoreDataType::I64 => DataType::I64,
-            CoreDataType::F16 => DataType::F16,
-            CoreDataType::F32 => DataType::F32,
-            CoreDataType::F64 => DataType::F64,
-        }
-    }
-}
-
-impl From<DataType> for CoreDataType {
-    fn from(dtype: DataType) -> Self {
-        match dtype {
-            DataType::U8 => CoreDataType::U8,
-            DataType::I8 => CoreDataType::I8,
-            DataType::I16 => CoreDataType::I16,
-            DataType::I32 => CoreDataType::I32,
-            DataType::I64 => CoreDataType::I64,
-            DataType::F16 => CoreDataType::F16,
-            DataType::F32 => CoreDataType::F32,
-            DataType::F64 => CoreDataType::F64,
-        }
-    }
+uniffi_mirror! {
+    DataType <=> CoreDataType,
+    [U8, I8, I16, I32, I64, F16, F32, F64]
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Record)]
@@ -73,10 +48,6 @@ pub struct TensorBuffer {
 }
 
 impl TensorBuffer {
-    pub fn new(inner: Arc<dyn CoreTensorBuffer>) -> Self {
-        Self { inner }
-    }
-
     pub fn from_boxed(boxed: Box<dyn CoreTensorBuffer>) -> Self {
         Self {
             inner: Arc::from(boxed),

@@ -1,6 +1,6 @@
 #![cfg(target_os = "android")]
 
-use infers_core::{CpuImageBuffer, Device, ImageFormat, ImageInputBuffer, ProcessingOptions, Rotation};
+use infers_core::{CpuImageBuffer, Device, ImageFormat, ProcessingOptions, Rotation};
 use platform_android::{
     AndroidHardwareBufferHandle, AHardwareBuffer_Desc, AHardwareBuffer_allocate,
     AHARDWAREBUFFER_FORMAT_R8G8B8_UNORM, AHARDWAREBUFFER_USAGE_CPU_READ_OFTEN,
@@ -42,7 +42,7 @@ fn test_android_hardware_buffer_metadata() {
 
     assert_eq!(handle.width(), 64);
     assert_eq!(handle.height(), 64);
-    assert_eq!(handle.format(), ImageFormat::RGB888);
+    assert_eq!(handle.format(), ImageFormat::Rgb888);
     assert_eq!(handle.device(), &Device::gpu(0));
     assert_eq!(handle.desc().width, 64);
     assert_eq!(handle.desc().height, 64);
@@ -71,8 +71,8 @@ fn test_android_hardware_buffer_with_image_processors() {
         src_h: 32,
         dest_w: 16,
         dest_h: 16,
-        dest_format: ImageFormat::RGBF32,
-        fit_mode: FitMode::STRETCH,
+        dest_format: ImageFormat::Rgbf32,
+        fit_mode: FitMode::Stretch,
         rotation: Rotation::None,
         ..Default::default()
     };

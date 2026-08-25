@@ -1,5 +1,6 @@
 pub use processing_core::{FitMode, ImageFormat, ProcessingOptions, Rotation};
 
+use crate::device::cpu_device;
 use crate::device::Device;
 use crate::error::CoreError;
 use std::any::Any;
@@ -63,15 +64,6 @@ impl CpuImageBuffer {
         self.format
     }
 
-    #[inline]
-    pub fn data(&self) -> &[u8] {
-        &self.data
-    }
-
-    #[inline]
-    pub fn into_data(self) -> Vec<u8> {
-        self.data
-    }
 }
 
 impl ImageInputBuffer for CpuImageBuffer {
@@ -88,8 +80,7 @@ impl ImageInputBuffer for CpuImageBuffer {
     }
 
     fn device(&self) -> &Device {
-        static CPU: std::sync::OnceLock<Device> = std::sync::OnceLock::new();
-        CPU.get_or_init(Device::cpu)
+        cpu_device()
     }
 
     fn as_bytes(&self) -> Option<&[u8]> {

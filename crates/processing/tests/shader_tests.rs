@@ -1,84 +1,36 @@
-use processing::{FitMode, ImageFormat, ProcessingOptions, Rotation, SHADERS};
+#![cfg(feature = "vulkan")]
+
+use std::sync::Arc;
+
+use infers_core::Device;
+use processing::{
+    FitMode, GpuImageProcessor, ImageFormat, ProcessingOptions, Rotation, VulkanContext,
+};
 
 #[test]
-fn test_spirv_shader_binary_valid_and_entry_points() {
-    assert!(!SHADERS.is_empty(), "Compiled SPIR-V should not be empty");
-    assert!(
-        SHADERS.len() >= 20,
-        "SPIR-V header is at least 5 32-bit words (20 bytes)"
-    );
-
-    // SPIR-V magic number is 0x07230203 (little endian bytes: 0x03, 0x02, 0x23, 0x07)
-    let magic = u32::from_le_bytes([SHADERS[0], SHADERS[1], SHADERS[2], SHADERS[3]]);
-    assert_eq!(
-        magic, 0x07230203,
-        "SPIR-V binary magic number mismatch: expected 0x07230203, got 0x{:08x}",
-        magic
-    );
-
-    // Parse SPIR-V words to verify entry points
-    let words: Vec<u32> = SHADERS
-        .chunks_exact(4)
-        .map(|chunk| u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
-        .collect();
-
-    let mut entry_points = Vec::new();
-    let mut i = 5; // Skip 5-word SPIR-V header
-    while i < words.len() {
-        let instr = words[i];
-        let opcode = instr & 0xffff;
-        let word_count = (instr >> 16) as usize;
-        if word_count == 0 {
-            break;
-        }
-
-        // OpEntryPoint = 15
-        if opcode == 15 && word_count >= 4 {
-            let name_words = &words[i + 3..i + word_count];
-            let mut name_bytes = Vec::new();
-            'outer: for &w in name_words {
-                for b in w.to_le_bytes() {
-                    if b == 0 {
-                        break 'outer;
-                    }
-                    name_bytes.push(b);
-                }
-            }
-            if let Ok(name) = String::from_utf8(name_bytes) {
-                entry_points.push(name);
-            }
-        }
-
-        i += word_count;
-    }
-
-    assert!(
-        entry_points.contains(&"convert_main".to_string()),
-        "SPIR-V module should have convert_main entry point, found: {:?}",
-        entry_points
-    );
-    assert!(
-        entry_points.contains(&"convert_image".to_string()),
-        "SPIR-V module should have convert_image entry point, found: {:?}",
-        entry_points
-    );
+fn test_gpu_image_processor_loads_shaders() {
+    let Ok(ctx) = VulkanContext::new(&Device::gpu(0)) else {
+        eprintln!("skipping: no Vulkan device");
+        return;
+    };
+    GpuImageProcessor::new(Arc::new(ctx)).expect("SPIR-V shaders must load into pipelines");
 }
 
 #[test]
 fn test_processing_options_enums() {
-    assert_eq!(FitMode::STRETCH as u32, 0);
-    assert_eq!(FitMode::CONTAIN as u32, 1);
-    assert_eq!(FitMode::CROP as u32, 2);
+    assert_eq!(FitMode::Stretch as u32, 0);
+    assert_eq!(FitMode::Contain as u32, 1);
+    assert_eq!(FitMode::Crop as u32, 2);
 
-    assert_eq!(ImageFormat::RGB888 as u32, 0);
-    assert_eq!(ImageFormat::RGBF32 as u32, 1);
-    assert_eq!(ImageFormat::NV12 as u32, 2);
+    assert_eq!(ImageFormat::Rgb888 as u32, 0);
+    assert_eq!(ImageFormat::Rgbf32 as u32, 1);
+    assert_eq!(ImageFormat::Nv12 as u32, 2);
     assert_eq!(ImageFormat::I420 as u32, 3);
 
     assert_eq!(Rotation::None as u32, 0);
-    assert_eq!(Rotation::R90DEG as u32, 1);
-    assert_eq!(Rotation::R180DEG as u32, 2);
-    assert_eq!(Rotation::R270DEG as u32, 3);
+    assert_eq!(Rotation::Rot90 as u32, 1);
+    assert_eq!(Rotation::Rot180 as u32, 2);
+    assert_eq!(Rotation::Rot270 as u32, 3);
 }
 
 #[test]
@@ -92,8 +44,8 @@ fn test_processing_options_crop() {
         crop_h: 0,
         dest_w: 224,
         dest_h: 224,
-        dest_format: ImageFormat::RGBF32,
-        fit_mode: FitMode::CONTAIN,
+        dest_format: ImageFormat::Rgbf32,
+        fit_mode: FitMode::Contain,
         rotation: Rotation::None,
         ..Default::default()
     };
@@ -109,9 +61,9 @@ fn test_processing_options_crop() {
         crop_h: 300,
         dest_w: 224,
         dest_h: 224,
-        dest_format: ImageFormat::RGB888,
-        fit_mode: FitMode::CROP,
-        rotation: Rotation::R90DEG,
+        dest_format: ImageFormat::Rgb888,
+        fit_mode: FitMode::Crop,
+        rotation: Rotation::Rot90,
         ..Default::default()
     };
 

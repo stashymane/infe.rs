@@ -1,8 +1,11 @@
 use infers_core::{
     CpuImageBuffer, DataType, Device, ImageFormat, ProcessingOptions, Rotation,
 };
+#[cfg(feature = "vulkan")]
 use infers_gpu::VulkanContext;
-use processing::{CpuImageProcessor, FitMode, GpuImageProcessor};
+use processing::{CpuImageProcessor, FitMode};
+#[cfg(feature = "vulkan")]
+use processing::GpuImageProcessor;
 use std::sync::Arc;
 
 fn create_test_pattern_image(width: u32, height: u32) -> (Vec<u8>, CpuImageBuffer) {
@@ -17,7 +20,7 @@ fn create_test_pattern_image(width: u32, height: u32) -> (Vec<u8>, CpuImageBuffe
             data.push(b);
         }
     }
-    let buf = CpuImageBuffer::new(width, height, ImageFormat::RGB888, data.clone()).unwrap();
+    let buf = CpuImageBuffer::new(width, height, ImageFormat::Rgb888, data.clone()).unwrap();
     (data, buf)
 }
 
@@ -31,8 +34,8 @@ fn test_cpu_processor_stretch_rgb888() {
         src_h: 64,
         dest_w: 32,
         dest_h: 32,
-        dest_format: ImageFormat::RGB888,
-        fit_mode: FitMode::STRETCH,
+        dest_format: ImageFormat::Rgb888,
+        fit_mode: FitMode::Stretch,
         rotation: Rotation::None,
         ..Default::default()
     };
@@ -57,8 +60,8 @@ fn test_cpu_processor_contain_rgbf32() {
         src_h: 50,
         dest_w: 64,
         dest_h: 64,
-        dest_format: ImageFormat::RGBF32,
-        fit_mode: FitMode::CONTAIN,
+        dest_format: ImageFormat::Rgbf32,
+        fit_mode: FitMode::Contain,
         rotation: Rotation::None,
         ..Default::default()
     };
@@ -73,7 +76,7 @@ fn test_cpu_processor_contain_rgbf32() {
 
     // Assert normalized values are between 0.0 and 1.0
     for &val in f32_slice {
-        assert!(val >= 0.0 && val <= 1.0, "Value {} is out of [0.0, 1.0]", val);
+        assert!((0.0..=1.0).contains(&val), "Value {} is out of [0.0, 1.0]", val);
     }
 }
 
@@ -84,17 +87,17 @@ fn test_cpu_processor_rotations() {
 
     for rot in [
         Rotation::None,
-        Rotation::R90DEG,
-        Rotation::R180DEG,
-        Rotation::R270DEG,
+        Rotation::Rot90,
+        Rotation::Rot180,
+        Rotation::Rot270,
     ] {
         let opts = ProcessingOptions {
             src_w: 60,
             src_h: 40,
             dest_w: 48,
             dest_h: 48,
-            dest_format: ImageFormat::RGB888,
-            fit_mode: FitMode::STRETCH,
+            dest_format: ImageFormat::Rgb888,
+            fit_mode: FitMode::Stretch,
             rotation: rot,
             ..Default::default()
         };
@@ -107,6 +110,7 @@ fn test_cpu_processor_rotations() {
 }
 
 #[test]
+#[cfg(feature = "vulkan")]
 fn test_gpu_process_outputs() {
     let (_, input) = create_test_pattern_image(80, 60);
     let device = Device::gpu(0);
@@ -135,8 +139,8 @@ fn test_gpu_process_outputs() {
             crop_h: 30,
             dest_w: 32,
             dest_h: 32,
-            dest_format: ImageFormat::RGB888,
-            fit_mode: FitMode::STRETCH,
+            dest_format: ImageFormat::Rgb888,
+            fit_mode: FitMode::Stretch,
             rotation: Rotation::None,
             ..Default::default()
         },
@@ -149,9 +153,9 @@ fn test_gpu_process_outputs() {
             crop_h: 60,
             dest_w: 32,
             dest_h: 32,
-            dest_format: ImageFormat::RGBF32,
-            fit_mode: FitMode::CONTAIN,
-            rotation: Rotation::R90DEG,
+            dest_format: ImageFormat::Rgbf32,
+            fit_mode: FitMode::Contain,
+            rotation: Rotation::Rot90,
             ..Default::default()
         },
         ProcessingOptions {
@@ -163,9 +167,9 @@ fn test_gpu_process_outputs() {
             crop_h: 60,
             dest_w: 32,
             dest_h: 32,
-            dest_format: ImageFormat::RGB888,
-            fit_mode: FitMode::CROP,
-            rotation: Rotation::R180DEG,
+            dest_format: ImageFormat::Rgb888,
+            fit_mode: FitMode::Crop,
+            rotation: Rotation::Rot180,
             ..Default::default()
         },
     ];
@@ -176,7 +180,7 @@ fn test_gpu_process_outputs() {
         assert_eq!(gpu_buf.device(), &Device::gpu(0));
 
         let gpu_host = gpu_buf.read_to_cpu().unwrap();
-        if opts.dest_format == ImageFormat::RGB888 {
+        if opts.dest_format == ImageFormat::Rgb888 {
             assert_eq!(gpu_buf.dtype(), DataType::U8);
             let bytes = gpu_host.as_slice_u8().unwrap();
             assert_eq!(bytes.len(), 32 * 32 * 3);

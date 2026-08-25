@@ -1,4 +1,5 @@
-use crate::error::GpuError;
+use infers_core::CoreError;
+use infers_gpu::GpuError;
 use infers_core::{AnyHostTensor, CpuTensor, DataType, Device, TensorBuffer, TensorShape};
 use infers_gpu::ash::vk;
 use infers_gpu::gpu_allocator::MemoryLocation;
@@ -57,24 +58,21 @@ impl GpuTensorBuffer {
         }
     }
 
-    /// Shared Vulkan context that owns this tensor's buffer.
-    pub fn context(&self) -> &Arc<VulkanContext> {
-        &self.inner.context
-    }
-
-    /// Underlying `VkBuffer` for ExecuTorch Vulkan staging copies.
-    pub fn vk_buffer(&self) -> Option<vk::Buffer> {
-        self.inner.buffer.as_ref().map(|b| b.buffer)
-    }
-
     /// Buffer, device memory, offset, and byte size for GPU→GPU copies into delegate staging.
     pub fn vulkan_handle(&self) -> Option<VulkanBufferHandle> {
         self.inner.buffer.as_ref().map(|b| b.vulkan_handle())
     }
 
-    /// Allocates a zero-filled buffer for tests and benchmarks.
-    #[doc(hidden)]
-    pub fn new_zeros(
+    /// Allocate a zero-initialized buffer on `context` for `shape` / `dtype`.
+    pub fn allocate(
+        context: Arc<VulkanContext>,
+        shape: TensorShape,
+        dtype: DataType,
+    ) -> Result<Self, CoreError> {
+        Self::try_allocate(context, shape, dtype).map_err(CoreError::from)
+    }
+
+    fn try_allocate(
         context: Arc<VulkanContext>,
         shape: TensorShape,
         dtype: DataType,
@@ -86,9 +84,8 @@ impl GpuTensorBuffer {
                 bytes,
                 vk::BufferUsageFlags::TRANSFER_SRC | vk::BufferUsageFlags::STORAGE_BUFFER,
                 MemoryLocation::CpuToGpu,
-                "gpu-tensor-test",
-            )
-            .map_err(GpuError::from)?;
+                "gpu-tensor",
+            )?;
         Ok(Self::from_allocated(
             Arc::clone(&context),
             context.logical_device().clone(),
@@ -130,30 +127,17 @@ impl TensorBuffer for GpuTensorBuffer {
         if target == &self.device {
             Ok(Box::new(self.clone()))
         } else if target.is_cpu() {
-            let host_tensor = self.read_to_cpu()?;
             match self.dtype {
                 DataType::U8 => {
-                    let tensor = host_tensor
-                        .as_any()
-                        .downcast_ref::<CpuTensor<u8>>()
-                        .cloned()
-                        .ok_or_else(|| {
-                            infers_core::CoreError::BufferTransferFailed(
-                                "Failed to downcast u8 tensor".into(),
-                            )
-                        })?;
+                    let host = self.read_to_cpu()?;
+                    let slice = host.as_slice_u8()?;
+                    let tensor = CpuTensor::from_u8(self.shape.clone(), slice.to_vec())?;
                     Ok(Box::new(tensor))
                 }
                 DataType::F32 => {
-                    let tensor = host_tensor
-                        .as_any()
-                        .downcast_ref::<CpuTensor<f32>>()
-                        .cloned()
-                        .ok_or_else(|| {
-                            infers_core::CoreError::BufferTransferFailed(
-                                "Failed to downcast f32 tensor".into(),
-                            )
-                        })?;
+                    let host = self.read_to_cpu()?;
+                    let slice = host.as_slice_f32()?;
+                    let tensor = CpuTensor::from_f32(self.shape.clone(), slice.to_vec())?;
                     Ok(Box::new(tensor))
                 }
                 _ => Err(infers_core::CoreError::BufferTransferFailed(format!(
@@ -181,31 +165,8 @@ fn read_buffer_to_vec(
         "readback-staging",
     )?;
 
-    let device = context.device();
-    let cmd_pool_info = vk::CommandPoolCreateInfo::default()
-        .queue_family_index(context.queue_family_index())
-        .flags(vk::CommandPoolCreateFlags::TRANSIENT);
-    let cmd_pool = unsafe { device.create_command_pool(&cmd_pool_info, None) }?;
-    let alloc_info = vk::CommandBufferAllocateInfo::default()
-        .command_pool(cmd_pool)
-        .level(vk::CommandBufferLevel::PRIMARY)
-        .command_buffer_count(1);
-    let cmd = unsafe { device.allocate_command_buffers(&alloc_info) }?[0];
-    let begin = vk::CommandBufferBeginInfo::default()
-        .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
-    unsafe { device.begin_command_buffer(cmd, &begin) }?;
-    let region = vk::BufferCopy::default().size(src.size);
-    unsafe {
-        device.cmd_copy_buffer(cmd, src.buffer, staging.buffer, &[region]);
-        device.end_command_buffer(cmd)?;
-    }
-    let fence = unsafe { device.create_fence(&vk::FenceCreateInfo::default(), None) }?;
-    context.submit(cmd, fence)?;
-    context.wait_fence(fence)?;
-    unsafe {
-        device.destroy_fence(fence, None);
-        device.destroy_command_pool(cmd_pool, None);
-    }
+    context
+        .copy_buffer(src.buffer, 0, staging.buffer, 0, src.size)?;
 
     let mut out = vec![0u8; src.size as usize];
     VulkanContext::read_allocation(&staging.allocation, &mut out)?;

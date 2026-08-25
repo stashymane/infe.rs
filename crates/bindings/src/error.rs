@@ -1,5 +1,7 @@
 use infers_core::CoreError;
-use processing::{GpuError, ProcessingError};
+
+#[cfg(feature = "vulkan")]
+use infers_gpu::GpuError;
 
 #[cfg(target_os = "android")]
 use platform_android::AndroidPlatformError;
@@ -14,9 +16,6 @@ pub enum InfersError {
 
     #[error("Unsupported data type: {message}")]
     UnsupportedType { message: String },
-
-    #[error("Buffer read failed: {message}")]
-    BufferReadFailed { message: String },
 
     #[error("Buffer allocation failed: {message}")]
     BufferAllocationFailed { message: String },
@@ -52,31 +51,27 @@ impl From<CoreError> for InfersError {
             CoreError::ModelLoadFailed(msg) => InfersError::ModelLoadFailed { message: msg },
             CoreError::InferenceFailed(msg) => InfersError::InferenceFailed { message: msg },
             CoreError::InvalidArgument(msg) => InfersError::InvalidShape { message: msg },
-            CoreError::PlatformError(msg) => InfersError::PlatformError { message: msg },
-            CoreError::Other(msg) => InfersError::InternalError { message: msg },
+            CoreError::InvalidImageBuffer(msg) | CoreError::ImageResizeFailed(msg) => {
+                InfersError::ProcessingFailed { message: msg }
+            }
+            CoreError::Platform(msg) => InfersError::PlatformError { message: msg },
+            CoreError::Gpu(err) => InfersError::ProcessingFailed {
+                message: err.to_string(),
+            },
         }
     }
 }
 
-impl From<ProcessingError> for InfersError {
-    fn from(err: ProcessingError) -> Self {
-        InfersError::ProcessingFailed {
-            message: err.to_string(),
-        }
-    }
-}
-
+#[cfg(feature = "vulkan")]
 impl From<GpuError> for InfersError {
     fn from(err: GpuError) -> Self {
-        ProcessingError::from(err).into()
+        CoreError::from(err).into()
     }
 }
 
 #[cfg(target_os = "android")]
 impl From<AndroidPlatformError> for InfersError {
     fn from(err: AndroidPlatformError) -> Self {
-        InfersError::PlatformError {
-            message: err.to_string(),
-        }
+        CoreError::from(err).into()
     }
 }

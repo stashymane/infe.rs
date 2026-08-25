@@ -2,7 +2,7 @@ use thiserror::Error;
 use crate::device::Device;
 use crate::tensor::DataType;
 
-#[derive(Error, Debug, Clone, PartialEq, Eq)]
+#[derive(Error, Debug)]
 pub enum CoreError {
     #[error("Device mismatch: expected {expected:?}, got {actual:?}")]
     DeviceMismatch { expected: Device, actual: Device },
@@ -25,9 +25,15 @@ pub enum CoreError {
     #[error("Invalid argument: {0}")]
     InvalidArgument(String),
 
-    #[error("Platform error: {0}")]
-    PlatformError(String),
+    #[error("Invalid input image buffer: {0}")]
+    InvalidImageBuffer(String),
 
-    #[error("General error: {0}")]
-    Other(String),
+    #[error("Image resize failed: {0}")]
+    ImageResizeFailed(String),
+
+    #[error("Platform error: {0}")]
+    Platform(String),
+
+    #[error("GPU error")]
+    Gpu(#[source] Box<dyn std::error::Error + Send + Sync>),
 }

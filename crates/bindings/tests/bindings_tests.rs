@@ -97,7 +97,7 @@ fn test_uniffi_mock_backend_and_session() {
         TensorShape {
             dims: vec![1, 3, 224, 224],
         },
-        vec![0.5f32; 1 * 3 * 224 * 224],
+        vec![0.5f32; 3 * 224 * 224],
     )
     .expect("Failed to create input tensor");
 
@@ -120,7 +120,7 @@ fn test_uniffi_mock_backend_and_session() {
 
 #[test]
 fn test_uniffi_executorch_backend_error_handling() {
-    let backend = ExecuTorchBackend::new();
+    let backend = FfiBackend::new();
     let devices = backend.available_devices();
     assert!(!devices.is_empty());
 

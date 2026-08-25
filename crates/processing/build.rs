@@ -4,13 +4,17 @@ use std::fs;
 use std::path::Path;
 
 fn main() {
-    println!("cargo:rerun-if-changed=../shaders");
-    println!("cargo:rerun-if-changed=../shaders/src/lib.rs");
-    println!("cargo:rerun-if-changed=../core/src/options.rs");
+    if env::var_os("CARGO_FEATURE_VULKAN").is_none() {
+        return;
+    }
+
+    println!("cargo:rerun-if-changed=shaders");
+    println!("cargo:rerun-if-changed=shaders/src/lib.rs");
+    println!("cargo:rerun-if-changed=core/src/options.rs");
 
     let out_dir = env::var_os("OUT_DIR").unwrap();
     let spirv_target = Path::new(&out_dir).join("spirv-builder");
-    let result = SpirvBuilder::new("../shaders", "spirv-unknown-vulkan1.1")
+    let result = SpirvBuilder::new("shaders", "spirv-unknown-vulkan1.1")
         .spirv_metadata(SpirvMetadata::Full)
         .capability(Capability::Int8)
         .target_dir_path(spirv_target)

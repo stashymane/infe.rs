@@ -3,7 +3,7 @@ use infers_backend_executorch::{
     ExecuTorchBackendConfig, ExecuTorchError, ExecuTorchTensorBuffer, ProgramMetadata,
     ScalarType,
 };
-use infers_core::{Backend, CoreError, DataType, Device, ModelSession as _, TensorBuffer, TensorShape};
+use infers_core::{Backend, CoreError, DataType, Device, TensorBuffer, TensorShape};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, OnceLock};
 
@@ -382,8 +382,8 @@ fn test_prepare_gpu_inputs_avoids_read_to_cpu() {
     };
     let ctx = Arc::new(ctx);
     let shape = TensorShape::new(vec![1, 64, 64, 3]).unwrap();
-    let gpu = GpuTensorBuffer::new_zeros(Arc::clone(&ctx), shape.clone(), DataType::F32)
-        .expect("test buffer");
+    let gpu = GpuTensorBuffer::allocate(Arc::clone(&ctx), shape.clone(), DataType::F32)
+        .expect("allocate GPU tensor");
     let tracked = TrackingGpuBuffer { inner: gpu };
     let input: &dyn TensorBuffer = &tracked;
 
@@ -410,4 +410,17 @@ fn test_vulkan_config_registers_or_reports_missing_backend() {
         },
     );
     assert!(result.is_err());
+}
+
+#[test]
+fn test_executorch_tensor_buffer_rejects_size_mismatch() {
+    let shape = TensorShape::new([1, 4]).expect("valid shape");
+    let err = ExecuTorchTensorBuffer::new(Device::cpu(), shape, DataType::F32, vec![0u8; 8])
+        .unwrap_err();
+    match err {
+        ExecuTorchError::BufferError(msg) => {
+            assert!(msg.contains("Buffer size mismatch"));
+        }
+        other => panic!("expected BufferError, got {other:?}"),
+    }
 }
