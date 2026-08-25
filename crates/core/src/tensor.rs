@@ -331,6 +331,9 @@ pub trait TensorBuffer: Send + Sync + std::fmt::Debug {
         self.shape().byte_size(self.dtype())
     }
 
+    /// Downcast support for device-specific buffer types.
+    fn as_any(&self) -> &dyn std::any::Any;
+
     /// Explicit readback into CPU host memory
     fn read_to_cpu(&self) -> Result<Box<dyn AnyHostTensor>, CoreError>;
 
@@ -356,6 +359,9 @@ impl TensorBuffer for CpuTensor<f32> {
     fn device(&self) -> &Device {
         static CPU: std::sync::OnceLock<Device> = std::sync::OnceLock::new();
         CPU.get_or_init(Device::cpu)
+    }
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
     fn read_to_cpu(&self) -> Result<Box<dyn AnyHostTensor>, CoreError> {
         Ok(Box::new(self.clone()))
@@ -383,6 +389,9 @@ impl TensorBuffer for CpuTensor<u8> {
         static CPU: std::sync::OnceLock<Device> = std::sync::OnceLock::new();
         CPU.get_or_init(Device::cpu)
     }
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
     fn read_to_cpu(&self) -> Result<Box<dyn AnyHostTensor>, CoreError> {
         Ok(Box::new(self.clone()))
     }
@@ -409,6 +418,9 @@ impl TensorBuffer for CpuTensor<i32> {
         static CPU: std::sync::OnceLock<Device> = std::sync::OnceLock::new();
         CPU.get_or_init(Device::cpu)
     }
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
     fn read_to_cpu(&self) -> Result<Box<dyn AnyHostTensor>, CoreError> {
         Ok(Box::new(self.clone()))
     }
@@ -434,6 +446,9 @@ impl TensorBuffer for CpuTensor<i64> {
     fn device(&self) -> &Device {
         static CPU: std::sync::OnceLock<Device> = std::sync::OnceLock::new();
         CPU.get_or_init(Device::cpu)
+    }
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
     fn read_to_cpu(&self) -> Result<Box<dyn AnyHostTensor>, CoreError> {
         Ok(Box::new(self.clone()))

@@ -46,6 +46,10 @@ impl TensorBuffer for MockDeviceTensor {
         &self.device
     }
 
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
     fn read_to_cpu(&self) -> Result<Box<dyn AnyHostTensor>, CoreError> {
         match self.dtype {
             DataType::F32 => {

@@ -208,6 +208,72 @@ fn test_shared_vulkan_context_creation() {
 
 #[test]
 #[cfg(feature = "vulkan")]
+fn test_prepare_gpu_inputs_avoids_read_to_cpu() {
+    use infers_backend_executorch::gpu_input;
+    use infers_core::{DataType, TensorBuffer, TensorShape};
+    use infers_gpu::VulkanContext;
+    use processing::GpuTensorBuffer;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::Arc;
+
+    static READBACK: AtomicBool = AtomicBool::new(false);
+
+    struct TrackingGpuBuffer {
+        inner: GpuTensorBuffer,
+    }
+
+    impl std::fmt::Debug for TrackingGpuBuffer {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            self.inner.fmt(f)
+        }
+    }
+
+    impl TensorBuffer for TrackingGpuBuffer {
+        fn shape(&self) -> &TensorShape {
+            self.inner.shape()
+        }
+        fn dtype(&self) -> DataType {
+            self.inner.dtype()
+        }
+        fn device(&self) -> &infers_core::Device {
+            self.inner.device()
+        }
+        fn as_any(&self) -> &dyn std::any::Any {
+            // Downcast in prepare_inputs expects GpuTensorBuffer, not this wrapper.
+            self.inner.as_any()
+        }
+        fn read_to_cpu(&self) -> Result<Box<dyn infers_core::AnyHostTensor>, infers_core::CoreError> {
+            READBACK.store(true, Ordering::SeqCst);
+            self.inner.read_to_cpu()
+        }
+        fn copy_to_device(
+            &self,
+            target: &infers_core::Device,
+        ) -> Result<Box<dyn TensorBuffer>, infers_core::CoreError> {
+            self.inner.copy_to_device(target)
+        }
+    }
+
+    let Ok(ctx) = VulkanContext::new(&infers_core::Device::gpu(0)) else {
+        eprintln!("skipping: no Vulkan device");
+        return;
+    };
+    let ctx = Arc::new(ctx);
+    let shape = TensorShape::new(vec![1, 64, 64, 3]).unwrap();
+    let gpu = GpuTensorBuffer::new_zeros(Arc::clone(&ctx), shape.clone(), DataType::F32)
+        .expect("test buffer");
+    let tracked = TrackingGpuBuffer { inner: gpu };
+    let input: &dyn TensorBuffer = &tracked;
+
+    READBACK.store(false, Ordering::SeqCst);
+    let plan = gpu_input::prepare_inputs(&[input], &ctx, None).expect("prepare_inputs");
+    assert!(!READBACK.load(Ordering::SeqCst), "GpuTensorBuffer path must not read_to_cpu");
+    assert_eq!(plan.tensor_ptrs.len(), 1);
+    assert_eq!(plan.skip_staging_mask, 0);
+}
+
+#[test]
+#[cfg(feature = "vulkan")]
 fn test_vulkan_config_registers_or_reports_missing_backend() {
     use infers_gpu::VulkanContext;
     use std::sync::Arc;

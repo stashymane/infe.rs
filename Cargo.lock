@@ -961,6 +961,7 @@ dependencies = [
  "infers-core",
  "infers-gpu",
  "processing",
+ "processing-gpu",
  "tempfile",
  "thiserror 2.0.20",
 ]

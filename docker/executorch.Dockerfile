@@ -44,6 +44,8 @@ ENV PATH="/opt/et-venv/bin:${PATH}"
 WORKDIR /workspace
 
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh
+COPY patches /usr/local/share/infers/executorch-patches
+RUN chmod +x /usr/local/bin/entrypoint.sh \
+    /usr/local/share/infers/executorch-patches/apply-vulkan-gpu-input.sh
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

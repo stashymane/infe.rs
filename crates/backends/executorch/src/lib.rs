@@ -6,6 +6,8 @@ pub mod program;
 pub mod session;
 pub mod tensor;
 #[cfg(feature = "vulkan")]
+pub mod gpu_input;
+#[cfg(feature = "vulkan")]
 pub mod vulkan_adapter;
 
 // Re-export native executorch modules and types

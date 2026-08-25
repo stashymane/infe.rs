@@ -29,6 +29,9 @@ git -c advice.detachedHead=false submodule update --init --depth 1 --jobs "$(npr
     backends/vulkan/third-party/VulkanMemoryAllocator \
     backends/vulkan/third-party/volk
 
+echo "Patching ExecuTorch Vulkan backend for GPU input staging..."
+bash /usr/local/share/infers/executorch-patches/apply-vulkan-gpu-input.sh "${EXECUTORCH_DIR}"
+
 echo "Configuring ExecuTorch..."
 rm -rf "${BUILD_DIR}"
 cmake -G Ninja \

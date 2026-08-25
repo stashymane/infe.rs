@@ -2,16 +2,15 @@ use crate::config::ExecuTorchBackendConfig;
 use crate::delegate::ExecuTorchDelegate;
 use crate::error::ExecuTorchError;
 use crate::program::{MethodDescriptor, ProgramMetadata, TensorDescriptor};
-use crate::tensor::{scalar_type_to_data_type, ExecuTorchTensorBuffer};
+#[cfg(feature = "vulkan")]
+use crate::gpu_input::{self, VulkanComputeGraph};
+use infers_core::{CoreError, Device, ModelSession, TensorBuffer, TensorShape};
 #[cfg(feature = "vulkan")]
 use crate::vulkan_adapter;
-use executorch::evalue::{EValue, IntoEValue, Tag};
+use executorch::evalue::IntoEValue;
 use executorch::module::Module;
 use executorch::ndarray;
 use executorch::tensor::TensorPtr;
-use infers_core::{CoreError, DataType, Device, ModelSession, TensorBuffer, TensorShape};
-#[cfg(feature = "vulkan")]
-use infers_gpu::VulkanContext;
 use std::io::Write;
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -19,24 +18,25 @@ use std::sync::Mutex;
 use std::sync::Arc;
 use tempfile::NamedTempFile;
 
+#[cfg(feature = "vulkan")]
+use infers_gpu::VulkanContext;
+
 pub struct ExecuTorchSession {
     device: Device,
     delegate: ExecuTorchDelegate,
     method: MethodDescriptor,
     input_shapes: Vec<TensorShape>,
     output_shapes: Vec<TensorShape>,
-    /// Keeps the `.pte` file alive for [`Module`].
     _model_file: NamedTempFile,
-    /// `Module` is `Send` but not `Sync`; mutex satisfies [`ModelSession`].
     module: Mutex<Module<'static>>,
     method_name: String,
-    /// Retained so the Vulkan device outlives this session.
     #[cfg(feature = "vulkan")]
     vulkan_context: Option<Arc<VulkanContext>>,
+    #[cfg(feature = "vulkan")]
+    vulkan_graph: Option<VulkanComputeGraph>,
 }
 
 impl ExecuTorchSession {
-    /// Load a program from bytes and prepare the configured method for execution.
     pub fn load(
         model_bytes: &[u8],
         config: &ExecuTorchBackendConfig,
@@ -97,6 +97,9 @@ impl ExecuTorchSession {
         }
         module.load_method(&method_name, None, None)?;
 
+        #[cfg(feature = "vulkan")]
+        let vulkan_graph = VulkanComputeGraph::take_registered();
+
         let input_shapes = method.inputs.iter().map(|i| i.shape.clone()).collect();
         let output_shapes = method.outputs.iter().map(|o| o.shape.clone()).collect();
 
@@ -111,6 +114,8 @@ impl ExecuTorchSession {
             method_name,
             #[cfg(feature = "vulkan")]
             vulkan_context,
+            #[cfg(feature = "vulkan")]
+            vulkan_graph,
         })
     }
 
@@ -130,8 +135,6 @@ impl ExecuTorchSession {
         &self.method.outputs
     }
 
-    /// Shared Vulkan context when this session was loaded with
-    /// [`ExecuTorchBackendConfig::Vulkan`].
     #[cfg(feature = "vulkan")]
     pub fn vulkan_context(&self) -> Option<&Arc<VulkanContext>> {
         self.vulkan_context.as_ref()
@@ -188,46 +191,87 @@ impl ModelSession for ExecuTorchSession {
             }
         }
 
-        let host_inputs = collect_host_inputs(inputs)?;
-        let owned_ptrs = host_inputs
-            .iter()
-            .map(host_to_tensor_ptr)
-            .collect::<Result<Vec<_>, _>>()?;
+        let mut module = self.module.lock().map_err(|_| {
+            CoreError::InferenceFailed("ExecuTorch module lock poisoned".into())
+        })?;
 
-        let evalues: Vec<EValue<'_>> = owned_ptrs
-            .iter()
-            .map(|ptr| match ptr {
-                OwnedTensorPtr::F32(p) => p.into_evalue(),
-                OwnedTensorPtr::U8(p) => p.into_evalue(),
-                OwnedTensorPtr::I32(p) => p.into_evalue(),
-                OwnedTensorPtr::I64(p) => p.into_evalue(),
-            })
-            .collect();
-        // `IntoEValue` is implemented for `&TensorPtr`; keep `owned_ptrs` alive across execute.
-
-        let output_tensors: Vec<Box<dyn TensorBuffer>> = {
-            let mut module = self.module.lock().map_err(|_| {
-                CoreError::InferenceFailed("ExecuTorch module lock poisoned".into())
+        #[cfg(feature = "vulkan")]
+        let outputs = if self.delegate == ExecuTorchDelegate::Vulkan {
+            let context = self.vulkan_context.as_ref().ok_or_else(|| {
+                CoreError::InferenceFailed("Vulkan session missing shared VulkanContext".into())
             })?;
-            let outputs = module.execute(&self.method_name, &evalues).map_err(|e| {
-                CoreError::InferenceFailed(format!("ExecuTorch execute failed: {:?}", e))
-            })?;
-
-            let mut owned: Vec<Box<dyn TensorBuffer>> =
-                Vec::with_capacity(self.method.outputs.len());
-            for (out_evalue, out_desc) in outputs.iter().zip(self.method.outputs.iter()) {
-                let tb = evalue_to_tensor_buffer(out_evalue, &self.device, out_desc)
-                    .map_err(CoreError::from)?;
-                owned.push(Box::new(tb));
-            }
-            owned
+            let plan =
+                gpu_input::prepare_inputs(inputs, context, self.vulkan_graph)?;
+            gpu_input::set_skip_staging_copy_mask(plan.skip_staging_mask);
+            let evalues: Vec<executorch::evalue::EValue<'_>> = plan
+                .tensor_ptrs
+                .iter()
+                .map(|p| p.into_evalue())
+                .collect();
+            let result = module
+                .execute(&self.method_name, &evalues)
+                .map_err(|e| {
+                    CoreError::InferenceFailed(format!("ExecuTorch execute failed: {:?}", e))
+                });
+            gpu_input::set_skip_staging_copy_mask(0);
+            result?
+        } else {
+            let host_inputs = collect_host_inputs(inputs)?;
+            let owned_ptrs = host_inputs
+                .iter()
+                .map(host_to_tensor_ptr)
+                .collect::<Result<Vec<_>, _>>()?;
+            let evalues: Vec<executorch::evalue::EValue<'_>> = owned_ptrs
+                .iter()
+                .map(|ptr| match ptr {
+                    OwnedTensorPtr::F32(p) => p.into_evalue(),
+                    OwnedTensorPtr::U8(p) => p.into_evalue(),
+                    OwnedTensorPtr::I32(p) => p.into_evalue(),
+                    OwnedTensorPtr::I64(p) => p.into_evalue(),
+                })
+                .collect();
+            module
+                .execute(&self.method_name, &evalues)
+                .map_err(|e| CoreError::InferenceFailed(format!("ExecuTorch execute failed: {:?}", e)))?
         };
-        Ok(output_tensors)
+
+        #[cfg(not(feature = "vulkan"))]
+        let outputs = {
+            let host_inputs = collect_host_inputs(inputs)?;
+            let owned_ptrs = host_inputs
+                .iter()
+                .map(host_to_tensor_ptr)
+                .collect::<Result<Vec<_>, _>>()?;
+            let evalues: Vec<executorch::evalue::EValue<'_>> = owned_ptrs
+                .iter()
+                .map(|ptr| match ptr {
+                    OwnedTensorPtr::F32(p) => p.into_evalue(),
+                    OwnedTensorPtr::U8(p) => p.into_evalue(),
+                    OwnedTensorPtr::I32(p) => p.into_evalue(),
+                    OwnedTensorPtr::I64(p) => p.into_evalue(),
+                })
+                .collect();
+            module
+                .execute(&self.method_name, &evalues)
+                .map_err(|e| CoreError::InferenceFailed(format!("ExecuTorch execute failed: {:?}", e)))?
+        };
+
+        let mut owned: Vec<Box<dyn TensorBuffer>> = Vec::with_capacity(self.method.outputs.len());
+        for (out_evalue, out_desc) in outputs.iter().zip(self.method.outputs.iter()) {
+            #[cfg(feature = "vulkan")]
+            let tb = gpu_input::evalue_to_tensor_buffer(out_evalue, &self.device, out_desc)
+                .map_err(CoreError::from)?;
+            #[cfg(not(feature = "vulkan"))]
+            let tb = evalue_to_tensor_buffer(out_evalue, &self.device, out_desc)
+                .map_err(CoreError::from)?;
+            owned.push(Box::new(tb));
+        }
+        Ok(owned)
     }
 }
 
 struct HostInput {
-    dtype: DataType,
+    dtype: infers_core::DataType,
     shape: TensorShape,
     bytes: Vec<u8>,
 }
@@ -255,41 +299,44 @@ fn collect_host_inputs(inputs: &[&dyn TensorBuffer]) -> Result<Vec<HostInput>, C
 fn host_to_tensor_ptr(host: &HostInput) -> Result<OwnedTensorPtr, CoreError> {
     let dims: Vec<usize> = host.shape.dims().to_vec();
     match host.dtype {
-        DataType::F32 => {
+        infers_core::DataType::F32 => {
             let data = bytes_as_vec_f32(&host.bytes, host.shape.element_count())?;
             let arr = ndarray::ArrayD::from_shape_vec(ndarray::IxDyn(&dims), data)
                 .map_err(|e| CoreError::InferenceFailed(e.to_string()))?;
-            let ptr = TensorPtr::from_array(arr).map_err(|e| {
-                CoreError::InferenceFailed(format!("TensorPtr::from_array failed: {:?}", e))
-            })?;
-            Ok(OwnedTensorPtr::F32(ptr))
+            Ok(OwnedTensorPtr::F32(
+                TensorPtr::from_array(arr).map_err(|e| {
+                    CoreError::InferenceFailed(format!("TensorPtr::from_array failed: {:?}", e))
+                })?,
+            ))
         }
-        DataType::U8 => {
-            let data = host.bytes.clone();
-            let arr = ndarray::ArrayD::from_shape_vec(ndarray::IxDyn(&dims), data)
+        infers_core::DataType::U8 => {
+            let arr = ndarray::ArrayD::from_shape_vec(ndarray::IxDyn(&dims), host.bytes.clone())
                 .map_err(|e| CoreError::InferenceFailed(e.to_string()))?;
-            let ptr = TensorPtr::from_array(arr).map_err(|e| {
-                CoreError::InferenceFailed(format!("TensorPtr::from_array failed: {:?}", e))
-            })?;
-            Ok(OwnedTensorPtr::U8(ptr))
+            Ok(OwnedTensorPtr::U8(
+                TensorPtr::from_array(arr).map_err(|e| {
+                    CoreError::InferenceFailed(format!("TensorPtr::from_array failed: {:?}", e))
+                })?,
+            ))
         }
-        DataType::I32 => {
+        infers_core::DataType::I32 => {
             let data = bytes_as_vec_i32(&host.bytes, host.shape.element_count())?;
             let arr = ndarray::ArrayD::from_shape_vec(ndarray::IxDyn(&dims), data)
                 .map_err(|e| CoreError::InferenceFailed(e.to_string()))?;
-            let ptr = TensorPtr::from_array(arr).map_err(|e| {
-                CoreError::InferenceFailed(format!("TensorPtr::from_array failed: {:?}", e))
-            })?;
-            Ok(OwnedTensorPtr::I32(ptr))
+            Ok(OwnedTensorPtr::I32(
+                TensorPtr::from_array(arr).map_err(|e| {
+                    CoreError::InferenceFailed(format!("TensorPtr::from_array failed: {:?}", e))
+                })?,
+            ))
         }
-        DataType::I64 => {
+        infers_core::DataType::I64 => {
             let data = bytes_as_vec_i64(&host.bytes, host.shape.element_count())?;
             let arr = ndarray::ArrayD::from_shape_vec(ndarray::IxDyn(&dims), data)
                 .map_err(|e| CoreError::InferenceFailed(e.to_string()))?;
-            let ptr = TensorPtr::from_array(arr).map_err(|e| {
-                CoreError::InferenceFailed(format!("TensorPtr::from_array failed: {:?}", e))
-            })?;
-            Ok(OwnedTensorPtr::I64(ptr))
+            Ok(OwnedTensorPtr::I64(
+                TensorPtr::from_array(arr).map_err(|e| {
+                    CoreError::InferenceFailed(format!("TensorPtr::from_array failed: {:?}", e))
+                })?,
+            ))
         }
         other => Err(CoreError::InferenceFailed(format!(
             "Unsupported input dtype for ExecuTorch Module: {:?}",
@@ -337,11 +384,14 @@ fn bytes_as_vec_i64(bytes: &[u8], count: usize) -> Result<Vec<i64>, CoreError> {
     Ok(out)
 }
 
+#[cfg(not(feature = "vulkan"))]
 fn evalue_to_tensor_buffer(
-    value: &EValue<'_>,
+    value: &executorch::evalue::EValue<'_>,
     device: &Device,
     desc: &TensorDescriptor,
-) -> Result<ExecuTorchTensorBuffer, ExecuTorchError> {
+) -> Result<crate::tensor::ExecuTorchTensorBuffer, ExecuTorchError> {
+    use crate::tensor::scalar_type_to_data_type;
+    use executorch::evalue::Tag;
     if value.tag() != Tag::Tensor {
         return Err(ExecuTorchError::Execution(format!(
             "Expected tensor output for '{}', got {:?}",
@@ -367,5 +417,5 @@ fn evalue_to_tensor_buffer(
     let shape = TensorShape::new(sizes.iter().map(|&d| d as usize).collect::<Vec<_>>())?;
     let dtype = scalar_type_to_data_type(tensor.scalar_type())?;
 
-    ExecuTorchTensorBuffer::new(device.clone(), shape, dtype, bytes)
+    crate::tensor::ExecuTorchTensorBuffer::new(device.clone(), shape, dtype, bytes)
 }

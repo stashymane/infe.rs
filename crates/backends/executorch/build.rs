@@ -15,7 +15,9 @@ fn main() {
         .unwrap_or_else(|_| workspace_root.join("target/executorch-libs"));
 
     println!("cargo:rerun-if-env-changed=EXECUTORCH_RS_EXECUTORCH_LIB_DIR");
+    println!("cargo:rerun-if-env-changed=EXECUTORCH_SRC");
     println!("cargo:rerun-if-changed=cpp/vulkan_external_adapter.cpp");
+    println!("cargo:rerun-if-changed=cpp/vulkan_gpu_input.cpp");
 
     if feature_enabled("portable") {
         link_portable(&libs_dir);
@@ -111,16 +113,41 @@ fn link_xnnpack(libs_dir: &Path) {
     }
 }
 
+fn executorch_src_dir() -> Option<PathBuf> {
+    let src = env::var("EXECUTORCH_SRC").ok()?;
+    let path = PathBuf::from(src);
+    if path
+        .join("src/executorch/backends/vulkan/runtime/graph/ComputeGraph.h")
+        .exists()
+    {
+        Some(path)
+    } else {
+        None
+    }
+}
+
 fn link_vulkan(libs_dir: &Path) {
     let vulkan_backend = libs_dir.join("backends/vulkan/libvulkan_backend.a");
     require_file(&vulkan_backend, "vulkan", "libvulkan_backend.a");
 
-    cc::Build::new()
+    let mut builder = cc::Build::new();
+    builder
         .cpp(true)
         .std("c++17")
         .file("cpp/vulkan_external_adapter.cpp")
-        .flag_if_supported("-Wno-unused-parameter")
-        .compile("infers_et_vulkan_ffi");
+        .file("cpp/vulkan_gpu_input.cpp")
+        .flag_if_supported("-Wno-unused-parameter");
+
+    if let Some(src) = executorch_src_dir() {
+        println!("cargo:rerun-if-changed={}", src.display());
+        builder.define("INFERS_ET_EXECUTORCH_SRC", None);
+        builder.include(src.join("src"));
+        builder.include(src.join("third-party/Vulkan-Headers/include"));
+        builder.include(src.join("third-party/volk"));
+        builder.include(src.join("third-party/VulkanMemoryAllocator"));
+    }
+
+    builder.compile("infers_et_vulkan_ffi");
 
     println!(
         "cargo:rustc-link-search=native={}",

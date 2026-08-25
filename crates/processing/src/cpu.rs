@@ -237,6 +237,10 @@ impl TensorBuffer for CpuTensorBuffer<f32> {
         &self.device
     }
 
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
     fn read_to_cpu(&self) -> Result<Box<dyn AnyHostTensor>, infers_core::CoreError> {
         Ok(Box::new(self.tensor.clone()))
     }
@@ -273,6 +277,10 @@ impl TensorBuffer for CpuTensorBuffer<u8> {
 
     fn device(&self) -> &Device {
         &self.device
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 
     fn read_to_cpu(&self) -> Result<Box<dyn AnyHostTensor>, infers_core::CoreError> {

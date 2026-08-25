@@ -202,6 +202,10 @@ impl TensorBuffer for ExecuTorchTensorBuffer {
         &self.device
     }
 
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
     fn read_to_cpu(&self) -> Result<Box<dyn AnyHostTensor>, CoreError> {
         // Explicit device synchronization / readback into host CPU memory
         match self.dtype {

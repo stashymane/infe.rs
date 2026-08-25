@@ -2,7 +2,7 @@ use crate::error::GpuError;
 use infers_core::{AnyHostTensor, CpuTensor, DataType, Device, TensorBuffer, TensorShape};
 use infers_gpu::ash::vk;
 use infers_gpu::gpu_allocator::MemoryLocation;
-use infers_gpu::{AllocatedBuffer, VulkanContext};
+use infers_gpu::{AllocatedBuffer, VulkanBufferHandle, VulkanContext};
 use std::sync::Arc;
 
 struct GpuTensorInner {
@@ -62,9 +62,40 @@ impl GpuTensorBuffer {
         &self.inner.context
     }
 
-    /// Underlying `VkBuffer` for future zero-copy handoff into ExecuTorch Vulkan.
+    /// Underlying `VkBuffer` for ExecuTorch Vulkan staging copies.
     pub fn vk_buffer(&self) -> Option<vk::Buffer> {
         self.inner.buffer.as_ref().map(|b| b.buffer)
+    }
+
+    /// Buffer, device memory, offset, and byte size for GPU→GPU copies into delegate staging.
+    pub fn vulkan_handle(&self) -> Option<VulkanBufferHandle> {
+        self.inner.buffer.as_ref().map(|b| b.vulkan_handle())
+    }
+
+    /// Allocates a zero-filled buffer for tests and benchmarks.
+    #[doc(hidden)]
+    pub fn new_zeros(
+        context: Arc<VulkanContext>,
+        shape: TensorShape,
+        dtype: DataType,
+    ) -> Result<Self, GpuError> {
+        use infers_gpu::gpu_allocator::MemoryLocation;
+        let bytes = shape.byte_size(dtype) as u64;
+        let buffer = context
+            .create_buffer(
+                bytes,
+                vk::BufferUsageFlags::TRANSFER_SRC | vk::BufferUsageFlags::STORAGE_BUFFER,
+                MemoryLocation::CpuToGpu,
+                "gpu-tensor-test",
+            )
+            .map_err(GpuError::from)?;
+        Ok(Self::from_allocated(
+            Arc::clone(&context),
+            context.logical_device().clone(),
+            shape,
+            dtype,
+            buffer,
+        ))
     }
 }
 
@@ -79,6 +110,10 @@ impl TensorBuffer for GpuTensorBuffer {
 
     fn device(&self) -> &Device {
         &self.device
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 
     fn read_to_cpu(&self) -> Result<Box<dyn AnyHostTensor>, infers_core::CoreError> {
