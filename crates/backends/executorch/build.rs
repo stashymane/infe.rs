@@ -41,7 +41,7 @@ fn require_file(path: &Path, feature: &str, description: &str) {
     }
     panic!(
         "ExecuTorch `{feature}` feature is enabled but {description} was not found at {}.\n\
-         Build ExecuTorch libraries (see docker/build_executorch_libs.sh) or disable \
+         Build ExecuTorch libraries (see scripts/build_executorch.sh) or disable \
          the `{feature}` feature on `infers-backend-executorch`.",
         path.display()
     );
