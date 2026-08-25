@@ -5,20 +5,21 @@ use infers_gpu::ash::vk;
 use infers_gpu::{VulkanContext, VulkanContextOptions, VulkanSampledImage};
 use std::sync::Arc;
 
-/// Instance/device extensions required to import `AHardwareBuffer` into Vulkan.
+/// Instance/device extensions required to import `AHardwareBuffer` into Vulkan,
+/// merged with shared-inference defaults for ExecuTorch Vulkan.
 pub fn vulkan_context_options() -> VulkanContextOptions {
-    VulkanContextOptions {
-        extra_instance_extensions: vec![
-            ash::khr::external_memory_capabilities::NAME,
-            ash::khr::get_physical_device_properties2::NAME,
-        ],
-        extra_device_extensions: vec![
-            ash::android::external_memory_android_hardware_buffer::NAME,
-            ash::khr::external_memory::NAME,
-            ash::ext::queue_family_foreign::NAME,
-        ],
-        sampler_ycbcr_conversion: true,
-    }
+    let mut options = VulkanContextOptions::for_shared_inference();
+    options.extra_instance_extensions = vec![
+        ash::khr::external_memory_capabilities::NAME,
+        ash::khr::get_physical_device_properties2::NAME,
+    ];
+    options.extra_device_extensions = vec![
+        ash::android::external_memory_android_hardware_buffer::NAME,
+        ash::khr::external_memory::NAME,
+        ash::ext::queue_family_foreign::NAME,
+    ];
+    options.sampler_ycbcr_conversion = true;
+    options
 }
 
 pub fn create_vulkan_context(device: &Device) -> Result<VulkanContext, AndroidPlatformError> {

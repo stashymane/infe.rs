@@ -67,7 +67,16 @@ impl From<ExecuTorchError> for CoreError {
             ExecuTorchError::InvalidProgram(msg) => CoreError::ModelLoadFailed(msg),
             ExecuTorchError::Execution(msg) => CoreError::InferenceFailed(msg),
             ExecuTorchError::BufferError(msg) => CoreError::BufferTransferFailed(msg),
-            ExecuTorchError::Native(e) => CoreError::InferenceFailed(format!("ExecuTorch native error: {:?}", e)),
+            ExecuTorchError::Native(e) => match e {
+                executorch::Error::InvalidProgram
+                | executorch::Error::InvalidExternalData
+                | executorch::Error::InvalidArgument
+                | executorch::Error::AccessFailed
+                | executorch::Error::NotFound => {
+                    CoreError::ModelLoadFailed(format!("ExecuTorch native error: {:?}", e))
+                }
+                other => CoreError::InferenceFailed(format!("ExecuTorch native error: {:?}", other)),
+            },
             ExecuTorchError::Io(e) => CoreError::ModelLoadFailed(e.to_string()),
             ExecuTorchError::Core(c) => c,
         }

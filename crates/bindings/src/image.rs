@@ -7,7 +7,6 @@ use infers_core::ImageInputBuffer;
 #[cfg(target_os = "android")]
 use platform_android::AndroidHardwareBufferHandle as CoreHardwareBuffer;
 use processing::{CpuImageProcessor, GpuImageProcessor};
-use infers_gpu::VulkanContext;
 use processing_core::{
     FitMode as CoreFitMode, ImageFormat as CoreImageFormat,
     ProcessingOptions as CoreProcessingOptions, Rotation as CoreRotation,
@@ -221,9 +220,9 @@ pub fn create_hardware_buffer_from_raw(
 
 #[derive(uniffi::Object)]
 pub struct ImageProcessor {
-    cpu_proc: Option<CpuImageProcessor>,
-    gpu_proc: Option<GpuImageProcessor>,
-    device: Device,
+    pub(crate) cpu_proc: Option<CpuImageProcessor>,
+    pub(crate) gpu_proc: Option<GpuImageProcessor>,
+    pub(crate) device: Device,
 }
 
 impl std::fmt::Debug for ImageProcessor {
@@ -301,23 +300,4 @@ pub fn create_cpu_image_processor() -> Arc<ImageProcessor> {
         gpu_proc: None,
         device: infers_core::Device::cpu().into(),
     })
-}
-
-#[uniffi::export]
-pub fn create_gpu_image_processor(device: Device) -> Result<Arc<ImageProcessor>, InfersError> {
-    let core_device: infers_core::Device = device.clone().into();
-    #[cfg(target_os = "android")]
-    let context = Arc::new(
-        platform_android::create_vulkan_context(&core_device).map_err(InfersError::from)?,
-    );
-    #[cfg(not(target_os = "android"))]
-    let context = Arc::new(VulkanContext::new(&core_device).map_err(|err| InfersError::ProcessingFailed {
-        message: err.to_string(),
-    })?);
-    let gpu_proc = GpuImageProcessor::new(context).map_err(InfersError::from)?;
-    Ok(Arc::new(ImageProcessor {
-        cpu_proc: None,
-        gpu_proc: Some(gpu_proc),
-        device,
-    }))
 }

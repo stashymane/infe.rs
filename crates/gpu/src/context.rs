@@ -13,6 +13,17 @@ pub struct VulkanContextOptions {
     pub sampler_ycbcr_conversion: bool,
 }
 
+impl VulkanContextOptions {
+    /// Options for a device shared between Infers GPU preprocessing and ExecuTorch Vulkan.
+    ///
+    /// Device feature bits (Int8, Float16, 16-bit storage) are enabled in
+    /// [`VulkanContext::new_with_options`] when the GPU supports them. Platform crates
+    /// (e.g. Android) should merge additional extensions on top of this.
+    pub fn for_shared_inference() -> Self {
+        Self::default()
+    }
+}
+
 /// Raw Vulkan objects for wrapping an existing device.
 pub struct VulkanHandles {
     pub instance: vk::Instance,
@@ -24,6 +35,10 @@ pub struct VulkanHandles {
 }
 
 /// Shared Vulkan instance, device, compute queue, and memory allocator.
+///
+/// Create the context before GPU processors or Vulkan inference sessions, keep an
+/// [`Arc`](std::sync::Arc) alive while they run, and drop sessions/processors before the
+/// last context handle so the device is destroyed last.
 pub struct VulkanContext {
     /// Kept alive so instance/device function pointers remain valid.
     #[allow(dead_code)]
@@ -42,7 +57,7 @@ pub struct VulkanContext {
 impl VulkanContext {
     /// Create a new instance and compute-capable logical device for `device`.
     pub fn new(device: &Device) -> Result<Self, GpuContextError> {
-        Self::new_with_options(device, VulkanContextOptions::default())
+        Self::new_with_options(device, VulkanContextOptions::for_shared_inference())
     }
 
     pub fn new_with_options(
@@ -159,12 +174,26 @@ impl VulkanContext {
         &self.instance
     }
 
+    /// Raw `VkInstance` handle for ExecuTorch external-adapter registration.
+    pub fn instance_handle(&self) -> vk::Instance {
+        self.instance.handle()
+    }
+
     pub fn physical_device(&self) -> vk::PhysicalDevice {
         self.physical_device
     }
 
     pub fn device(&self) -> &ash::Device {
         &self.device
+    }
+
+    /// Raw `VkDevice` handle for ExecuTorch external-adapter registration.
+    pub fn device_handle(&self) -> vk::Device {
+        self.device.handle()
+    }
+
+    pub fn queue(&self) -> vk::Queue {
+        self.queue
     }
 
     pub fn queue_family_index(&self) -> u32 {
@@ -245,13 +274,21 @@ fn create_logical_device(
     let mut features_8bit = vk::PhysicalDevice8BitStorageFeatures::default()
         .storage_buffer8_bit_access(true)
         .uniform_and_storage_buffer8_bit_access(true);
-    let mut features_int8 = vk::PhysicalDeviceShaderFloat16Int8Features::default().shader_int8(true);
+    let mut features_16bit = vk::PhysicalDevice16BitStorageFeatures::default()
+        .storage_buffer16_bit_access(true)
+        .uniform_and_storage_buffer16_bit_access(true);
+    let mut features_float16_int8 = vk::PhysicalDeviceShaderFloat16Int8Features::default()
+        .shader_int8(true)
+        .shader_float16(true);
     let mut features_v12 = vk::PhysicalDeviceVulkan12Features::default()
         .shader_int8(true)
+        .shader_float16(true)
         .storage_buffer8_bit_access(true)
         .uniform_and_storage_buffer8_bit_access(true);
     let mut features_v11 = vk::PhysicalDeviceVulkan11Features::default()
-        .sampler_ycbcr_conversion(options.sampler_ycbcr_conversion);
+        .sampler_ycbcr_conversion(options.sampler_ycbcr_conversion)
+        .storage_buffer16_bit_access(true)
+        .uniform_and_storage_buffer16_bit_access(true);
 
     if api_minor < 2 {
         if !ext_available(&available, vk::KHR_8BIT_STORAGE_NAME) {
@@ -262,6 +299,9 @@ fn create_logical_device(
         }
         enabled_exts.push(vk::KHR_8BIT_STORAGE_NAME.as_ptr());
         enabled_exts.push(vk::KHR_SHADER_FLOAT16_INT8_NAME.as_ptr());
+        if ext_available(&available, vk::KHR_16BIT_STORAGE_NAME) {
+            enabled_exts.push(vk::KHR_16BIT_STORAGE_NAME.as_ptr());
+        }
     }
 
     for name in &options.extra_device_extensions {
@@ -283,7 +323,8 @@ fn create_logical_device(
     } else {
         features2 = features2
             .push_next(&mut features_8bit)
-            .push_next(&mut features_int8)
+            .push_next(&mut features_float16_int8)
+            .push_next(&mut features_16bit)
             .push_next(&mut features_v11);
     }
 

@@ -8,6 +8,34 @@ pub use executorch::program::{
 use infers_core::{DataType, TensorShape};
 use std::collections::HashMap;
 
+/// Bytes ExecuTorch reads from the start of a program blob when parsing the header.
+const PROGRAM_HEADER_BYTES: usize = 64;
+const PROGRAM_MAGIC: &[u8; 4] = b"ET12";
+
+/// Reject buffers that cannot be valid ExecuTorch programs before calling native code.
+///
+/// ExecuTorch logs to stderr when the buffer is too small or has the wrong magic; validating
+/// here keeps tests and error paths quiet while returning the same failure semantics.
+pub(crate) fn validate_program_bytes(bytes: &[u8]) -> Result<(), ExecuTorchError> {
+    if bytes.len() < PROGRAM_HEADER_BYTES {
+        return Err(ExecuTorchError::InvalidProgram(format!(
+            "Program buffer too small: {} bytes (need at least {} for the ExecuTorch header)",
+            bytes.len(),
+            PROGRAM_HEADER_BYTES,
+        )));
+    }
+    if bytes.get(0..4) != Some(PROGRAM_MAGIC) {
+        let found = bytes
+            .get(0..4)
+            .map(|magic| String::from_utf8_lossy(magic).into_owned())
+            .unwrap_or_else(|| "???".into());
+        return Err(ExecuTorchError::InvalidProgram(format!(
+            "Invalid ExecuTorch program magic: expected 'ET12', found '{found}'"
+        )));
+    }
+    Ok(())
+}
+
 /// A descriptor of a tensor with name, shape, and data type.
 #[derive(Clone, Debug, PartialEq)]
 pub struct TensorDescriptor {
@@ -121,6 +149,7 @@ impl ProgramMetadata {
 
     /// Load program metadata from raw model bytes using native ExecuTorch BufferDataLoader and Program.
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, ExecuTorchError> {
+        validate_program_bytes(bytes)?;
         let loader = BufferDataLoader::new(bytes);
         match NativeProgram::load(&loader, None) {
             Ok(prog) => Self::from_native_program(&prog),

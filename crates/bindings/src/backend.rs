@@ -1,9 +1,25 @@
 use crate::device::Device;
 use crate::error::InfersError;
+use crate::gpu_context::GpuContext;
 use crate::session::ModelSession;
-use infers_backend_executorch::ExecuTorchBackend as CoreExecuTorchBackend;
+use infers_backend_executorch::{
+    ExecuTorchBackend as CoreExecuTorchBackend, ExecuTorchBackendConfig,
+};
 use infers_core::Backend;
 use std::sync::Arc;
+
+#[derive(Debug, Clone, uniffi::Enum)]
+pub enum BackendConfig {
+    Xnnpack {
+        num_threads: u32,
+        method: Option<String>,
+    },
+    #[cfg(feature = "vulkan")]
+    Vulkan {
+        context: Arc<GpuContext>,
+        method: Option<String>,
+    },
+}
 
 #[derive(uniffi::Object)]
 pub struct ExecuTorchBackend {
@@ -36,12 +52,12 @@ impl ExecuTorchBackend {
     pub fn load_model(
         &self,
         model_bytes: Vec<u8>,
-        device: Device,
+        config: BackendConfig,
     ) -> Result<Arc<ModelSession>, InfersError> {
-        let core_device: infers_core::Device = device.into();
+        let core_config = to_core_config(config)?;
         let session = self
             .inner
-            .load_model(&model_bytes, &core_device)
+            .load_model(&model_bytes, core_config)
             .map_err(InfersError::from)?;
         Ok(Arc::new(ModelSession::new(session)))
     }
@@ -49,13 +65,30 @@ impl ExecuTorchBackend {
     pub fn load_model_from_file(
         &self,
         path: String,
-        device: Device,
+        config: BackendConfig,
     ) -> Result<Arc<ModelSession>, InfersError> {
-        let core_device: infers_core::Device = device.into();
+        let core_config = to_core_config(config)?;
         let session = self
             .inner
-            .load_model_from_file(&path, &core_device)
+            .load_model_from_file(&path, core_config)
             .map_err(InfersError::from)?;
         Ok(Arc::new(ModelSession::new(session)))
     }
+}
+
+fn to_core_config(config: BackendConfig) -> Result<ExecuTorchBackendConfig, InfersError> {
+    Ok(match config {
+        BackendConfig::Xnnpack {
+            num_threads,
+            method,
+        } => ExecuTorchBackendConfig::Xnnpack {
+            num_threads: num_threads.max(1) as usize,
+            method,
+        },
+        #[cfg(feature = "vulkan")]
+        BackendConfig::Vulkan { context, method } => ExecuTorchBackendConfig::Vulkan {
+            context: Arc::clone(context.inner()),
+            method,
+        },
+    })
 }

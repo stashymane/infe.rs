@@ -32,7 +32,16 @@ infers-core = { path = "crates/core" }
 infers-gpu = { path = "crates/gpu" }
 processing = { path = "crates/processing" }
 processing-gpu = { path = "crates/processing/gpu" }
-infers-backend-executorch = { path = "crates/backends/executorch" }
+infers-backend-executorch = { path = "crates/backends/executorch", default-features = false }
+
+[features]
+default = ["portable", "xnnpack", "vulkan"]
+portable = ["infers-backend-executorch/portable"]
+xnnpack = ["infers-backend-executorch/xnnpack"]
+vulkan = ["infers-backend-executorch/vulkan"]
+
+[dev-dependencies]
+infers-test-utils = { path = "crates/test-utils" }
 
 [target.'cfg(target_os = "android")'.dependencies]
 platform-android = { path = "crates/platform/android" }

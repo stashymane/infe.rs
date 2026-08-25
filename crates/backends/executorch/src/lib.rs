@@ -1,9 +1,12 @@
 pub mod backend;
+pub mod config;
 pub mod delegate;
 pub mod error;
 pub mod program;
 pub mod session;
 pub mod tensor;
+#[cfg(feature = "vulkan")]
+pub mod vulkan_adapter;
 
 // Re-export native executorch modules and types
 pub use executorch::data_loader::{BufferDataLoader, DataLoader};
@@ -15,6 +18,7 @@ pub use executorch::tensor::{ScalarType, Tensor, TensorImpl};
 
 // Re-export backend abstractions
 pub use backend::ExecuTorchBackend;
+pub use config::ExecuTorchBackendConfig;
 pub use delegate::ExecuTorchDelegate;
 pub use error::ExecuTorchError;
 pub use program::{MethodDescriptor, ProgramMetadata, TensorDescriptor};

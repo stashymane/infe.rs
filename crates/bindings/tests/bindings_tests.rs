@@ -124,10 +124,15 @@ fn test_uniffi_executorch_backend_error_handling() {
     let devices = backend.available_devices();
     assert!(!devices.is_empty());
 
-    let cpu = create_cpu_device();
     // Invalid model bytes should return ModelLoadFailed
     let invalid_bytes = vec![0xDE, 0xAD, 0xBE, 0xEF];
-    let err = backend.load_model(invalid_bytes, cpu);
+    let err = backend.load_model(
+        invalid_bytes,
+        BackendConfig::Xnnpack {
+            num_threads: 1,
+            method: None,
+        },
+    );
     assert!(err.is_err());
     match err.unwrap_err() {
         InfersError::ModelLoadFailed { message } => {

@@ -12,10 +12,16 @@ infers-core = { path = "../core" }
 infers-gpu = { path = "../gpu" }
 processing = { path = "../processing" }
 processing-core = { path = "../processing/core" }
-infers-backend-executorch = { path = "../backends/executorch" }
+infers-backend-executorch = { path = "../backends/executorch", default-features = false }
 uniffi = { version = "0.28", features = ["cli"] }
 thiserror = "2"
 parking_lot = "0.12"
+
+[features]
+default = ["portable", "xnnpack", "vulkan"]
+portable = ["infers-backend-executorch/portable"]
+xnnpack = ["infers-backend-executorch/xnnpack"]
+vulkan = ["infers-backend-executorch/vulkan"]
 
 [target.'cfg(target_os = "android")'.dependencies]
 platform-android = { path = "../platform/android" }

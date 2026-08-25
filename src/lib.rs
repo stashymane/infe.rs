@@ -40,10 +40,11 @@ pub use processing::{
     CpuImageProcessor, CpuTensorBuffer, GpuImageProcessor, GpuTensorBuffer, ProcessingError, SHADERS,
 };
 pub use executorch::{
-    ExecuTorchBackend, ExecuTorchDelegate, ExecuTorchError, ExecuTorchSession, ExecuTorchTensorBuffer,
-    MethodDescriptor, ProgramMetadata, TensorDescriptor, data_type_to_scalar_type,
-    scalar_type_to_data_type,
+    ExecuTorchBackend, ExecuTorchBackendConfig, ExecuTorchDelegate, ExecuTorchError,
+    ExecuTorchSession, ExecuTorchTensorBuffer, MethodDescriptor, ProgramMetadata, TensorDescriptor,
+    data_type_to_scalar_type, scalar_type_to_data_type,
 };
+pub use gpu::VulkanContext;
 
 #[cfg(target_os = "android")]
 pub use android::{

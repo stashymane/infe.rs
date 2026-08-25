@@ -56,6 +56,16 @@ impl GpuTensorBuffer {
             }),
         }
     }
+
+    /// Shared Vulkan context that owns this tensor's buffer.
+    pub fn context(&self) -> &Arc<VulkanContext> {
+        &self.inner.context
+    }
+
+    /// Underlying `VkBuffer` for future zero-copy handoff into ExecuTorch Vulkan.
+    pub fn vk_buffer(&self) -> Option<vk::Buffer> {
+        self.inner.buffer.as_ref().map(|b| b.buffer)
+    }
 }
 
 impl TensorBuffer for GpuTensorBuffer {

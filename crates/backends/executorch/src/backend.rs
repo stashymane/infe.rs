@@ -1,5 +1,4 @@
-use crate::delegate::ExecuTorchDelegate;
-use crate::program::{MethodDescriptor, ProgramMetadata};
+use crate::config::ExecuTorchBackendConfig;
 use crate::session::ExecuTorchSession;
 use infers_core::{Backend, CoreError, Device, ModelSession, SessionConfig};
 
@@ -12,66 +11,30 @@ impl ExecuTorchBackend {
         Self
     }
 
-    /// Load directly from an existing `MethodDescriptor` with session config
-    pub fn load_method(
+    /// Load a `.pte` program with an explicit backend configuration.
+    ///
+    /// For [`ExecuTorchBackendConfig::Vulkan`], pass an existing
+    /// [`infers_gpu::VulkanContext`] created by the app (required for teardown order
+    /// and sharing with GPU preprocessing).
+    pub fn load_model(
         &self,
-        method: MethodDescriptor,
-        config: &SessionConfig,
+        model_bytes: &[u8],
+        config: ExecuTorchBackendConfig,
     ) -> Result<Box<dyn ModelSession>, CoreError> {
-        let delegate = if let Some(del_name) = config.extra_options.get("delegate") {
-            match del_name.to_lowercase().as_str() {
-                "xnnpack" => ExecuTorchDelegate::Xnnpack,
-                "vulkan" => ExecuTorchDelegate::Vulkan,
-                "qnn" => ExecuTorchDelegate::Qnn,
-                "coreml" => ExecuTorchDelegate::CoreMl,
-                "portable_cpu" => ExecuTorchDelegate::PortableCpu,
-                other => ExecuTorchDelegate::Custom(other.to_string()),
-            }
-        } else {
-            ExecuTorchDelegate::for_device(&config.device)
-        };
-
-        let session = ExecuTorchSession::new(config.device.clone(), delegate, method)
-            .map_err(CoreError::from)?;
-
+        let session = ExecuTorchSession::load(model_bytes, &config).map_err(CoreError::from)?;
         Ok(Box::new(session))
     }
 
-    /// Load directly from `ProgramMetadata` with session config
-    pub fn load_metadata_with_config(
-        &self,
-        metadata: ProgramMetadata,
-        config: &SessionConfig,
-    ) -> Result<Box<dyn ModelSession>, CoreError> {
-        let method_name = config
-            .extra_options
-            .get("method")
-            .map(|s| s.as_str())
-            .unwrap_or("forward");
-
-        let method = metadata
-            .method(method_name)
-            .cloned()
-            .ok_or_else(|| {
-                CoreError::ModelLoadFailed(format!(
-                    "Method '{}' not found in ExecuTorch program metadata",
-                    method_name
-                ))
-            })?;
-
-        self.load_method(method, config)
-    }
-
-    /// Load a model from a file path with session configuration
-    pub fn load_model_from_file_with_config(
+    /// Load a `.pte` program from a file path with an explicit backend configuration.
+    pub fn load_model_from_file(
         &self,
         path: &str,
-        config: &SessionConfig,
+        config: ExecuTorchBackendConfig,
     ) -> Result<Box<dyn ModelSession>, CoreError> {
         let bytes = std::fs::read(path).map_err(|e| {
             CoreError::ModelLoadFailed(format!("Failed to read model file '{}': {}", path, e))
         })?;
-        self.load_model_with_config(&bytes, config)
+        self.load_model(&bytes, config)
     }
 }
 
@@ -89,8 +52,22 @@ impl Backend for ExecuTorchBackend {
         model_bytes: &[u8],
         config: &SessionConfig,
     ) -> Result<Box<dyn ModelSession>, CoreError> {
-        let metadata = ProgramMetadata::from_bytes(model_bytes)
-            .map_err(|e| CoreError::ModelLoadFailed(e.to_string()))?;
-        self.load_metadata_with_config(metadata, config)
+        // Core trait path: CPU/XNNPACK only. GPU requires [`ExecuTorchBackendConfig::Vulkan`].
+        if config.device.is_gpu() {
+            return Err(CoreError::ModelLoadFailed(
+                "GPU ExecuTorch models require ExecuTorchBackend::load_model with \
+                 ExecuTorchBackendConfig::Vulkan { context, .. }"
+                    .into(),
+            ));
+        }
+        let method = config.extra_options.get("method").cloned();
+        let num_threads = config.num_threads.max(1);
+        self.load_model(
+            model_bytes,
+            ExecuTorchBackendConfig::Xnnpack {
+                num_threads,
+                method,
+            },
+        )
     }
 }
