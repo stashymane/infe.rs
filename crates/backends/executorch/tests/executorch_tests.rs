@@ -3,7 +3,53 @@ use infers_backend_executorch::{
     ExecuTorchBackendConfig, ExecuTorchError, ExecuTorchTensorBuffer, ProgramMetadata,
     ScalarType,
 };
-use infers_core::{Backend, CoreError, DataType, Device, TensorBuffer, TensorShape};
+use infers_core::{Backend, CoreError, DataType, Device, ModelSession as _, TensorBuffer, TensorShape};
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, OnceLock};
+
+#[cfg(feature = "vulkan")]
+fn shared_vulkan_context() -> Option<Arc<infers_gpu::VulkanContext>> {
+    static CTX: OnceLock<Option<Arc<infers_gpu::VulkanContext>>> = OnceLock::new();
+    CTX.get_or_init(|| {
+        infers_gpu::VulkanContext::new(&Device::gpu(0))
+            .ok()
+            .map(Arc::new)
+    })
+    .clone()
+}
+
+
+fn yolo26n_face_asset(subpath: &str) -> Option<PathBuf> {
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../assets/yolo26n-face")
+        .join(subpath);
+    path.exists().then_some(path)
+}
+
+fn manifest_imgsz(manifest: &Path) -> Option<u32> {
+    let content = std::fs::read_to_string(manifest).ok()?;
+    for line in content.lines() {
+        let line = line.trim();
+        if line.starts_with("imgsz:") {
+            return line.split(':').nth(1)?.trim().parse().ok();
+        }
+    }
+    None
+}
+
+fn assert_detection_input_shape(meta: &ProgramMetadata, imgsz: u32) {
+    let forward = meta
+        .methods
+        .get("forward")
+        .expect("forward method metadata");
+    assert_eq!(forward.inputs.len(), 1);
+    assert_eq!(forward.inputs[0].dtype, DataType::F32);
+    assert_eq!(
+        forward.inputs[0].shape.dims(),
+        &[1, 3, imgsz as usize, imgsz as usize]
+    );
+    assert!(!forward.outputs.is_empty());
+}
 
 #[test]
 fn test_data_type_scalar_type_conversions() {
@@ -159,6 +205,82 @@ fn test_asset_model_loading_and_error_handling() {
 }
 
 #[test]
+fn test_yolo26n_face_xnnpack_asset_loads() {
+    let Some(pte_path) = yolo26n_face_asset("xnnpack/model.pte") else {
+        eprintln!("skipping: assets/yolo26n-face/xnnpack/model.pte not built");
+        return;
+    };
+    let Some(manifest_path) = yolo26n_face_asset("manifest.yaml") else {
+        eprintln!("skipping: assets/yolo26n-face/manifest.yaml missing");
+        return;
+    };
+    let Some(imgsz) = manifest_imgsz(&manifest_path) else {
+        panic!("manifest.yaml missing imgsz");
+    };
+
+    let bytes = std::fs::read(&pte_path).expect("read xnnpack model.pte");
+    let meta = ProgramMetadata::from_bytes(&bytes).expect("parse program metadata");
+    assert_detection_input_shape(&meta, imgsz);
+
+    let backend = ExecuTorchBackend::new();
+    let session = backend
+        .load_model(
+            &bytes,
+            ExecuTorchBackendConfig::Xnnpack {
+                num_threads: 1,
+                method: None,
+            },
+        )
+        .expect("load xnnpack yolo26n-face asset");
+    assert_eq!(session.input_shapes().len(), 1);
+    assert_eq!(
+        session.input_shapes()[0].dims(),
+        &[1, 3, imgsz as usize, imgsz as usize]
+    );
+}
+
+#[test]
+#[cfg(feature = "vulkan")]
+fn test_yolo26n_face_vulkan_asset_loads() {
+    let Some(pte_path) = yolo26n_face_asset("vulkan/model.pte") else {
+        eprintln!("skipping: assets/yolo26n-face/vulkan/model.pte not built");
+        return;
+    };
+    let Some(manifest_path) = yolo26n_face_asset("manifest.yaml") else {
+        eprintln!("skipping: assets/yolo26n-face/manifest.yaml missing");
+        return;
+    };
+    let Some(imgsz) = manifest_imgsz(&manifest_path) else {
+        panic!("manifest.yaml missing imgsz");
+    };
+
+    let Some(ctx) = shared_vulkan_context() else {
+        eprintln!("skipping: no Vulkan device");
+        return;
+    };
+
+    let bytes = std::fs::read(&pte_path).expect("read vulkan model.pte");
+    let meta = ProgramMetadata::from_bytes(&bytes).expect("parse vulkan program metadata");
+    assert_detection_input_shape(&meta, imgsz);
+
+    let backend = ExecuTorchBackend::new();
+    let session = backend
+        .load_model(
+            &bytes,
+            ExecuTorchBackendConfig::Vulkan {
+                context: ctx,
+                method: None,
+            },
+        )
+        .expect("load vulkan yolo26n-face asset");
+    assert_eq!(session.input_shapes().len(), 1);
+    assert_eq!(
+        session.input_shapes()[0].dims(),
+        &[1, 3, imgsz as usize, imgsz as usize]
+    );
+}
+
+#[test]
 fn test_delegate_configuration_and_device_selection() {
     use infers_backend_executorch::ExecuTorchDelegate;
 
@@ -275,19 +397,15 @@ fn test_prepare_gpu_inputs_avoids_read_to_cpu() {
 #[test]
 #[cfg(feature = "vulkan")]
 fn test_vulkan_config_registers_or_reports_missing_backend() {
-    use infers_gpu::VulkanContext;
-    use std::sync::Arc;
-
-    let Ok(ctx) = VulkanContext::new(&Device::gpu(0)) else {
+    let Some(ctx) = shared_vulkan_context() else {
         eprintln!("skipping: no Vulkan device");
         return;
     };
-    let ctx = Arc::new(ctx);
     let backend = ExecuTorchBackend::new();
     let result = backend.load_model(
         &[0u8; 16],
         ExecuTorchBackendConfig::Vulkan {
-            context: Arc::clone(&ctx),
+            context: ctx,
             method: None,
         },
     );

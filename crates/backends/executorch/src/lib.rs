@@ -9,6 +9,8 @@ pub mod tensor;
 pub mod gpu_input;
 #[cfg(feature = "vulkan")]
 pub mod vulkan_adapter;
+#[cfg(feature = "vulkan")]
+pub use vulkan_adapter::{register_external_adapter, ExternalAdapterRegistration};
 
 // Re-export native executorch modules and types
 pub use executorch::data_loader::{BufferDataLoader, DataLoader};

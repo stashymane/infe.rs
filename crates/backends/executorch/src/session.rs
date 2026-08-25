@@ -27,13 +27,31 @@ pub struct ExecuTorchSession {
     method: MethodDescriptor,
     input_shapes: Vec<TensorShape>,
     output_shapes: Vec<TensorShape>,
-    _model_file: NamedTempFile,
-    module: Mutex<Module<'static>>,
     method_name: String,
     #[cfg(feature = "vulkan")]
     vulkan_context: Option<Arc<VulkanContext>>,
     #[cfg(feature = "vulkan")]
+    adapter_registration: Option<vulkan_adapter::ExternalAdapterRegistration>,
+    _model_file: NamedTempFile,
+    #[cfg(feature = "vulkan")]
     vulkan_graph: Option<VulkanComputeGraph>,
+    /// Wrapped in `Option` so [`Drop`] can destroy the Module before clearing
+    /// the sticky external adapter (ComputeGraph frees via Adapter VMA).
+    module: Option<Mutex<Module<'static>>>,
+}
+
+impl Drop for ExecuTorchSession {
+    fn drop(&mut self) {
+        // Destroy Method/ComputeGraph first while any Vulkan adapter + device remain.
+        drop(self.module.take());
+        #[cfg(feature = "vulkan")]
+        {
+            self.vulkan_graph = None;
+            // Clear sticky adapter (VMA/caches) while the guard still holds the context.
+            drop(self.adapter_registration.take());
+            self.vulkan_context = None;
+        }
+    }
 }
 
 impl ExecuTorchSession {
@@ -51,13 +69,18 @@ impl ExecuTorchSession {
         let (device, delegate) = match config {
             ExecuTorchBackendConfig::Xnnpack { .. } => (Device::cpu(), ExecuTorchDelegate::Xnnpack),
             #[cfg(feature = "vulkan")]
+            ExecuTorchBackendConfig::Vulkan { context, .. } => (
+                context.logical_device().clone(),
+                ExecuTorchDelegate::Vulkan,
+            ),
+        };
+
+        #[cfg(feature = "vulkan")]
+        let adapter_registration = match config {
             ExecuTorchBackendConfig::Vulkan { context, .. } => {
-                vulkan_adapter::register_external_adapter(context)?;
-                (
-                    context.logical_device().clone(),
-                    ExecuTorchDelegate::Vulkan,
-                )
+                Some(vulkan_adapter::register_external_adapter(context)?)
             }
+            ExecuTorchBackendConfig::Xnnpack { .. } => None,
         };
 
         #[cfg(feature = "vulkan")]
@@ -109,13 +132,15 @@ impl ExecuTorchSession {
             method,
             input_shapes,
             output_shapes,
-            _model_file: model_file,
-            module: Mutex::new(module),
             method_name,
             #[cfg(feature = "vulkan")]
             vulkan_context,
             #[cfg(feature = "vulkan")]
+            adapter_registration,
+            _model_file: model_file,
+            #[cfg(feature = "vulkan")]
             vulkan_graph,
+            module: Some(Mutex::new(module)),
         })
     }
 
@@ -191,9 +216,12 @@ impl ModelSession for ExecuTorchSession {
             }
         }
 
-        let mut module = self.module.lock().map_err(|_| {
-            CoreError::InferenceFailed("ExecuTorch module lock poisoned".into())
-        })?;
+        let mut module = self
+            .module
+            .as_ref()
+            .ok_or_else(|| CoreError::InferenceFailed("ExecuTorch session module already dropped".into()))?
+            .lock()
+            .map_err(|_| CoreError::InferenceFailed("ExecuTorch module lock poisoned".into()))?;
 
         #[cfg(feature = "vulkan")]
         let outputs = if self.delegate == ExecuTorchDelegate::Vulkan {

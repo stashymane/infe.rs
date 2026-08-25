@@ -24,13 +24,17 @@ pub(crate) fn validate_program_bytes(bytes: &[u8]) -> Result<(), ExecuTorchError
             PROGRAM_HEADER_BYTES,
         )));
     }
-    if bytes.get(0..4) != Some(PROGRAM_MAGIC) {
-        let found = bytes
+    let header = &bytes[..PROGRAM_HEADER_BYTES.min(bytes.len())];
+    let has_magic = header
+        .windows(PROGRAM_MAGIC.len())
+        .any(|window| window == PROGRAM_MAGIC);
+    if !has_magic {
+        let found = header
             .get(0..4)
             .map(|magic| String::from_utf8_lossy(magic).into_owned())
             .unwrap_or_else(|| "???".into());
         return Err(ExecuTorchError::InvalidProgram(format!(
-            "Invalid ExecuTorch program magic: expected 'ET12', found '{found}'"
+            "Invalid ExecuTorch program magic: expected 'ET12' in header, found '{found}' at offset 0"
         )));
     }
     Ok(())

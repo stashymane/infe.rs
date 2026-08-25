@@ -32,11 +32,18 @@ git -c advice.detachedHead=false submodule update --init --depth 1 --jobs "$(npr
 echo "Patching ExecuTorch Vulkan backend for GPU input staging..."
 bash /usr/local/share/infers/executorch-patches/apply-vulkan-gpu-input.sh "${EXECUTORCH_DIR}"
 
+echo "Patching ExecuTorch Vulkan Runtime for external adapter teardown..."
+bash /usr/local/share/infers/executorch-patches/apply-vulkan-external-adapter-teardown.sh "${EXECUTORCH_DIR}"
+
+echo "Patching ExecuTorch SharedObject for GCC 15 <algorithm>..."
+bash /usr/local/share/infers/executorch-patches/apply-vulkan-sharedobject-algorithm.sh "${EXECUTORCH_DIR}"
+
 echo "Configuring ExecuTorch..."
 rm -rf "${BUILD_DIR}"
 cmake -G Ninja \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+    -DCMAKE_CXX_FLAGS="-include algorithm" \
     -DEXECUTORCH_BUILD_EXECUTOR_RUNNER=OFF \
     -DEXECUTORCH_BUILD_EXTENSION_RUNNER_UTIL=OFF \
     -DEXECUTORCH_BUILD_PORTABLE_OPS=ON \

@@ -46,6 +46,8 @@ WORKDIR /workspace
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY patches /usr/local/share/infers/executorch-patches
 RUN chmod +x /usr/local/bin/entrypoint.sh \
-    /usr/local/share/infers/executorch-patches/apply-vulkan-gpu-input.sh
+    /usr/local/share/infers/executorch-patches/apply-vulkan-gpu-input.sh \
+    /usr/local/share/infers/executorch-patches/apply-vulkan-external-adapter-teardown.sh \
+    /usr/local/share/infers/executorch-patches/apply-vulkan-sharedobject-algorithm.sh
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
