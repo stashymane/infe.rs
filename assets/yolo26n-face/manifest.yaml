@@ -1,0 +1,41 @@
+model: yolo26n-face
+task: detect
+license: AGPL-3.0
+imgsz: 192
+weights:
+  url: https://huggingface.co/Shubham12864/YOLO26n-face/resolve/main/yolo26_widerdataset.pt
+  filename: yolo26_widerdataset.pt
+  sha256: 429066d7481ff45bed8769f22ec1732c795712d4881a6d2e9267906681eea572
+  source: huggingface
+  repo: Shubham12864/YOLO26n-face
+  resolved_path: /output/weights/yolo26_widerdataset.pt
+artifacts:
+  xnnpack:
+    path: xnnpack/model.pte
+    delegate: xnnpack
+    sha256: a7e34fb30d8470fc6c8ed76390611bd8894dd7e189a930fdf84db3eda686fd51
+    bytes: 9644676
+  vulkan:
+    path: vulkan/model.pte
+    delegate: vulkan
+    compile_options:
+      force_fp16: true
+    sha256: 21e82f8ac74653dfde3d0a3e2f0dc39133745f782f441b290360a7c1955e7228
+    bytes: 4890728
+build:
+  script: scripts/build_yolo26n_face_assets.sh
+  dockerfile: docker/yolo26n-face-export.Dockerfile
+  env:
+    IMGSZ: '192'
+export:
+  built_at: '2026-08-25T10:41:48.232034+00:00'
+  torch_version: 2.13.0+cpu
+  executorch_version: 1.4.0+cpu
+  ultralytics_version: 8.4.128
+  input_shape:
+  - 1
+  - 3
+  - 192
+  - 192
+  input_layout: NCHW
+  input_dtype: float32
