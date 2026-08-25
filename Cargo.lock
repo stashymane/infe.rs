@@ -928,6 +928,7 @@ dependencies = [
 name = "infers"
 version = "0.1.0"
 dependencies = [
+ "clap",
  "infers-backend-executorch",
  "infers-core",
  "infers-gpu",

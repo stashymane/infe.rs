@@ -23,6 +23,7 @@ unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_arch, values("spirv
 
 [workspace.dependencies]
 ash = "0.38"
+clap = { version = "4", features = ["derive"] }
 # Used instead of `std::sync::Mutex` so that a panic while a lock is held cannot
 # poison it and turn every later access into an error or panic.
 parking_lot = "0.12"
@@ -38,6 +39,7 @@ infers-core = { path = "crates/core" }
 infers-gpu = { path = "crates/gpu", optional = true }
 processing = { path = "crates/processing" }
 infers-backend-executorch = { path = "crates/backends/executorch", default-features = false }
+clap = { workspace = true }
 
 [features]
 default = ["portable", "xnnpack", "vulkan"]

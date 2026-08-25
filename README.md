@@ -49,6 +49,22 @@ Camera / image buffer (Rgb888, Nv12, …)
 
 On Android, `AndroidHardwareBufferHandle` can feed the GPU processor directly. With `vulkan`, the same `VulkanContext` should be shared between `GpuImageProcessor` and `ExecuTorchBackendConfig::Vulkan` so preprocessing and inference use one device.
 
+## Benchmark examples
+
+Release-mode examples time the hot path after a camera-like frame is already resident (allocation is outside the timer):
+
+```bash
+# CPU: preprocess → NHWC→NCHW → XNNPACK yolo26n-face
+cargo run --release --example cpu_pipeline_bench
+cargo run --release --example cpu_pipeline_bench -- --iters 100 --threads 4
+
+# GPU: Vulkan preprocess → NHWC→NCHW → Vulkan ExecuTorch
+cargo run --release --example gpu_pipeline_bench
+cargo run --release --example gpu_pipeline_bench -- --iters 100
+```
+
+Defaults load `assets/yolo26n-face/{xnnpack,vulkan}/model.pte` (192²). Flags are parsed with `clap` (`--model`, `--width` / `--height`, `--warmup`, `--iters`, `--threads` on CPU, `--help`). Reported stages: preprocess, layout convert, inference, and total.
+
 ## Development
 
 Set a stable target directory (optional but recommended in this repo):
