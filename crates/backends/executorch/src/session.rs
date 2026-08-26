@@ -11,7 +11,7 @@ use crate::vulkan_adapter;
 use executorch::module::Module;
 use parking_lot::Mutex;
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 #[cfg(feature = "vulkan")]
 use std::sync::Arc;
 use tempfile::NamedTempFile;
@@ -30,7 +30,9 @@ pub struct ExecuTorchSession {
     vulkan_context: Option<Arc<VulkanContext>>,
     #[cfg(feature = "vulkan")]
     adapter_registration: Option<vulkan_adapter::ExternalAdapterRegistration>,
-    _model_file: NamedTempFile,
+    /// Owns a spill file when the model was loaded from bytes; `None` when loaded
+    /// from a caller-owned path (that path must outlive this session).
+    _model_file: Option<NamedTempFile>,
     #[cfg(feature = "vulkan")]
     vulkan_graph: Option<VulkanComputeGraph>,
     /// Wrapped in `Option` so [`Drop`] can destroy the Module before clearing
@@ -53,11 +55,47 @@ impl Drop for ExecuTorchSession {
 }
 
 impl ExecuTorchSession {
+    /// Load from in-memory bytes by spilling to a temp file ExecuTorch can mmap.
     pub fn load(
         model_bytes: &[u8],
         config: &ExecuTorchBackendConfig,
     ) -> Result<Self, ExecuTorchError> {
         validate_program_bytes(model_bytes)?;
+
+        let mut model_file = NamedTempFile::new()?;
+        model_file.write_all(model_bytes)?;
+        model_file.flush()?;
+        let path: PathBuf = model_file.path().to_path_buf();
+
+        Self::load_from_path_inner(&path, config, Some(model_file))
+    }
+
+    /// Load from an on-disk `.pte`. The file must remain readable for the
+    /// lifetime of the returned session (ExecuTorch keeps the path open).
+    pub fn load_from_path(
+        path: &Path,
+        config: &ExecuTorchBackendConfig,
+    ) -> Result<Self, ExecuTorchError> {
+        use std::io::Read;
+
+        // Cheap header check — do not pull the full program into memory.
+        let mut file = std::fs::File::open(path).map_err(|e| {
+            std::io::Error::new(
+                e.kind(),
+                format!("Failed to open model file '{}': {}", path.display(), e),
+            )
+        })?;
+        let mut header = [0u8; 64];
+        let n = file.read(&mut header)?;
+        validate_program_bytes(&header[..n])?;
+        Self::load_from_path_inner(path, config, None)
+    }
+
+    fn load_from_path_inner(
+        path: &Path,
+        config: &ExecuTorchBackendConfig,
+        model_file: Option<NamedTempFile>,
+    ) -> Result<Self, ExecuTorchError> {
         let method_name = config.method_name().to_string();
 
         let (device, delegate) = match config {
@@ -91,12 +129,7 @@ impl ExecuTorchSession {
             )));
         }
 
-        let mut model_file = NamedTempFile::new()?;
-        model_file.write_all(model_bytes)?;
-        model_file.flush()?;
-        let path: PathBuf = model_file.path().to_path_buf();
-
-        let mut module = Module::new(&path);
+        let mut module = Module::new(path);
         match config {
             ExecuTorchBackendConfig::Xnnpack { num_threads, .. } => {
                 use executorch::backend_options::{BackendOption, LoadBackendOptionsMap};

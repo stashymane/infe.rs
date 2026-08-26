@@ -7,7 +7,13 @@ IMGSZ="${IMGSZ:-192}"
 
 mkdir -p "${OUTPUT_DIR}"
 
-docker build -t yolo26n-face-exporter -f "${ROOT}/docker/yolo26n-face-export.Dockerfile" "${ROOT}/docker"
+export DOCKER_BUILDKIT=1
+
+docker build \
+    --progress=plain \
+    -t infers-builder \
+    -f "${ROOT}/docker/builder/Dockerfile" \
+    "${ROOT}/docker/builder"
 
 docker_run=(docker run --rm
     -e IMGSZ="${IMGSZ}"
@@ -19,5 +25,5 @@ if [[ -n "${YOLO26N_FACE_WEIGHTS:-}" ]]; then
     docker_run+=(-v "${YOLO26N_FACE_WEIGHTS}:${YOLO26N_FACE_WEIGHTS}:ro")
 fi
 
-docker_run+=(-v "${OUTPUT_DIR}:/output" yolo26n-face-exporter)
+docker_run+=(-v "${OUTPUT_DIR}:/output" infers-builder yolo26n-face)
 "${docker_run[@]}"

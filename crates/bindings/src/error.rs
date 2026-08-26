@@ -6,57 +6,61 @@ use infers_gpu::GpuError;
 #[cfg(target_os = "android")]
 use platform_android::AndroidPlatformError;
 
+/// UniFFI error type. Field is named `reason` (not `message`) so generated Kotlin
+/// does not clash with `Throwable.message`.
 #[derive(Debug, thiserror::Error, uniffi::Error)]
 pub enum InfersError {
-    #[error("Invalid tensor shape: {message}")]
-    InvalidShape { message: String },
+    #[error("Invalid tensor shape: {reason}")]
+    InvalidShape { reason: String },
 
     #[error("Device mismatch: expected {expected}, actual {actual}")]
     DeviceMismatch { expected: String, actual: String },
 
-    #[error("Unsupported data type: {message}")]
-    UnsupportedType { message: String },
+    #[error("Unsupported data type: {reason}")]
+    UnsupportedType { reason: String },
 
-    #[error("Buffer allocation failed: {message}")]
-    BufferAllocationFailed { message: String },
+    #[error("Buffer allocation failed: {reason}")]
+    BufferAllocationFailed { reason: String },
 
-    #[error("Model load failed: {message}")]
-    ModelLoadFailed { message: String },
+    #[error("Model load failed: {reason}")]
+    ModelLoadFailed { reason: String },
 
-    #[error("Inference execution failed: {message}")]
-    InferenceFailed { message: String },
+    #[error("Inference execution failed: {reason}")]
+    InferenceFailed { reason: String },
 
-    #[error("Image processing failed: {message}")]
-    ProcessingFailed { message: String },
+    #[error("Image processing failed: {reason}")]
+    ProcessingFailed { reason: String },
 
-    #[error("Platform error: {message}")]
-    PlatformError { message: String },
+    #[error("Platform error: {reason}")]
+    PlatformError { reason: String },
 
-    #[error("Internal error: {message}")]
-    InternalError { message: String },
+    #[error("Internal error: {reason}")]
+    InternalError { reason: String },
 }
 
 impl From<CoreError> for InfersError {
     fn from(err: CoreError) -> Self {
         match err {
-            CoreError::InvalidShape(msg) => InfersError::InvalidShape { message: msg },
+            CoreError::InvalidShape(msg) => InfersError::InvalidShape { reason: msg },
             CoreError::DeviceMismatch { expected, actual } => InfersError::DeviceMismatch {
                 expected: expected.name,
                 actual: actual.name,
             },
             CoreError::InvalidDataType { expected, actual } => InfersError::UnsupportedType {
-                message: format!("Expected {expected:?}, got {actual:?}"),
+                reason: format!("Expected {expected:?}, got {actual:?}"),
             },
-            CoreError::BufferTransferFailed(msg) => InfersError::BufferAllocationFailed { message: msg },
-            CoreError::ModelLoadFailed(msg) => InfersError::ModelLoadFailed { message: msg },
-            CoreError::InferenceFailed(msg) => InfersError::InferenceFailed { message: msg },
-            CoreError::InvalidArgument(msg) => InfersError::InvalidShape { message: msg },
-            CoreError::InvalidImageBuffer(msg) | CoreError::ImageResizeFailed(msg) => {
-                InfersError::ProcessingFailed { message: msg }
+            CoreError::BufferTransferFailed(msg) => {
+                InfersError::BufferAllocationFailed { reason: msg }
             }
-            CoreError::Platform(msg) => InfersError::PlatformError { message: msg },
+            CoreError::ModelLoadFailed(msg) => InfersError::ModelLoadFailed { reason: msg },
+            CoreError::InferenceFailed(msg) => InfersError::InferenceFailed { reason: msg },
+            CoreError::InvalidArgument(msg) => InfersError::InvalidShape { reason: msg },
+            CoreError::InvalidImageBuffer(msg) | CoreError::ImageResizeFailed(msg) => {
+                InfersError::ProcessingFailed { reason: msg }
+            }
+            CoreError::Platform(msg) => InfersError::PlatformError { reason: msg },
             CoreError::Gpu(err) => InfersError::ProcessingFailed {
-                message: err.to_string(),
+                reason: err.to_string(),
             },
         }
     }

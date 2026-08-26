@@ -1,0 +1,18 @@
+public final class dev/stashy/infers/vulkan/GpuContext : java/lang/AutoCloseable {
+	public fun <init> (Ldev/stashy/infers/Device;)V
+	public fun close ()V
+	public final fun getDevice ()Ldev/stashy/infers/Device;
+}
+
+public final class dev/stashy/infers/vulkan/GpuImageProcessor : dev/stashy/infers/FfiBackedImageProcessor {
+	public fun <init> (Ldev/stashy/infers/vulkan/GpuContext;)V
+}
+
+public final class dev/stashy/infers/vulkan/VulkanConfig : dev/stashy/infers/BackendConfig, dev/stashy/infers/internal/BackendConfigFfiConvertible {
+	public fun <init> (Ldev/stashy/infers/vulkan/GpuContext;Ljava/lang/String;)V
+	public synthetic fun <init> (Ldev/stashy/infers/vulkan/GpuContext;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getContext ()Ldev/stashy/infers/vulkan/GpuContext;
+	public final fun getMethod ()Ljava/lang/String;
+	public fun toFfiConfig ()Ldev/stashy/infers/ffi/BackendConfig;
+}
+

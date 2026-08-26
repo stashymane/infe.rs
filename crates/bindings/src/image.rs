@@ -4,7 +4,9 @@ use crate::tensor::TensorBuffer;
 use infers_core::CpuImageBuffer;
 #[cfg(target_os = "android")]
 use platform_android::AndroidHardwareBufferHandle as CoreHardwareBuffer;
-use processing::{CpuImageProcessor, GpuImageProcessor};
+use processing::CpuImageProcessor;
+#[cfg(feature = "vulkan")]
+use processing::GpuImageProcessor;
 use processing_core::{
     FitMode as CoreFitMode, ImageFormat as CoreImageFormat,
     ProcessingOptions as CoreProcessingOptions, Rotation as CoreRotation,
@@ -84,19 +86,31 @@ impl From<ProcessingOptions> for CoreProcessingOptions {
     }
 }
 
-#[cfg(target_os = "android")]
+/// UniFFI-exported handle. Instantiable only on Android; off-Android the
+/// `_unsupported: Infallible` field makes construction impossible so method
+/// bodies that `match` on it are unreachable.
 #[derive(uniffi::Object)]
 pub struct HardwareBufferHandle {
+    #[cfg(target_os = "android")]
     inner: Arc<CoreHardwareBuffer>,
+    #[cfg(not(target_os = "android"))]
+    _unsupported: std::convert::Infallible,
 }
 
-#[cfg(target_os = "android")]
 impl std::fmt::Debug for HardwareBufferHandle {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("HardwareBufferHandle")
-            .field("width", &self.inner.width())
-            .field("height", &self.inner.height())
-            .finish()
+        #[cfg(target_os = "android")]
+        {
+            f.debug_struct("HardwareBufferHandle")
+                .field("width", &self.inner.width())
+                .field("height", &self.inner.height())
+                .finish()
+        }
+        #[cfg(not(target_os = "android"))]
+        {
+            let _ = f;
+            match self._unsupported {}
+        }
     }
 }
 
@@ -111,46 +125,92 @@ impl HardwareBufferHandle {
     }
 }
 
-#[cfg(target_os = "android")]
 #[uniffi::export]
 impl HardwareBufferHandle {
     pub fn width(&self) -> u32 {
-        self.inner.width()
+        #[cfg(target_os = "android")]
+        {
+            self.inner.width()
+        }
+        #[cfg(not(target_os = "android"))]
+        {
+            match self._unsupported {}
+        }
     }
 
     pub fn height(&self) -> u32 {
-        self.inner.height()
+        #[cfg(target_os = "android")]
+        {
+            self.inner.height()
+        }
+        #[cfg(not(target_os = "android"))]
+        {
+            match self._unsupported {}
+        }
     }
 
     pub fn format(&self) -> u32 {
-        self.inner.desc().format
+        #[cfg(target_os = "android")]
+        {
+            self.inner.desc().format
+        }
+        #[cfg(not(target_os = "android"))]
+        {
+            match self._unsupported {}
+        }
     }
 
     pub fn raw_pointer(&self) -> u64 {
-        self.inner.raw_ptr() as u64
+        #[cfg(target_os = "android")]
+        {
+            self.inner.raw_ptr() as u64
+        }
+        #[cfg(not(target_os = "android"))]
+        {
+            match self._unsupported {}
+        }
     }
 
     pub fn lock_cpu(&self) -> Result<Vec<u8>, InfersError> {
-        let locked = self.inner.lock_cpu_read().map_err(InfersError::from)?;
-        Ok(locked.as_slice().to_vec())
+        #[cfg(target_os = "android")]
+        {
+            self.inner.copy_cpu_packed().map_err(InfersError::from)
+        }
+        #[cfg(not(target_os = "android"))]
+        {
+            match self._unsupported {}
+        }
     }
 }
 
-#[cfg(target_os = "android")]
 #[uniffi::export]
 pub fn create_hardware_buffer_from_raw(
     ptr: u64,
     device: Device,
 ) -> Result<Arc<HardwareBufferHandle>, InfersError> {
-    let raw_ptr = ptr as *mut platform_android::ffi::AHardwareBuffer;
-    let handle =
-        CoreHardwareBuffer::from_raw(raw_ptr, device.into()).map_err(InfersError::from)?;
-    Ok(Arc::new(HardwareBufferHandle::new(Arc::new(handle))))
+    #[cfg(target_os = "android")]
+    {
+        let raw_ptr = ptr as *mut platform_android::ffi::AHardwareBuffer;
+        // Acquire our own +1. Do not consume the caller's/Java object's ref —
+        // `AHardwareBuffer_fromHardwareBuffer` is not reliable as a transferable
+        // ownership handoff against `HardwareBuffer.close()` on MTE devices.
+        let handle =
+            CoreHardwareBuffer::from_raw(raw_ptr, device.into()).map_err(InfersError::from)?;
+        Ok(Arc::new(HardwareBufferHandle::new(Arc::new(handle))))
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = (ptr, device);
+        Err(InfersError::PlatformError {
+            reason: "HardwareBuffer is only available on Android".into(),
+        })
+    }
 }
 
 #[derive(uniffi::Object)]
 pub struct ImageProcessor {
     pub(crate) cpu_proc: Option<CpuImageProcessor>,
+    #[cfg(feature = "vulkan")]
     pub(crate) gpu_proc: Option<GpuImageProcessor>,
     pub(crate) device: Device,
 }
@@ -181,43 +241,58 @@ impl ImageProcessor {
             .map_err(InfersError::from)?;
         let core_opts: CoreProcessingOptions = options.into();
 
+        #[cfg(feature = "vulkan")]
         if let Some(gpu) = &self.gpu_proc {
             let out_tensor = gpu.process(&cpu_img, &core_opts).map_err(InfersError::from)?;
-            Ok(Arc::new(TensorBuffer::from_boxed(out_tensor)))
-        } else if let Some(cpu) = &self.cpu_proc {
+            return Ok(Arc::new(TensorBuffer::from_boxed(out_tensor)));
+        }
+
+        if let Some(cpu) = &self.cpu_proc {
             let out_tensor = cpu.process(&cpu_img, &core_opts).map_err(InfersError::from)?;
             Ok(Arc::new(TensorBuffer::from_boxed(out_tensor)))
         } else {
             Err(InfersError::InternalError {
-                message: "No processor available".into(),
+                reason: "No processor available".into(),
             })
         }
     }
-}
 
-#[cfg(target_os = "android")]
-#[uniffi::export]
-impl ImageProcessor {
     pub fn process_hardware_buffer(
         &self,
         buffer: Arc<HardwareBufferHandle>,
         options: ProcessingOptions,
     ) -> Result<Arc<TensorBuffer>, InfersError> {
-        let core_opts: CoreProcessingOptions = options.into();
-        let hb = buffer.inner();
+        #[cfg(target_os = "android")]
+        {
+            let core_opts: CoreProcessingOptions = options.into();
+            let hb = buffer.inner();
 
-        if let Some(gpu) = &self.gpu_proc {
-            let sampled = hb
-                .to_vulkan(Arc::clone(gpu.context()))
-                .map_err(InfersError::from)?;
-            let out_tensor = gpu.process(&sampled, &core_opts).map_err(InfersError::from)?;
-            Ok(Arc::new(TensorBuffer::from_boxed(out_tensor)))
-        } else if let Some(cpu) = &self.cpu_proc {
-            let out_tensor = cpu.process(hb, &core_opts).map_err(InfersError::from)?;
-            Ok(Arc::new(TensorBuffer::from_boxed(out_tensor)))
-        } else {
-            Err(InfersError::InternalError {
-                message: "No processor available".into(),
+            #[cfg(feature = "vulkan")]
+            if let Some(gpu) = &self.gpu_proc {
+                let sampled = hb
+                    .to_vulkan(Arc::clone(gpu.context()))
+                    .map_err(InfersError::from)?;
+                let out_tensor = gpu.process(&sampled, &core_opts).map_err(InfersError::from)?;
+                return Ok(Arc::new(TensorBuffer::from_boxed(out_tensor)));
+            }
+
+            if let Some(cpu) = &self.cpu_proc {
+                let data = hb.copy_cpu_packed().map_err(InfersError::from)?;
+                let cpu_img = CpuImageBuffer::new(hb.width(), hb.height(), hb.format(), data)
+                    .map_err(InfersError::from)?;
+                let out_tensor = cpu.process(&cpu_img, &core_opts).map_err(InfersError::from)?;
+                Ok(Arc::new(TensorBuffer::from_boxed(out_tensor)))
+            } else {
+                Err(InfersError::InternalError {
+                    reason: "No processor available".into(),
+                })
+            }
+        }
+        #[cfg(not(target_os = "android"))]
+        {
+            let _ = (buffer, options);
+            Err(InfersError::PlatformError {
+                reason: "HardwareBuffer is only available on Android".into(),
             })
         }
     }
@@ -227,6 +302,7 @@ impl ImageProcessor {
 pub fn create_cpu_image_processor() -> Arc<ImageProcessor> {
     Arc::new(ImageProcessor {
         cpu_proc: Some(CpuImageProcessor::new()),
+        #[cfg(feature = "vulkan")]
         gpu_proc: None,
         device: infers_core::Device::cpu().into(),
     })

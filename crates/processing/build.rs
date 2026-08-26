@@ -1,12 +1,18 @@
-use spirv_builder::{Capability, SpirvBuilder, SpirvMetadata};
 use std::env;
-use std::fs;
-use std::path::Path;
 
 fn main() {
     if env::var_os("CARGO_FEATURE_VULKAN").is_none() {
         return;
     }
+
+    build_shaders();
+}
+
+#[cfg(feature = "vulkan")]
+fn build_shaders() {
+    use spirv_builder::{Capability, SpirvBuilder, SpirvMetadata};
+    use std::fs;
+    use std::path::Path;
 
     println!("cargo:rerun-if-changed=shaders");
     println!("cargo:rerun-if-changed=shaders/src/lib.rs");
@@ -31,3 +37,6 @@ fn main() {
 
     println!("cargo:rustc-env=PROCESSING_SHADERS_SPV={}", dest_path.display());
 }
+
+#[cfg(not(feature = "vulkan"))]
+fn build_shaders() {}

@@ -181,6 +181,65 @@ impl AndroidHardwareBufferHandle {
         })
     }
 
+    /// Copy pixels into a tightly packed buffer (`width * bpp` bytes per row).
+    ///
+    /// `AHardwareBuffer` row pitch is `stride * bpp` and may exceed `width`; the
+    /// CPU image processor expects unpadded rows.
+    pub fn copy_cpu_packed(&self) -> Result<Vec<u8>, AndroidPlatformError> {
+        let locked = self.lock_cpu_read()?;
+        let bpp = match self.format {
+            ImageFormat::Rgb888 => 3usize,
+            ImageFormat::Rgbf32 => 12usize,
+            ImageFormat::Nv12 | ImageFormat::I420 => {
+                return Err(AndroidPlatformError::UnsupportedFormat(self.desc.format));
+            }
+        };
+
+        let width = self.desc.width as usize;
+        let height = self.desc.height as usize;
+        let stride = self.desc.stride as usize;
+        let src_pitch = stride
+            .checked_mul(bpp)
+            .ok_or(AndroidPlatformError::UnsupportedFormat(self.desc.format))?;
+        let dst_pitch = width
+            .checked_mul(bpp)
+            .ok_or(AndroidPlatformError::UnsupportedFormat(self.desc.format))?;
+
+        if src_pitch < dst_pitch {
+            return Err(AndroidPlatformError::UnsupportedFormat(self.desc.format));
+        }
+
+        let src = locked.as_slice();
+        if src_pitch == dst_pitch {
+            let need = dst_pitch
+                .checked_mul(height)
+                .ok_or(AndroidPlatformError::UnsupportedFormat(self.desc.format))?;
+            if src.len() < need {
+                return Err(AndroidPlatformError::UnsupportedFormat(self.desc.format));
+            }
+            return Ok(src[..need].to_vec());
+        }
+
+        let mut out = Vec::with_capacity(
+            dst_pitch
+                .checked_mul(height)
+                .ok_or(AndroidPlatformError::UnsupportedFormat(self.desc.format))?,
+        );
+        for y in 0..height {
+            let start = y
+                .checked_mul(src_pitch)
+                .ok_or(AndroidPlatformError::UnsupportedFormat(self.desc.format))?;
+            let end = start
+                .checked_add(dst_pitch)
+                .ok_or(AndroidPlatformError::UnsupportedFormat(self.desc.format))?;
+            if end > src.len() {
+                return Err(AndroidPlatformError::UnsupportedFormat(self.desc.format));
+            }
+            out.extend_from_slice(&src[start..end]);
+        }
+        Ok(out)
+    }
+
     /// Byte length of the CPU mapping produced by `AHardwareBuffer_lock`.
     ///
     /// `desc.stride` is measured in pixels, so the row pitch is

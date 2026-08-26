@@ -1,0 +1,325 @@
+public final class dev/stashy/infers/Backend : java/lang/AutoCloseable {
+	public fun <init> ()V
+	public final fun availableDevices (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun close ()V
+	public final fun loadModel (Lkotlinx/io/files/Path;Ldev/stashy/infers/BackendConfig;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public abstract interface class dev/stashy/infers/BackendConfig {
+}
+
+public final class dev/stashy/infers/CpuImageProcessor : dev/stashy/infers/FfiBackedImageProcessor {
+	public fun <init> ()V
+	public fun <init> (Ldev/stashy/infers/ffi/ImageProcessor;)V
+}
+
+public final class dev/stashy/infers/DataType : java/lang/Enum {
+	public static final field F16 Ldev/stashy/infers/DataType;
+	public static final field F32 Ldev/stashy/infers/DataType;
+	public static final field F64 Ldev/stashy/infers/DataType;
+	public static final field I16 Ldev/stashy/infers/DataType;
+	public static final field I32 Ldev/stashy/infers/DataType;
+	public static final field I64 Ldev/stashy/infers/DataType;
+	public static final field I8 Ldev/stashy/infers/DataType;
+	public static final field U8 Ldev/stashy/infers/DataType;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Ldev/stashy/infers/DataType;
+	public static fun values ()[Ldev/stashy/infers/DataType;
+}
+
+public final class dev/stashy/infers/Device {
+	public static final field Companion Ldev/stashy/infers/Device$Companion;
+	public synthetic fun <init> (Ldev/stashy/infers/DeviceKind;JLjava/lang/String;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ldev/stashy/infers/DeviceKind;
+	public final fun component2-s-VKNKU ()J
+	public final fun component3 ()Ljava/lang/String;
+	public final fun copy-z13BHRw (Ldev/stashy/infers/DeviceKind;JLjava/lang/String;)Ldev/stashy/infers/Device;
+	public static synthetic fun copy-z13BHRw$default (Ldev/stashy/infers/Device;Ldev/stashy/infers/DeviceKind;JLjava/lang/String;ILjava/lang/Object;)Ldev/stashy/infers/Device;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getId-s-VKNKU ()J
+	public final fun getKind ()Ldev/stashy/infers/DeviceKind;
+	public final fun getName ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/stashy/infers/Device$Companion {
+	public final fun cpu ()Ldev/stashy/infers/Device;
+	public final fun gpu-VKZWuLQ (J)Ldev/stashy/infers/Device;
+	public static synthetic fun gpu-VKZWuLQ$default (Ldev/stashy/infers/Device$Companion;JILjava/lang/Object;)Ldev/stashy/infers/Device;
+	public final fun npu-VKZWuLQ (J)Ldev/stashy/infers/Device;
+	public static synthetic fun npu-VKZWuLQ$default (Ldev/stashy/infers/Device$Companion;JILjava/lang/Object;)Ldev/stashy/infers/Device;
+}
+
+public final class dev/stashy/infers/DeviceKind : java/lang/Enum {
+	public static final field Cpu Ldev/stashy/infers/DeviceKind;
+	public static final field Gpu Ldev/stashy/infers/DeviceKind;
+	public static final field Npu Ldev/stashy/infers/DeviceKind;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Ldev/stashy/infers/DeviceKind;
+	public static fun values ()[Ldev/stashy/infers/DeviceKind;
+}
+
+public class dev/stashy/infers/FfiBackedImageProcessor : dev/stashy/infers/ImageProcessor {
+	public fun <init> (Ldev/stashy/infers/ffi/ImageProcessor;Ljava/lang/String;Lkotlinx/coroutines/CoroutineDispatcher;)V
+	public synthetic fun <init> (Ldev/stashy/infers/ffi/ImageProcessor;Ljava/lang/String;Lkotlinx/coroutines/CoroutineDispatcher;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun close ()V
+	public fun getDevice ()Ldev/stashy/infers/Device;
+	public final fun getDispatcher ()Lkotlinx/coroutines/CoroutineDispatcher;
+	public final fun getHandle ()Ldev/stashy/infers/ffi/ImageProcessor;
+	public final fun processBytes ([BLdev/stashy/infers/ProcessingOptions;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun processBytes-d0p9NHs ([BIILdev/stashy/infers/ImageFormat;Ldev/stashy/infers/ProcessingOptions;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class dev/stashy/infers/FitMode : java/lang/Enum {
+	public static final field Contain Ldev/stashy/infers/FitMode;
+	public static final field Crop Ldev/stashy/infers/FitMode;
+	public static final field Stretch Ldev/stashy/infers/FitMode;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Ldev/stashy/infers/FitMode;
+	public static fun values ()[Ldev/stashy/infers/FitMode;
+}
+
+public final class dev/stashy/infers/FlowsKt {
+	public static final fun mapInference (Lkotlinx/coroutines/flow/Flow;Lkotlin/jvm/functions/Function3;)Lkotlinx/coroutines/flow/Flow;
+}
+
+public final class dev/stashy/infers/ImageFormat : java/lang/Enum {
+	public static final field I420 Ldev/stashy/infers/ImageFormat;
+	public static final field Nv12 Ldev/stashy/infers/ImageFormat;
+	public static final field Rgb888 Ldev/stashy/infers/ImageFormat;
+	public static final field Rgbf32 Ldev/stashy/infers/ImageFormat;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Ldev/stashy/infers/ImageFormat;
+	public static fun values ()[Ldev/stashy/infers/ImageFormat;
+}
+
+public abstract interface class dev/stashy/infers/ImageProcessor : java/lang/AutoCloseable {
+	public abstract fun getDevice ()Ldev/stashy/infers/Device;
+}
+
+public final class dev/stashy/infers/InferenceScope {
+	public final fun process (Ldev/stashy/infers/ImageProcessor;[BLdev/stashy/infers/ProcessingOptions;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun run (Ldev/stashy/infers/ModelSession;Ldev/stashy/infers/Tensor;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun run (Ldev/stashy/infers/ModelSession;Ljava/util/List;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun tensorOf (Ldev/stashy/infers/TensorShape;[B)Ldev/stashy/infers/Tensor;
+	public final fun tensorOf (Ldev/stashy/infers/TensorShape;[F)Ldev/stashy/infers/Tensor;
+	public final fun tensorOf (Ldev/stashy/infers/TensorShape;[I)Ldev/stashy/infers/Tensor;
+	public final fun tensorOf (Ldev/stashy/infers/TensorShape;[J)Ldev/stashy/infers/Tensor;
+}
+
+public final class dev/stashy/infers/InferenceScopeKt {
+	public static final fun inferenceScope (Lkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public abstract interface annotation class dev/stashy/infers/InfersDsl : java/lang/annotation/Annotation {
+}
+
+public abstract class dev/stashy/infers/InfersException : java/lang/Exception {
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/Throwable;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public abstract fun getReason ()Ljava/lang/String;
+}
+
+public final class dev/stashy/infers/InfersException$BufferAllocationFailed : dev/stashy/infers/InfersException {
+	public fun <init> (Ljava/lang/String;)V
+	public fun getReason ()Ljava/lang/String;
+}
+
+public final class dev/stashy/infers/InfersException$DeviceMismatch : dev/stashy/infers/InfersException {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;)V
+	public final fun getActual ()Ljava/lang/String;
+	public final fun getExpected ()Ljava/lang/String;
+	public fun getReason ()Ljava/lang/String;
+}
+
+public final class dev/stashy/infers/InfersException$InferenceFailed : dev/stashy/infers/InfersException {
+	public fun <init> (Ljava/lang/String;)V
+	public fun getReason ()Ljava/lang/String;
+}
+
+public final class dev/stashy/infers/InfersException$InternalError : dev/stashy/infers/InfersException {
+	public fun <init> (Ljava/lang/String;)V
+	public fun getReason ()Ljava/lang/String;
+}
+
+public final class dev/stashy/infers/InfersException$InvalidShape : dev/stashy/infers/InfersException {
+	public fun <init> (Ljava/lang/String;)V
+	public fun getReason ()Ljava/lang/String;
+}
+
+public final class dev/stashy/infers/InfersException$ModelLoadFailed : dev/stashy/infers/InfersException {
+	public fun <init> (Ljava/lang/String;)V
+	public fun getReason ()Ljava/lang/String;
+}
+
+public final class dev/stashy/infers/InfersException$PlatformError : dev/stashy/infers/InfersException {
+	public fun <init> (Ljava/lang/String;)V
+	public fun getReason ()Ljava/lang/String;
+}
+
+public final class dev/stashy/infers/InfersException$ProcessingFailed : dev/stashy/infers/InfersException {
+	public fun <init> (Ljava/lang/String;)V
+	public fun getReason ()Ljava/lang/String;
+}
+
+public final class dev/stashy/infers/InfersException$UnsupportedType : dev/stashy/infers/InfersException {
+	public fun <init> (Ljava/lang/String;)V
+	public fun getReason ()Ljava/lang/String;
+}
+
+public abstract interface annotation class dev/stashy/infers/InfersInternalApi : java/lang/annotation/Annotation {
+}
+
+public final class dev/stashy/infers/ModelSession : java/lang/AutoCloseable {
+	public fun close ()V
+	public final fun getDevice ()Ldev/stashy/infers/Device;
+	public final fun getInputShapes ()Ljava/util/List;
+	public final fun getOutputShapes ()Ljava/util/List;
+	public final fun runInternal (Ljava/util/List;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class dev/stashy/infers/ProcessingOptions {
+	public static final field Companion Ldev/stashy/infers/ProcessingOptions$Companion;
+	public synthetic fun <init> (IIIIIIIILdev/stashy/infers/ImageFormat;Ldev/stashy/infers/ImageFormat;Ldev/stashy/infers/FitMode;Ldev/stashy/infers/Rotation;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (IIIIIIIILdev/stashy/infers/ImageFormat;Ldev/stashy/infers/ImageFormat;Ldev/stashy/infers/FitMode;Ldev/stashy/infers/Rotation;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1-pVg5ArA ()I
+	public final fun component10 ()Ldev/stashy/infers/ImageFormat;
+	public final fun component11 ()Ldev/stashy/infers/FitMode;
+	public final fun component12 ()Ldev/stashy/infers/Rotation;
+	public final fun component2-pVg5ArA ()I
+	public final fun component3-pVg5ArA ()I
+	public final fun component4-pVg5ArA ()I
+	public final fun component5-pVg5ArA ()I
+	public final fun component6-pVg5ArA ()I
+	public final fun component7-pVg5ArA ()I
+	public final fun component8-pVg5ArA ()I
+	public final fun component9 ()Ldev/stashy/infers/ImageFormat;
+	public final fun copy-6vARCmY (IIIIIIIILdev/stashy/infers/ImageFormat;Ldev/stashy/infers/ImageFormat;Ldev/stashy/infers/FitMode;Ldev/stashy/infers/Rotation;)Ldev/stashy/infers/ProcessingOptions;
+	public static synthetic fun copy-6vARCmY$default (Ldev/stashy/infers/ProcessingOptions;IIIIIIIILdev/stashy/infers/ImageFormat;Ldev/stashy/infers/ImageFormat;Ldev/stashy/infers/FitMode;Ldev/stashy/infers/Rotation;ILjava/lang/Object;)Ldev/stashy/infers/ProcessingOptions;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getCropH-pVg5ArA ()I
+	public final fun getCropW-pVg5ArA ()I
+	public final fun getCropX-pVg5ArA ()I
+	public final fun getCropY-pVg5ArA ()I
+	public final fun getDestFormat ()Ldev/stashy/infers/ImageFormat;
+	public final fun getDestH-pVg5ArA ()I
+	public final fun getDestW-pVg5ArA ()I
+	public final fun getFitMode ()Ldev/stashy/infers/FitMode;
+	public final fun getRotation ()Ldev/stashy/infers/Rotation;
+	public final fun getSrcFormat ()Ldev/stashy/infers/ImageFormat;
+	public final fun getSrcH-pVg5ArA ()I
+	public final fun getSrcW-pVg5ArA ()I
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/stashy/infers/ProcessingOptions$Companion {
+	public final fun invoke (Lkotlin/jvm/functions/Function1;)Ldev/stashy/infers/ProcessingOptions;
+}
+
+public final class dev/stashy/infers/ProcessingOptionsBuilder {
+	public fun <init> ()V
+	public final fun build ()Ldev/stashy/infers/ProcessingOptions;
+	public final fun getCropOrigin ()Lkotlin/Pair;
+	public final fun getCropSize ()Lkotlin/Pair;
+	public final fun getDest ()Lkotlin/Pair;
+	public final fun getDestFormat ()Ldev/stashy/infers/ImageFormat;
+	public final fun getFitMode ()Ldev/stashy/infers/FitMode;
+	public final fun getRotation ()Ldev/stashy/infers/Rotation;
+	public final fun getSource ()Lkotlin/Pair;
+	public final fun getSrcFormat ()Ldev/stashy/infers/ImageFormat;
+	public final fun setCropOrigin (Lkotlin/Pair;)V
+	public final fun setCropSize (Lkotlin/Pair;)V
+	public final fun setDest (Lkotlin/Pair;)V
+	public final fun setDestFormat (Ldev/stashy/infers/ImageFormat;)V
+	public final fun setFitMode (Ldev/stashy/infers/FitMode;)V
+	public final fun setRotation (Ldev/stashy/infers/Rotation;)V
+	public final fun setSource (Lkotlin/Pair;)V
+	public final fun setSrcFormat (Ldev/stashy/infers/ImageFormat;)V
+}
+
+public abstract interface annotation class dev/stashy/infers/ProcessingOptionsDsl : java/lang/annotation/Annotation {
+}
+
+public final class dev/stashy/infers/Rotation : java/lang/Enum {
+	public static final field None Ldev/stashy/infers/Rotation;
+	public static final field Rot180 Ldev/stashy/infers/Rotation;
+	public static final field Rot270 Ldev/stashy/infers/Rotation;
+	public static final field Rot90 Ldev/stashy/infers/Rotation;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Ldev/stashy/infers/Rotation;
+	public static fun values ()[Ldev/stashy/infers/Rotation;
+}
+
+public final class dev/stashy/infers/Tensor : java/lang/AutoCloseable {
+	public static final field Companion Ldev/stashy/infers/Tensor$Companion;
+	public fun close ()V
+	public final fun copyTo (Ldev/stashy/infers/Device;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun getByteSize-s-VKNKU ()J
+	public final fun getDevice ()Ldev/stashy/infers/Device;
+	public final fun getDtype ()Ldev/stashy/infers/DataType;
+	public final fun getShape ()Ldev/stashy/infers/TensorShape;
+	public final fun readBytes (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun readFloats (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun readInts (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun readLongs (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class dev/stashy/infers/Tensor$Companion {
+}
+
+public final class dev/stashy/infers/TensorShape {
+	public static final field Companion Ldev/stashy/infers/TensorShape$Companion;
+	public fun <init> (Ljava/util/List;)V
+	public final fun component1 ()Ljava/util/List;
+	public final fun copy (Ljava/util/List;)Ldev/stashy/infers/TensorShape;
+	public static synthetic fun copy$default (Ldev/stashy/infers/TensorShape;Ljava/util/List;ILjava/lang/Object;)Ldev/stashy/infers/TensorShape;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getDims ()Ljava/util/List;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/stashy/infers/TensorShape$Companion {
+	public final fun of ([J)Ldev/stashy/infers/TensorShape;
+}
+
+public abstract interface class dev/stashy/infers/internal/BackendConfigFfiConvertible {
+	public abstract fun toFfiConfig ()Ldev/stashy/infers/ffi/BackendConfig;
+}
+
+public final class dev/stashy/infers/internal/BridgeKt {
+	public static final fun fromFfi (Ldev/stashy/infers/Tensor$Companion;Ldev/stashy/infers/ffi/TensorBuffer;)Ldev/stashy/infers/Tensor;
+	public static final fun fromFfi (Ldev/stashy/infers/ffi/DataType;)Ldev/stashy/infers/DataType;
+	public static final fun fromFfi (Ldev/stashy/infers/ffi/Device;)Ldev/stashy/infers/Device;
+	public static final fun fromFfi (Ldev/stashy/infers/ffi/DeviceKind;)Ldev/stashy/infers/DeviceKind;
+	public static final fun fromFfi (Ldev/stashy/infers/ffi/TensorShape;)Ldev/stashy/infers/TensorShape;
+	public static final fun mapFfiException (Ldev/stashy/infers/ffi/InfersException;)Ldev/stashy/infers/InfersException;
+	public static final fun toFfi (Ldev/stashy/infers/BackendConfig;)Ldev/stashy/infers/ffi/BackendConfig;
+	public static final fun toFfi (Ldev/stashy/infers/DataType;)Ldev/stashy/infers/ffi/DataType;
+	public static final fun toFfi (Ldev/stashy/infers/Device;)Ldev/stashy/infers/ffi/Device;
+	public static final fun toFfi (Ldev/stashy/infers/DeviceKind;)Ldev/stashy/infers/ffi/DeviceKind;
+	public static final fun toFfi (Ldev/stashy/infers/FitMode;)Ldev/stashy/infers/ffi/FitMode;
+	public static final fun toFfi (Ldev/stashy/infers/ImageFormat;)Ldev/stashy/infers/ffi/ImageFormat;
+	public static final fun toFfi (Ldev/stashy/infers/ProcessingOptions;)Ldev/stashy/infers/ffi/ProcessingOptions;
+	public static final fun toFfi (Ldev/stashy/infers/Rotation;)Ldev/stashy/infers/ffi/Rotation;
+	public static final fun toFfi (Ldev/stashy/infers/TensorShape;)Ldev/stashy/infers/ffi/TensorShape;
+	public static final fun withFfiErrors (Lkotlin/jvm/functions/Function0;)Ljava/lang/Object;
+}
+
+public final class dev/stashy/infers/internal/CloseGate {
+	public fun <init> (Ljava/lang/String;)V
+	public final fun ensureOpen ()V
+	public final fun markClosed ()Z
+}
+
+public final class dev/stashy/infers/internal/TensorCodec {
+	public static final field INSTANCE Ldev/stashy/infers/internal/TensorCodec;
+	public final fun decodeFloats ([B)[F
+	public final fun decodeInts ([B)[I
+	public final fun decodeLongs ([B)[J
+	public final fun encodeFloats ([F)[B
+	public final fun encodeInts ([I)[B
+	public final fun encodeLongs ([J)[B
+}
+

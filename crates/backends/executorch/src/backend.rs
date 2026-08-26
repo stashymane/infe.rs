@@ -27,15 +27,17 @@ impl ExecuTorchBackend {
     }
 
     /// Load a `.pte` program from a file path with an explicit backend configuration.
+    ///
+    /// The file at `path` must remain readable for the lifetime of the returned session.
     pub fn load_model_from_file(
         &self,
         path: &str,
         config: ExecuTorchBackendConfig,
     ) -> Result<Box<dyn ModelSession>, CoreError> {
-        let bytes = std::fs::read(path).map_err(|e| {
-            CoreError::ModelLoadFailed(format!("Failed to read model file '{}': {}", path, e))
-        })?;
-        self.load_model(&bytes, config)
+        let session =
+            ExecuTorchSession::load_from_path(std::path::Path::new(path), &config)
+                .map_err(CoreError::from)?;
+        Ok(Box::new(session))
     }
 }
 

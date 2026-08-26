@@ -3,6 +3,17 @@ use std::time::Instant;
 
 mod common;
 
+fn f32_le_bytes(data: &[f32]) -> Vec<u8> {
+    data.iter().flat_map(|v| v.to_le_bytes()).collect()
+}
+
+fn f32_from_le_bytes(bytes: &[u8]) -> Vec<f32> {
+    bytes
+        .chunks_exact(4)
+        .map(|c| f32::from_le_bytes(c.try_into().unwrap()))
+        .collect()
+}
+
 fn bindings_processing_options(
     opts: infers_core::ProcessingOptions,
 ) -> ProcessingOptions {
@@ -53,9 +64,11 @@ fn test_end_to_end_face_pipeline_uniffi() {
         .expect("Detector execution failed");
     assert_eq!(detector_outputs.len(), 1);
 
-    let raw_boxes = detector_outputs[0]
-        .read_to_cpu_f32()
-        .expect("Failed to read bounding boxes to CPU");
+    let raw_boxes = f32_from_le_bytes(
+        &detector_outputs[0]
+            .read_to_cpu_bytes()
+            .expect("Failed to read bounding boxes to CPU"),
+    );
     assert_eq!(raw_boxes.len(), 4);
     let (box_x, box_y, box_w, box_h) = (raw_boxes[0], raw_boxes[1], raw_boxes[2], raw_boxes[3]);
 
@@ -72,9 +85,11 @@ fn test_end_to_end_face_pipeline_uniffi() {
         .expect("Landmarker execution failed");
     assert_eq!(landmarker_outputs.len(), 1);
 
-    let raw_landmarks = landmarker_outputs[0]
-        .read_to_cpu_f32()
-        .expect("Failed to read landmarks to CPU");
+    let raw_landmarks = f32_from_le_bytes(
+        &landmarker_outputs[0]
+            .read_to_cpu_bytes()
+            .expect("Failed to read landmarks to CPU"),
+    );
     assert_eq!(raw_landmarks.len(), 4);
 }
 
@@ -85,11 +100,12 @@ fn test_cross_device_mismatch_error_handling() {
 
     let gpu_session = common::load_mock_session(vec![0x01, 0x02], gpu.clone());
 
-    let cpu_tensor = create_tensor_from_f32(
+    let cpu_tensor = create_tensor_from_bytes(
         TensorShape {
             dims: vec![1, 3, 224, 224],
         },
-        vec![0.0f32; 3 * 224 * 224],
+        DataType::F32,
+        f32_le_bytes(&vec![0.0f32; 3 * 224 * 224]),
     )
     .expect("Failed to create CPU tensor");
 
@@ -132,7 +148,7 @@ fn test_pipeline_latency_and_throughput_benchmark() {
         let outputs = detector
             .run(vec![input_tensor])
             .expect("Detector run failed");
-        let _host_boxes = outputs[0].read_to_cpu_f32().expect("Read to host failed");
+        let _host_boxes = outputs[0].read_to_cpu_bytes().expect("Read to host failed");
     }
 
     let elapsed = start.elapsed();

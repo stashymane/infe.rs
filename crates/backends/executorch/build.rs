@@ -111,6 +111,16 @@ fn link_xnnpack(libs_dir: &Path) {
     for lib in ["pthreadpool", "cpuinfo", "XNNPACK", "xnnpack-microkernels-prod"] {
         println!("cargo:rustc-link-lib=static={lib}");
     }
+
+    // Android/arm64 XNNPACK builds pull KleidiAI microkernels; link when present.
+    let kleidiai = libs_dir.join("kleidiai/libkleidiai.a");
+    if kleidiai.exists() {
+        println!(
+            "cargo:rustc-link-search=native={}",
+            libs_dir.join("kleidiai").display()
+        );
+        println!("cargo:rustc-link-lib=static=kleidiai");
+    }
 }
 
 fn executorch_src_dir() -> Option<PathBuf> {
@@ -142,9 +152,11 @@ fn link_vulkan(libs_dir: &Path) {
         println!("cargo:rerun-if-changed={}", src.display());
         builder.define("INFERS_ET_EXECUTORCH_SRC", None);
         builder.include(src.join("src"));
-        builder.include(src.join("third-party/Vulkan-Headers/include"));
-        builder.include(src.join("third-party/volk"));
-        builder.include(src.join("third-party/VulkanMemoryAllocator"));
+        // ET keeps these under the Vulkan backend tree (not repo-root third-party/).
+        let vulkan_tp = src.join("backends/vulkan/third-party");
+        builder.include(vulkan_tp.join("Vulkan-Headers/include"));
+        builder.include(vulkan_tp.join("volk"));
+        builder.include(vulkan_tp.join("VulkanMemoryAllocator"));
     }
 
     builder.compile("infers_et_vulkan_ffi");

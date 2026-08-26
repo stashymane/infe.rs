@@ -1,7 +1,7 @@
 //! GPU input staging helpers for ExecuTorch Vulkan delegate integration.
 //!
 //! When linked against a patched `libvulkan_backend.a` (see
-//! `docker/patches/apply-vulkan-gpu-input.sh`), the Vulkan backend registers its
+//! `docker/builder/patches/apply-vulkan-gpu-input.sh`), the Vulkan backend registers its
 //! `ComputeGraph` at init and honors a per-input skip mask after GPU copies into
 //! delegate staging buffers.
 

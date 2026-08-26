@@ -90,3 +90,76 @@ Integration tests in `tests/` and `crates/bindings/tests/` exercise multi-stage 
 ## Errors
 
 Public APIs surface typed errors: `CoreError` (core), `GpuError` (Vulkan), and `InfersError` (UniFFI bindings). Image and tensor enums use Rust-style names (`Rgb888`, `Rgbf32`, `Nv12`, `Contain`, `Rot90`, etc.).
+
+## Kotlin Multiplatform (`kotlin/`)
+
+Android + JVM desktop hosts consume `infers-bindings` through Gobley (UniFFI). There is **one** native library (`libinfers_bindings`); Cargo features are selected at build time, not via multiple `.so` files.
+
+Public modules hand-write wrappers over the generated `dev.stashy.infers.ffi` surface. `:infers-ffi` is an `implementation` dependency, so apps never see generated types on their compile classpath.
+
+### Suspending, frame-scoped API
+
+Blocking `process` / `run` / `loadModel(ByteArray)` are not part of the public surface. Long-lived handles (`Backend`, `ModelSession`, image processors) stay `AutoCloseable`. Per-frame tensors are created inside `inferenceScope` and closed automatically when the scope exits:
+
+```kotlin
+Backend().use { backend ->
+    backend.loadModel(Path("model.pte"), XnnpackConfig()).use { session ->
+        CpuImageProcessor().use { processor ->
+            inferenceScope {
+                val input = processor.process(frameBytes, options)
+                val outputs = session.run(input)
+                render(outputs.first().readFloats())
+            }
+        }
+    }
+}
+```
+
+`loadModel` takes a kotlinx-io `Path`; the file must stay readable for the session lifetime. Callers that only have a stream should write their own file. Camera pipelines typically use `conflate().mapInference { … }` so stale frames are dropped; native calls are not interruptible mid-inference.
+
+JVM desktop embeds the host native library only (for local tests). Android AAR multi-ABI publishing is unchanged; multi-OS desktop classifier JARs are a later follow-up.
+
+### Modules
+
+| Module | Role |
+|--------|------|
+| `:infers` | Public KMP core (`Device`, `Tensor`, `CpuImageProcessor`, `Backend`, …). Android extensions (`HardwareBuffer`) live in `androidMain`. |
+| `:infers-ffi` | Builds `crates/bindings` + generates UniFFI Kotlin (internal) |
+| `:infers-portable` / `:infers-xnnpack` / `:infers-vulkan` | One module per Cargo feature; each expands the public API for that feature |
+
+### Consumer setup
+
+1. Include the Gradle project (composite build or `include` from an app).
+2. Set `infers.cargo.features` in `kotlin/gradle.properties` (or `-P`) to the Cargo features you want, e.g. `portable,xnnpack` or `portable,xnnpack,vulkan`.
+3. Depend on the matching modules:
+
+```kotlin
+dependencies {
+    implementation(project(":infers"))
+    implementation(project(":infers-xnnpack"))
+    implementation(project(":infers-portable"))
+    // optional:
+    implementation(project(":infers-vulkan"))
+}
+```
+
+Shared APIs belong in `commonMain`. Android-only APIs (e.g. `HardwareBuffer`) are only visible from `androidMain` of the module that ships them.
+
+### Requirements
+
+- JDK compatible with the Gradle wrapper (Gradle 9.5+; Kotlin 2.4.x supports up to 9.5 fully).
+- Android SDK + NDK for Android targets (`kotlin/local.properties` → `sdk.dir=...`).
+- Rust toolchain able to build `infers-bindings` (same as the Cargo workspace).
+- Android `.so` builds need ExecuTorch static libs built for the Android ABI (host libs under `target/executorch-libs` are not sufficient for `cargoBuildAndroid*`). Build them with Docker only: `./scripts/build_executorch.sh android-arm64` → `target/executorch-libs-android-arm64`.
+- Gobley **0.3.7** requires AGP **8.x** (`com.android.library`); AGP 9 / `com.android.kotlin.multiplatform.library` needs Gobley 0.4+.
+
+Android/Kotlin Gradle builds run via Docker (SDK, NDK, Rust, and JDK are in the image):
+
+```bash
+./scripts/android_gradle.sh :infers-ffi:printInfersCargoFeatures
+./scripts/android_gradle.sh :infers:jvmTest :infers-xnnpack:jvmTest :infers-vulkan:jvmTest
+./scripts/android_gradle.sh :infers-consumer-test:compileKotlinJvm
+./scripts/android_gradle.sh publishToMavenLocal
+# HardwareBuffer instrumented tests; needs a device/emulator visible to host adb:
+./scripts/android_gradle.sh :infers:connectedDebugAndroidTest :infers-vulkan:connectedDebugAndroidTest
+```

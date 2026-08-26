@@ -1,0 +1,8 @@
+public final class dev/stashy/infers/xnnpack/XnnpackConfig : dev/stashy/infers/BackendConfig, dev/stashy/infers/internal/BackendConfigFfiConvertible {
+	public synthetic fun <init> (ILjava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (ILjava/lang/String;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getMethod ()Ljava/lang/String;
+	public final fun getNumThreads-pVg5ArA ()I
+	public fun toFfiConfig ()Ldev/stashy/infers/ffi/BackendConfig;
+}
+

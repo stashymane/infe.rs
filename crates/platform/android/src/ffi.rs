@@ -65,4 +65,12 @@ unsafe extern "C" {
     ) -> i32;
 
     pub fn AHardwareBuffer_unlock(buffer: *mut AHardwareBuffer, fence: *mut i32) -> i32;
+
+    /// Convert a Java `android.hardware.HardwareBuffer` into an `AHardwareBuffer*`.
+    /// The returned pointer has its reference count incremented; the caller must
+    /// eventually call `AHardwareBuffer_release`.
+    pub fn AHardwareBuffer_fromHardwareBuffer(
+        env: *mut c_void,
+        hardwareBuffer: *mut c_void,
+    ) -> *mut AHardwareBuffer;
 }

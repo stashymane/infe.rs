@@ -1,5 +1,6 @@
 use crate::device::Device;
 use crate::error::InfersError;
+#[cfg(feature = "vulkan")]
 use crate::gpu_context::GpuContext;
 use crate::session::ModelSession;
 use infers_backend_executorch::{
@@ -10,6 +11,7 @@ use std::sync::Arc;
 
 #[derive(Debug, Clone, uniffi::Enum)]
 pub enum BackendConfig {
+    #[cfg(feature = "xnnpack")]
     Xnnpack {
         num_threads: u32,
         method: Option<String>,
@@ -78,6 +80,7 @@ impl FfiBackend {
 
 fn to_core_config(config: BackendConfig) -> Result<ExecuTorchBackendConfig, InfersError> {
     Ok(match config {
+        #[cfg(feature = "xnnpack")]
         BackendConfig::Xnnpack {
             num_threads,
             method,

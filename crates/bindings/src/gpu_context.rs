@@ -44,7 +44,7 @@ pub fn create_gpu_context(device: Device) -> Result<Arc<GpuContext>, InfersError
     #[cfg(not(target_os = "android"))]
     let context = Arc::new(
         VulkanContext::new(&core_device).map_err(|err| InfersError::ProcessingFailed {
-            message: err.to_string(),
+            reason: err.to_string(),
         })?,
     );
     Ok(Arc::new(GpuContext { inner: context }))
@@ -52,7 +52,9 @@ pub fn create_gpu_context(device: Device) -> Result<Arc<GpuContext>, InfersError
 
 /// Create a GPU image processor that shares `context`.
 #[uniffi::export]
-pub fn create_gpu_image_processor(context: Arc<GpuContext>) -> Result<Arc<ImageProcessor>, InfersError> {
+pub fn create_gpu_image_processor(
+    context: Arc<GpuContext>,
+) -> Result<Arc<ImageProcessor>, InfersError> {
     let device: Device = context.inner.logical_device().clone().into();
     let gpu_proc = GpuImageProcessor::new(Arc::clone(context.inner())).map_err(InfersError::from)?;
     Ok(Arc::new(ImageProcessor {
