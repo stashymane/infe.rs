@@ -1,0 +1,60 @@
+diff --git a/backends/vulkan/runtime/vk_api/Runtime.cpp b/backends/vulkan/runtime/vk_api/Runtime.cpp
+index abf5174..2f48a33 100644
+--- a/backends/vulkan/runtime/vk_api/Runtime.cpp
++++ b/backends/vulkan/runtime/vk_api/Runtime.cpp
+@@ -471,14 +471,26 @@ std::unique_ptr<Adapter> init_external_adapter(
+       instance, physical_device, logical_device, num_queues, cache_data_path);
+ }
+ 
++namespace {
++
++std::mutex& external_adapter_mutex() {
++  static std::mutex mutex;
++  return mutex;
++}
++
++std::unique_ptr<Adapter>& external_adapter_slot() {
++  static std::unique_ptr<Adapter> adapter;
++  return adapter;
++}
++
++} // namespace
++
+ Adapter* set_and_get_external_adapter(
+     const VkInstance instance,
+     const VkPhysicalDevice physical_device,
+     const VkDevice logical_device) {
+-  static std::mutex external_adapter_mutex;
+-  static std::unique_ptr<Adapter> p_external_adapter;
+-
+-  const std::lock_guard<std::mutex> lock(external_adapter_mutex);
++  const std::lock_guard<std::mutex> lock(external_adapter_mutex());
++  std::unique_ptr<Adapter>& p_external_adapter = external_adapter_slot();
+   if (!p_external_adapter) {
+     p_external_adapter = init_external_adapter(
+         instance,
+@@ -491,5 +503,10 @@ Adapter* set_and_get_external_adapter(
+   return p_external_adapter.get();
+ }
+ 
++void clear_external_adapter() {
++  const std::lock_guard<std::mutex> lock(external_adapter_mutex());
++  external_adapter_slot().reset();
++}
++
+ } // namespace vkapi
+ } // namespace vkcompute
+diff --git a/backends/vulkan/runtime/vk_api/Runtime.h b/backends/vulkan/runtime/vk_api/Runtime.h
+index 285e979..4fa4628 100644
+--- a/backends/vulkan/runtime/vk_api/Runtime.h
++++ b/backends/vulkan/runtime/vk_api/Runtime.h
+@@ -114,5 +114,9 @@ Adapter* set_and_get_external_adapter(
+     const VkPhysicalDevice physical_device = VK_NULL_HANDLE,
+     const VkDevice logical_device = VK_NULL_HANDLE);
+ 
++// Destroy the sticky external adapter while the caller's VkDevice is still
++// valid. Required for correct teardown when sharing an app-owned device.
++void clear_external_adapter();
++
+ } // namespace vkapi
+ } // namespace vkcompute

@@ -2,19 +2,22 @@ name: Build project
 
 on:
   push:
+    branches:
+      - "**"
     tags-ignore:
       - "v*"
+  pull_request:
 
 permissions:
   contents: read
-  packages: write
 
 concurrency:
   group: kotlin-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  publish:
+  build:
     uses: ./.github/workflows/x-build.yml
     permissions:
       contents: read
+    secrets: inherit

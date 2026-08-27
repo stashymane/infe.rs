@@ -20,7 +20,7 @@ use infers::{
 };
 
 fn main() {
-    let (args, model) = BenchArgs::parse("yolo26n-face/xnnpack/model.pte");
+    let (args, model) = BenchArgs::parse("xnnpack/model.pte");
     let model_bytes = require_model(&model);
 
     let backend = ExecuTorchBackend::new();

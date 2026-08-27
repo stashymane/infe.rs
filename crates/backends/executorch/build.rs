@@ -12,7 +12,7 @@ fn main() {
 
     let libs_dir = env::var("EXECUTORCH_RS_EXECUTORCH_LIB_DIR")
         .map(PathBuf::from)
-        .unwrap_or_else(|_| workspace_root.join("target/executorch-libs"));
+        .unwrap_or_else(|_| workspace_root.join("target/executorch/x86_64-unknown-linux-gnu"));
 
     println!("cargo:rerun-if-env-changed=EXECUTORCH_RS_EXECUTORCH_LIB_DIR");
     println!("cargo:rerun-if-env-changed=EXECUTORCH_SRC");

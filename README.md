@@ -36,21 +36,36 @@ cargo run --release --example gpu_pipeline_bench
 cargo run --release --example gpu_pipeline_bench -- --iters 100
 ```
 
-By default these load `yolo26n-face`, which is not bundled in this repo - you can build the models with a script in the
-`scripts/` directory.
+By default, these load `yolo26n-face`, which is not bundled in this repo — build the models with
+`scripts/build_yolo26n_face.sh`.
 
 ## Development
 
 ### Requirements
 
-* Android NDK
+* Nix (with flake support)
 * Rust toolchain (specified in `rust-toolchain.toml`)
-* Docker (for building dependencies)
+* JDK + Gradle (for Kotlin library)
 
 ### Steps
 
-Before this can compile, you have to build ExecuTorch (+ yolo26n-face for testing). This is automated by
-`scripts/build_assets.sh` - builds run within a Docker container, only outputting the necessary assets.
+Before this can compile, you have to build ExecuTorch (+ yolo26n-face for testing).
+`scripts/build_assets.sh` does this all for you.
+
+You may also build these assets directly:
+
+```bash
+nix build .#executorch-x86_64-unknown-linux-gnu --out-link target/executorch/x86_64-unknown-linux-gnu
+nix build .#executorch-src --out-link target/executorch/executorch
+# or both targets + sources:
+nix build .#executorch-libs --out-link target/executorch
+```
+
+yolo26n-face model (configure via `assets/yolo26n-face-manifest.yaml`):
+
+```bash
+nix build .#yolo26n-face-export --out-link target/yolo26n-face
+```
 
 Once the assets are built, everything else is standard Cargo.
 

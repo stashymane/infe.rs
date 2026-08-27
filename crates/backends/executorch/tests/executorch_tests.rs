@@ -21,7 +21,7 @@ fn shared_vulkan_context() -> Option<Arc<infers_gpu::VulkanContext>> {
 
 fn yolo26n_face_asset(subpath: &str) -> Option<PathBuf> {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../../assets/yolo26n-face")
+        .join("../../../target/yolo26n-face")
         .join(subpath);
     path.exists().then_some(path)
 }
@@ -207,11 +207,11 @@ fn test_asset_model_loading_and_error_handling() {
 #[test]
 fn test_yolo26n_face_xnnpack_asset_loads() {
     let Some(pte_path) = yolo26n_face_asset("xnnpack/model.pte") else {
-        eprintln!("skipping: assets/yolo26n-face/xnnpack/model.pte not built");
+        eprintln!("skipping: target/yolo26n-face/xnnpack/model.pte not built");
         return;
     };
     let Some(manifest_path) = yolo26n_face_asset("manifest.yaml") else {
-        eprintln!("skipping: assets/yolo26n-face/manifest.yaml missing");
+        eprintln!("skipping: target/yolo26n-face/manifest.yaml missing");
         return;
     };
     let Some(imgsz) = manifest_imgsz(&manifest_path) else {
@@ -243,11 +243,11 @@ fn test_yolo26n_face_xnnpack_asset_loads() {
 #[cfg(feature = "vulkan")]
 fn test_yolo26n_face_vulkan_asset_loads() {
     let Some(pte_path) = yolo26n_face_asset("vulkan/model.pte") else {
-        eprintln!("skipping: assets/yolo26n-face/vulkan/model.pte not built");
+        eprintln!("skipping: target/yolo26n-face/vulkan/model.pte not built");
         return;
     };
     let Some(manifest_path) = yolo26n_face_asset("manifest.yaml") else {
-        eprintln!("skipping: assets/yolo26n-face/manifest.yaml missing");
+        eprintln!("skipping: target/yolo26n-face/manifest.yaml missing");
         return;
     };
     let Some(imgsz) = manifest_imgsz(&manifest_path) else {

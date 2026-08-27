@@ -37,7 +37,7 @@ fn main() {
         Device, ExecuTorchBackend, ExecuTorchBackendConfig, GpuImageProcessor, VulkanContext,
     };
 
-    let (args, model) = BenchArgs::parse("yolo26n-face/vulkan/model.pte");
+    let (args, model) = BenchArgs::parse("vulkan/model.pte");
     let model_bytes = require_model(&model);
 
     let ctx = Arc::new(

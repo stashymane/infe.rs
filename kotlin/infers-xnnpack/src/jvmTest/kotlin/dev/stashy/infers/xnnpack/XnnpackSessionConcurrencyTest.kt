@@ -70,10 +70,10 @@ class XnnpackSessionConcurrencyTest {
         }
         val candidates =
             listOf(
-                File("../../assets/yolo26n-face/xnnpack/model.pte"),
-                File("../assets/yolo26n-face/xnnpack/model.pte"),
-                File("assets/yolo26n-face/xnnpack/model.pte"),
-                File(System.getProperty("user.dir"), "../assets/yolo26n-face/xnnpack/model.pte"),
+                File("../../target/yolo26n-face/xnnpack/model.pte"),
+                File("../target/yolo26n-face/xnnpack/model.pte"),
+                File("target/yolo26n-face/xnnpack/model.pte"),
+                File(System.getProperty("user.dir"), "../target/yolo26n-face/xnnpack/model.pte"),
             )
         return candidates.firstOrNull { it.isFile }
     }

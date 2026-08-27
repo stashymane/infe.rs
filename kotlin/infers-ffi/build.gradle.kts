@@ -52,12 +52,12 @@ tasks.withType<CargoBuildTask>().configureEach {
 
 val androidExecuTorchLibs =
     rootProject.layout.projectDirectory
-        .dir("../target/executorch-libs-android-arm64")
+        .dir("../target/executorch/android-arm64")
         .asFile
         .absolutePath
 val executorchSrc =
     rootProject.layout.projectDirectory
-        .dir("../target/executorch")
+        .dir("../target/executorch/executorch")
         .asFile
         .absolutePath
 

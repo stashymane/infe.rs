@@ -28,7 +28,7 @@ pub const DEFAULT_THREADS: usize = 4;
     after_help = "The camera-like frame is allocated once and excluded from timings."
 )]
 pub struct BenchArgs {
-    /// Path to the .pte model (default: assets/yolo26n-face/<backend>/model.pte)
+    /// Path to the .pte model (default: target/yolo26n-face/<backend>/model.pte)
     #[arg(long, value_name = "PATH")]
     pub model: Option<PathBuf>,
 
@@ -66,7 +66,7 @@ impl BenchArgs {
 
 pub fn default_asset(rel: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("assets")
+        .join("target/yolo26n-face")
         .join(rel)
 }
 
@@ -74,7 +74,7 @@ pub fn require_model(path: &Path) -> Vec<u8> {
     std::fs::read(path).unwrap_or_else(|err| {
         panic!(
             "failed to read model '{}': {err}\n\
-             Build assets first (see assets/yolo26n-face/manifest.yaml).",
+             Build models first (see assets/yolo26n-face-manifest.yaml, output in target/yolo26n-face/).",
             path.display()
         )
     })

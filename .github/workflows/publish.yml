@@ -1,4 +1,4 @@
-name: Publish Kotlin modules
+name: Publish
 
 on:
   push:
@@ -20,7 +20,8 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  publish:
+  publish-kotlin:
+    name: Publish Kotlin modules
     uses: ./.github/workflows/x-build.yml
     with:
       publish: true

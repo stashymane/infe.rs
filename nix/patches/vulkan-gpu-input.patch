@@ -1,0 +1,47 @@
+diff --git a/backends/vulkan/runtime/VulkanBackend.cpp b/backends/vulkan/runtime/VulkanBackend.cpp
+index ff62d4f..208c2ae 100644
+--- a/backends/vulkan/runtime/VulkanBackend.cpp
++++ b/backends/vulkan/runtime/VulkanBackend.cpp
+@@ -37,7 +37,14 @@
+ #include <unordered_map>
+ #include <vector>
+ 
++
++extern "C" {
++void infers_et_register_vulkan_graph(void* graph);
++int infers_et_vulkan_should_skip_staging_copy(uint32_t input_index);
++}
++
+ namespace executorch {
++
+ namespace backends {
+ namespace vulkan {
+ namespace {
+@@ -706,6 +713,8 @@ class VulkanBackend final : public ::executorch::runtime::BackendInterface {
+       return err;
+     }
+ 
++
++    infers_et_register_vulkan_graph(compute_graph);
+     return compute_graph;
+   }
+ 
+@@ -742,11 +751,13 @@ class VulkanBackend final : public ::executorch::runtime::BackendInterface {
+         bool was_resized =
+             maybe_resize_input(compute_graph, i, args[i]->toTensor());
+         should_propagate_resize = should_propagate_resize || was_resized;
+-        compute_graph->maybe_cast_and_copy_into_staging(
+-            compute_graph->inputs()[i].staging,
+-            args[i]->toTensor().const_data_ptr(),
+-            args[i]->toTensor().numel(),
+-            equivalent_scalar_type(args[i]->toTensor().scalar_type()));
++        if (!infers_et_vulkan_should_skip_staging_copy(static_cast<uint32_t>(i))) {
++          compute_graph->maybe_cast_and_copy_into_staging(
++              compute_graph->inputs()[i].staging,
++              args[i]->toTensor().const_data_ptr(),
++              args[i]->toTensor().numel(),
++              equivalent_scalar_type(args[i]->toTensor().scalar_type()));
++        }
+       } else if (compute_graph->val_is_symint(iref)) {
+         VK_CHECK_COND(
+             args[i]->isTensor(),

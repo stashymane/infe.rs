@@ -1,19 +1,37 @@
-name: Build ExecuTorch libraries
-description: Build host and arm64 ExecuTorch static libs (scripts/build_executorch.sh)
+name: Build ExecuTorch
+description: Nix-build ExecuTorch static libs for one platform (x86_64-unknown-linux-gnu or android-arm64).
+
+inputs:
+  target:
+    description: x86_64-unknown-linux-gnu or android-arm64
+    required: true
+  artifact-name:
+    description: Name for the archive (excluding .tar.gz)
+    required: false
+    default: ""
+
+outputs:
+  artifact:
+    description: Artifact / tarball basename
+    value: ${{ inputs.artifact-name || format('executorch-{0}', inputs.target) }}
 
 runs:
   using: composite
   steps:
-    - name: Cache ExecuTorch outputs
-      uses: actions/cache@v4
+    - name: Install Nix
+      uses: cachix/install-nix-action@v31
       with:
-        path: |
-          target/executorch-libs
-          target/executorch-libs-android-arm64
-        key: executorch-${{ hashFiles('scripts/build_executorch.sh', 'docker/builder/**', 'docker/docker-bake.hcl') }}-v1.4.0
+        github_access_token: ${{ github.token }}
+        extra_nix_config: |
+          experimental-features = nix-command flakes
 
-    - name: Build ExecuTorch (host + android-arm64)
+    - name: Cache Nix store
+      uses: nix-community/cache-nix-action@v6
+      with:
+        primary-key: et-nix-${{ inputs.target }}-${{ hashFiles('flake.lock', 'nix/**') }}
+
+    - name: Build
       shell: bash
-      run: |
-        ./scripts/build_executorch.sh host
-        ./scripts/build_executorch.sh android-arm64
+      env:
+        TARGET: ${{ inputs.target }}
+      run: bash "${{ github.action_path }}/build.sh" "${TARGET}"

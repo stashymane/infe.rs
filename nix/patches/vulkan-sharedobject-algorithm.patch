@@ -1,0 +1,13 @@
+diff --git a/backends/vulkan/runtime/graph/containers/SharedObject.cpp b/backends/vulkan/runtime/graph/containers/SharedObject.cpp
+index 10ddd6f..5f4236f 100644
+--- a/backends/vulkan/runtime/graph/containers/SharedObject.cpp
++++ b/backends/vulkan/runtime/graph/containers/SharedObject.cpp
+@@ -8,6 +8,8 @@
+ 
+ #include <executorch/backends/vulkan/runtime/graph/containers/SharedObject.h>
+ 
++#include <algorithm>
++
+ #include <executorch/backends/vulkan/runtime/graph/ComputeGraph.h>
+ 
+ namespace vkcompute {

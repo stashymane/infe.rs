@@ -1,4 +1,4 @@
-name: Build
+name: Project builder
 
 on:
   workflow_call:
@@ -20,14 +20,21 @@ concurrency:
 
 permissions:
   contents: read
-  packages: write
 
 jobs:
+  executorch:
+    name: Build ExecuTorch
+    uses: ./.github/workflows/x-build-executorch.yml
+    permissions:
+      contents: read
+
   build:
+    name: Build library
+    needs: executorch
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Resolve version
         id: version
@@ -44,17 +51,25 @@ jobs:
           echo "value=${version}" >> "${GITHUB_OUTPUT}"
           echo "INFERS_VERSION=${version}"
 
-      - name: Bake Docker images
-        uses: ./.github/actions/bake-docker
+      - name: Download ExecuTorch artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: executorch-*
+          merge-multiple: true
+          path: target
 
-      - name: Build ExecuTorch libraries
-        uses: ./.github/actions/build-executorch
+      - name: Verify ExecuTorch layout
+        run: find target/executorch -name '*.a' | head
+
+      - name: Setup Android host toolchains
+        uses: ./.github/actions/setup-android
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: nightly-2026-04-11
           components: rust-src, rustc-dev, llvm-tools
+          targets: aarch64-linux-android
 
       - name: Install host Vulkan libs
         run: |
@@ -71,13 +86,26 @@ jobs:
           restore-keys: |
             cargo-${{ runner.os }}-
 
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('kotlin/**/*.gradle.kts', 'kotlin/gradle/libs.versions.toml', 'kotlin/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+
       - name: Cargo build
+        env:
+          EXECUTORCH_SRC: ${{ github.workspace }}/target/executorch/executorch
         run: cargo build --workspace --all-features
 
       - name: Gradle assemble
         if: ${{ !inputs.publish }}
         env:
           INFERS_VERSION: ${{ steps.version.outputs.value }}
+          EXECUTORCH_SRC: ${{ github.workspace }}/target/executorch/executorch
         run: ./scripts/android_gradle.sh assemble --console=plain
 
       - name: Publish to GitHub Packages
@@ -85,4 +113,5 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           INFERS_VERSION: ${{ steps.version.outputs.value }}
+          EXECUTORCH_SRC: ${{ github.workspace }}/target/executorch/executorch
         run: ./scripts/android_gradle.sh publishAllPublicationsToGitHubPackagesRepository --console=plain
