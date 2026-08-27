@@ -117,16 +117,58 @@ cmake "${CMAKE_ARGS[@]}" -B "${BUILD_DIR}" .
 echo "Building ExecuTorch..."
 cmake --build "${BUILD_DIR}" -j"$(nproc)"
 
-echo "Copying build artifacts to ${OUTPUT_DIR}..."
+echo "Copying static libraries to ${OUTPUT_DIR}..."
 mkdir -p "${OUTPUT_DIR}"
 # Replace prior contents so stale host/android objects cannot mix.
 find "${OUTPUT_DIR}" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
-cp -a "${BUILD_DIR}/." "${OUTPUT_DIR}/"
-chmod -R a+rwX "${OUTPUT_DIR}"
 
-if [[ ! -f "${OUTPUT_DIR}/kernels/portable/libportable_ops_lib.a" ]]; then
-    echo "Expected libportable_ops_lib.a missing under ${OUTPUT_DIR}" >&2
-    exit 1
-fi
+# Only ship the .a files cargo/executorch-sys link against. Skip CMake/ninja
+# intermediates, object files, and vulkan_compute_shaders (~glsl/.spv).
+REQUIRED_LIBS=(
+    libexecutorch.a
+    libexecutorch_core.a
+    extension/data_loader/libextension_data_loader.a
+    extension/flat_tensor/libextension_flat_tensor.a
+    extension/module/libextension_module_static.a
+    extension/named_data_map/libextension_named_data_map.a
+    extension/tensor/libextension_tensor.a
+    extension/threadpool/libextension_threadpool.a
+    kernels/portable/libportable_ops_lib.a
+    kernels/portable/libportable_kernels.a
+    backends/xnnpack/libxnnpack_backend.a
+    backends/xnnpack/third-party/pthreadpool/libpthreadpool.a
+    backends/xnnpack/third-party/cpuinfo/libcpuinfo.a
+    backends/xnnpack/third-party/XNNPACK/libXNNPACK.a
+    backends/xnnpack/third-party/XNNPACK/libxnnpack-microkernels-prod.a
+    backends/vulkan/libvulkan_backend.a
+)
+OPTIONAL_LIBS=(
+    # Present on Android/arm64 XNNPACK builds (KleidiAI microkernels).
+    kleidiai/libkleidiai.a
+)
+
+copy_lib() {
+    local rel="$1"
+    local src="${BUILD_DIR}/${rel}"
+    local dst="${OUTPUT_DIR}/${rel}"
+    if [[ ! -f "${src}" ]]; then
+        echo "Missing required library: ${rel}" >&2
+        return 1
+    fi
+    mkdir -p "$(dirname "${dst}")"
+    cp -a "${src}" "${dst}"
+}
+
+for rel in "${REQUIRED_LIBS[@]}"; do
+    copy_lib "${rel}"
+done
+for rel in "${OPTIONAL_LIBS[@]}"; do
+    if [[ -f "${BUILD_DIR}/${rel}" ]]; then
+        mkdir -p "$(dirname "${OUTPUT_DIR}/${rel}")"
+        cp -a "${BUILD_DIR}/${rel}" "${OUTPUT_DIR}/${rel}"
+    fi
+done
+
+chmod -R a+rwX "${OUTPUT_DIR}"
 
 echo "ExecuTorch libraries built and copied to ${OUTPUT_DIR} (TARGET=${TARGET})"
