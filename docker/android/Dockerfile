@@ -1,4 +1,7 @@
-FROM ubuntu:26.04
+# syntax=docker/dockerfile:1
+# Named context `infers-base` is provided by docker/docker-bake.hcl (target:base).
+# Plain `docker build` works if a local `infers-base` image already exists.
+FROM infers-base
 ARG ANDROID_CMDLINE_TOOLS_VERSION=13114758
 ARG ANDROID_PLATFORM=android-36
 ARG ANDROID_BUILD_TOOLS=36.0.0
@@ -6,27 +9,13 @@ ARG ANDROID_BUILD_TOOLS=36.0.0
 ARG ANDROID_NDK_VERSION=27.2.12479018
 ARG RUST_TOOLCHAIN=nightly-2026-04-11
 
-ENV DEBIAN_FRONTEND=noninteractive
-
-# Apt packages (cache mounts keep indexes/packages across rebuilds).
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates \
-    curl \
-    wget \
-    unzip \
     zip \
-    git \
-    build-essential \
     clang \
-    cmake \
-    ninja-build \
     openjdk-17-jdk-headless \
-    python3 \
-    python3-pip \
     libssl-dev \
-    libvulkan-dev \
     pkg-config
 
 ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
@@ -75,7 +64,6 @@ RUN --mount=type=cache,target=/opt/rustup/downloads,sharing=locked \
     rustup default "${RUST_TOOLCHAIN}"; \
     rustup target add aarch64-linux-android --toolchain "${RUST_TOOLCHAIN}"
 
-WORKDIR /workspace
 # Runtime caches survive image rebuilds when scripts/android_gradle.sh mounts
 # the named volumes infers-android-gradle / infers-android-cargo-*.
 VOLUME ["/root/.gradle", "/opt/cargo/registry", "/opt/cargo/git"]

@@ -2,15 +2,13 @@
 set -euo pipefail
 
 ROOT="$(cd -- "$(dirname "$0")/.." && pwd)"
-IMAGE="${INFERS_ANDROID_IMAGE:-infers-android-builder}"
 
 export DOCKER_BUILDKIT=1
-
-docker build \
-    --progress=plain \
-    -t "${IMAGE}" \
-    -f "${ROOT}/docker/android/Dockerfile" \
-    "${ROOT}/docker/android"
+# Bake resolves local contexts relative to CWD (not the bake file).
+(
+    cd "${ROOT}/docker"
+    docker buildx bake -f docker-bake.hcl --progress=plain android
+)
 
 LOCAL_PROPS="$(mktemp)"
 trap 'rm -f "${LOCAL_PROPS}"' EXIT
@@ -30,5 +28,5 @@ docker run --rm --network host \
     -e CARGO_HOME=/opt/cargo \
     -e CARGO_TARGET_DIR=/workspace/target \
     -e RUSTUP_HOME=/opt/rustup \
-    "${IMAGE}" \
+    infers-android-builder \
     "$@"

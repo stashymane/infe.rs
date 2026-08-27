@@ -21,12 +21,11 @@ esac
 mkdir -p "${OUTPUT_DIR}"
 
 export DOCKER_BUILDKIT=1
-
-docker build \
-    --progress=plain \
-    -t infers-builder \
-    -f "${ROOT}/docker/builder/Dockerfile" \
-    "${ROOT}/docker/builder"
+# Bake resolves local contexts relative to CWD (not the bake file).
+(
+    cd "${ROOT}/docker"
+    docker buildx bake -f docker-bake.hcl --progress=plain builder
+)
 
 # Named volume keeps ExecuTorch source + submodules across rebuilds.
 # FORCE_CLONE=1 discards the persisted checkout and clones fresh.

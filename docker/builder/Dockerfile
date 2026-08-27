@@ -1,4 +1,7 @@
-FROM ubuntu:26.04
+# syntax=docker/dockerfile:1
+# Named context `infers-base` is provided by docker/docker-bake.hcl (target:base).
+# Plain `docker build` works if a local `infers-base` image already exists.
+FROM infers-base
 ARG ANDROID_NDK_VERSION=r27c
 ARG ANDROID_NDK_API=26
 ARG VULKAN_SDK_VERSION=1.4.357.1
@@ -7,25 +10,12 @@ ARG TORCHVISION_VERSION=0.28.0
 ARG ULTRALYTICS_VERSION=8.4.128
 ARG EXECUTORCH_PIP_VERSION=1.4.0
 
-ENV DEBIAN_FRONTEND=noninteractive
-
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     apt-get update && apt-get install -y --no-install-recommends \
-    git \
-    ca-certificates \
-    cmake \
-    ninja-build \
-    build-essential \
-    python3 \
-    python3-pip \
     python3-venv \
-    curl \
-    wget \
     xz-utils \
-    unzip \
     zlib1g-dev \
-    libvulkan-dev \
     vulkan-tools \
     libglib2.0-0 \
     libgl1 \
@@ -85,7 +75,6 @@ RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
         "executorch==${EXECUTORCH_PIP_VERSION}" \
         pyyaml
 
-WORKDIR /workspace
 # Persist ExecuTorch source (and cmake trees) across container runs.
 # scripts/build_*.sh mount the named volume infers-builder-workspace here.
 VOLUME ["/workspace"]
