@@ -27,11 +27,13 @@ export DOCKER_BUILDKIT=1
     docker buildx bake -f docker-bake.hcl --progress=plain builder
 )
 
-# Named volume keeps ExecuTorch source + submodules across rebuilds.
+# Named volume keeps ExecuTorch source, submodules, and per-target CMake trees.
 # FORCE_CLONE=1 discards the persisted checkout and clones fresh.
+# FORCE_BUILD=1 wipes the persisted CMake build dir for a clean rebuild.
 docker run --rm \
     -e "TARGET=${TARGET}" \
     -e "FORCE_CLONE=${FORCE_CLONE:-0}" \
+    -e "FORCE_BUILD=${FORCE_BUILD:-0}" \
     -e "EXECUTORCH_VERSION=${EXECUTORCH_VERSION:-v1.4.0}" \
     -v infers-builder-workspace:/workspace \
     -v "${OUTPUT_DIR}:/output" \

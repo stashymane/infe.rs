@@ -17,6 +17,7 @@ printf 'sdk.dir=/opt/android-sdk\n' > "${LOCAL_PROPS}"
 # Persistent named volumes: Gradle + Cargo downloads survive container rebuilds.
 # --network host: wireless/USB adb on the host is visible inside the container.
 # Overlay local.properties so the host sdk.dir is not rewritten.
+# HOST_UID/GID: chown workspace outputs back to the invoking user (IDE sync).
 docker run --rm --network host \
     -v "${ROOT}:/workspace" \
     -v "${LOCAL_PROPS}:/workspace/kotlin/local.properties:ro" \
@@ -28,5 +29,7 @@ docker run --rm --network host \
     -e CARGO_HOME=/opt/cargo \
     -e CARGO_TARGET_DIR=/workspace/target \
     -e RUSTUP_HOME=/opt/rustup \
+    -e "HOST_UID=$(id -u)" \
+    -e "HOST_GID=$(id -g)" \
     infers-android-builder \
     "$@"

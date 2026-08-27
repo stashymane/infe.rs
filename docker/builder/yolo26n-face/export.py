@@ -19,6 +19,8 @@ from ultralytics import YOLO
 from ultralytics.utils import YAML as UltralyticsYAML
 
 MANIFEST_NAME = "manifest.yaml"
+GENERATED_MANIFEST_NAME = "manifest.generated.yaml"
+
 
 
 def load_manifest(manifest_path: Path) -> dict[str, Any]:
@@ -174,7 +176,7 @@ def smoke_test_pte(pte_path: Path, imgsz: int) -> None:
 
 
 def write_manifest(
-    manifest_path: Path,
+    generated_path: Path,
     manifest: dict[str, Any],
     imgsz: int,
     xnnpack_pte: Path,
@@ -219,10 +221,12 @@ def write_manifest(
         "input_dtype": "float32",
     }
 
-    tmp_manifest = manifest_path.with_suffix(".yaml.tmp")
+    # Write beside the committed template so local builds do not dirty git.
+    generated_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_manifest = generated_path.with_suffix(".yaml.tmp")
     with tmp_manifest.open("w", encoding="utf-8") as f:
         yaml.safe_dump(manifest, f, sort_keys=False, default_flow_style=False)
-    tmp_manifest.replace(manifest_path)
+    tmp_manifest.replace(generated_path)
 
 
 def main() -> int:
@@ -265,7 +269,7 @@ def main() -> int:
             shutil.copy2(vulkan_meta, vulkan_out / "metadata.yaml")
 
     write_manifest(
-        manifest_path,
+        output_dir / GENERATED_MANIFEST_NAME,
         manifest,
         imgsz,
         output_dir / "xnnpack" / "model.pte",
@@ -273,6 +277,7 @@ def main() -> int:
         weights_path,
     )
     print(f"Export complete -> {output_dir}")
+    print(f"Generated manifest -> {output_dir / GENERATED_MANIFEST_NAME}")
     return 0
 
 

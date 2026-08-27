@@ -1,3 +1,8 @@
+# Built model binaries / weights (regenerate via scripts/build_yolo26n_face_assets.sh).
 *.pte
 *.pt
 weights/
+
+# Export outputs (do not dirty the committed manifest.yaml template).
+manifest.generated.yaml
+**/metadata.yaml

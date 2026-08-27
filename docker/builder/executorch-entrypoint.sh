@@ -3,15 +3,18 @@ set -euo pipefail
 
 EXECUTORCH_VERSION="${EXECUTORCH_VERSION:-v1.4.0}"
 EXECUTORCH_DIR="${EXECUTORCH_DIR:-/workspace/executorch}"
-BUILD_DIR="${BUILD_DIR:-/workspace/build}"
 OUTPUT_DIR="${OUTPUT_DIR:-/output}"
 # host (default) | android-arm64
 TARGET="${TARGET:-host}"
+# Per-target build tree on the named volume so host/android caches do not mix.
+BUILD_DIR="${BUILD_DIR:-/workspace/build-${TARGET}}"
 ANDROID_NDK_HOME="${ANDROID_NDK_HOME:-/opt/android-ndk}"
 ANDROID_NDK_API="${ANDROID_NDK_API:-26}"
 ANDROID_ABI="${ANDROID_ABI:-arm64-v8a}"
 # Set FORCE_CLONE=1 to discard a persisted /workspace checkout and clone fresh.
 FORCE_CLONE="${FORCE_CLONE:-0}"
+# Set FORCE_BUILD=1 to wipe the persisted CMake build dir (full rebuild).
+FORCE_BUILD="${FORCE_BUILD:-0}"
 
 clone_executorch() {
     echo "Cloning ExecuTorch ${EXECUTORCH_VERSION}..."
@@ -110,8 +113,14 @@ case "${TARGET}" in
         ;;
 esac
 
+if [[ "${FORCE_BUILD}" == "1" ]]; then
+    echo "FORCE_BUILD=1: wiping build dir ${BUILD_DIR}"
+    rm -rf "${BUILD_DIR}"
+elif [[ -d "${BUILD_DIR}" ]]; then
+    echo "Reusing incremental build dir ${BUILD_DIR} (set FORCE_BUILD=1 for a clean rebuild)"
+fi
+
 echo "Configuring ExecuTorch..."
-rm -rf "${BUILD_DIR}"
 cmake "${CMAKE_ARGS[@]}" -B "${BUILD_DIR}" .
 
 echo "Building ExecuTorch..."

@@ -37,4 +37,23 @@ fi
 echo "adb devices:"
 adb devices -l || true
 echo "Running: ./gradlew $*"
-exec ./gradlew "$@"
+
+status=0
+./gradlew "$@" || status=$?
+
+# Rootful Docker writes as root into the bind-mounted workspace; restore ownership
+# so host IDE Gradle sync can rewrite kotlin/**/build. Skip under user namespaces
+# where container uid 0 already maps to the host user.
+if [[ -n "${HOST_UID:-}" && -n "${HOST_GID:-}" ]]; then
+    host_uid_for_0="$(awk '$1 == 0 { print $2; exit }' /proc/self/uid_map 2>/dev/null || true)"
+    if [[ "${host_uid_for_0}" == "0" ]]; then
+        chown -R "${HOST_UID}:${HOST_GID}" \
+            "${CARGO_TARGET_DIR}" \
+            "${KOTLIN_DIR}/.kotlin" \
+            "${KOTLIN_DIR}/build" \
+            "${KOTLIN_DIR}"/*/build \
+            2>/dev/null || true
+    fi
+fi
+
+exit "${status}"
