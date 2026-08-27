@@ -918,7 +918,7 @@ dependencies = [
 
 [[package]]
 name = "infers"
-version = "0.1.0"
+version = "0.0.0-dev"
 dependencies = [
  "clap",
  "infers-backend-executorch",
@@ -931,7 +931,7 @@ dependencies = [
 
 [[package]]
 name = "infers-backend-executorch"
-version = "0.1.0"
+version = "0.0.0-dev"
 dependencies = [
  "cc",
  "executorch",
@@ -945,7 +945,7 @@ dependencies = [
 
 [[package]]
 name = "infers-bindings"
-version = "0.1.0"
+version = "0.0.0-dev"
 dependencies = [
  "infers-backend-executorch",
  "infers-core",
@@ -961,7 +961,7 @@ dependencies = [
 
 [[package]]
 name = "infers-core"
-version = "0.1.0"
+version = "0.0.0-dev"
 dependencies = [
  "bytemuck",
  "infers-test-utils",
@@ -971,7 +971,7 @@ dependencies = [
 
 [[package]]
 name = "infers-gpu"
-version = "0.1.0"
+version = "0.0.0-dev"
 dependencies = [
  "ash",
  "gpu-allocator",
@@ -982,7 +982,7 @@ dependencies = [
 
 [[package]]
 name = "infers-test-utils"
-version = "0.1.0"
+version = "0.0.0-dev"
 dependencies = [
  "infers-core",
 ]
@@ -1385,7 +1385,7 @@ checksum = "b4596b6d070b27117e987119b4dac604f3c58cfb0b191112e24771b2faeac1a6"
 
 [[package]]
 name = "platform-android"
-version = "0.1.0"
+version = "0.0.0-dev"
 dependencies = [
  "ash",
  "infers-core",
@@ -1445,7 +1445,7 @@ dependencies = [
 
 [[package]]
 name = "processing"
-version = "0.1.0"
+version = "0.0.0-dev"
 dependencies = [
  "ash",
  "fast_image_resize",
@@ -1460,7 +1460,7 @@ dependencies = [
 
 [[package]]
 name = "processing-core"
-version = "0.1.0"
+version = "0.0.0-dev"
 
 [[package]]
 name = "pxfm"

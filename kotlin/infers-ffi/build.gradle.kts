@@ -10,7 +10,7 @@ plugins {
     alias(libs.plugins.gobley.cargo)
     alias(libs.plugins.gobley.uniffi)
     alias(libs.plugins.kotlin.atomicfu)
-    alias(libs.plugins.maven.publish)
+    id("infers.maven-publish")
 }
 
 android {

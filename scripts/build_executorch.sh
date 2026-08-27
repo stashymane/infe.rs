@@ -20,14 +20,8 @@ esac
 
 mkdir -p "${OUTPUT_DIR}"
 
-export DOCKER_BUILDKIT=1
-# Bake resolves local contexts relative to CWD (not the bake file).
-(
-    cd "${ROOT}/docker"
-    docker buildx bake -f docker-bake.hcl --progress=plain builder
-)
-
-# Named volume keeps ExecuTorch source, submodules, and per-target CMake trees.
+# Requires infers-builder (./scripts/docker_bake.sh builder). Named volume keeps
+# ExecuTorch source, submodules, and per-target CMake trees.
 # FORCE_CLONE=1 discards the persisted checkout and clones fresh.
 # FORCE_BUILD=1 wipes the persisted CMake build dir for a clean rebuild.
 docker run --rm \

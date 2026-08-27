@@ -7,15 +7,8 @@ IMGSZ="${IMGSZ:-192}"
 
 mkdir -p "${OUTPUT_DIR}"
 
-export DOCKER_BUILDKIT=1
-# Bake resolves local contexts relative to CWD (not the bake file).
-(
-    cd "${ROOT}/docker"
-    docker buildx bake -f docker-bake.hcl --progress=plain builder
-)
-
-# Named volume keeps any workspace-side caches across rebuilds (shared with
-# scripts/build_executorch.sh).
+# Requires infers-builder (./scripts/docker_bake.sh builder). Named volume keeps
+# any workspace-side caches across rebuilds (shared with scripts/build_executorch.sh).
 docker_run=(docker run --rm
     -e IMGSZ="${IMGSZ}"
     -e OUTPUT_DIR=/output

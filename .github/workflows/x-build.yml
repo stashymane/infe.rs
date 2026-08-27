@@ -1,0 +1,88 @@
+name: Build
+
+on:
+  workflow_call:
+    inputs:
+      publish:
+        description: Publish Kotlin artifacts to GitHub Packages
+        type: boolean
+        required: false
+        default: false
+      version:
+        description: Version override (empty = tag or 0.0.0-dev.<sha>)
+        type: string
+        required: false
+        default: ""
+
+concurrency:
+  group: build-${{ github.workflow }}-${{ github.ref }}-${{ inputs.publish || false }}
+  cancel-in-progress: ${{ !inputs.publish }}
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Resolve version
+        id: version
+        run: |
+          if [[ -n "${{ inputs.version }}" ]]; then
+            version="${{ inputs.version }}"
+          elif [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            version="${GITHUB_REF_NAME#v}"
+          elif [[ "${{ inputs.publish }}" == "true" ]]; then
+            version="0.0.0-dev.${GITHUB_SHA:0:7}"
+          else
+            version="0.0.0-dev"
+          fi
+          echo "value=${version}" >> "${GITHUB_OUTPUT}"
+          echo "INFERS_VERSION=${version}"
+
+      - name: Bake Docker images
+        uses: ./.github/actions/bake-docker
+
+      - name: Build ExecuTorch libraries
+        uses: ./.github/actions/build-executorch
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly-2026-04-11
+          components: rust-src, rustc-dev, llvm-tools
+
+      - name: Install host Vulkan libs
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libvulkan-dev
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: |
+            cargo-${{ runner.os }}-
+
+      - name: Cargo build
+        run: cargo build --workspace --all-features
+
+      - name: Gradle assemble
+        if: ${{ !inputs.publish }}
+        env:
+          INFERS_VERSION: ${{ steps.version.outputs.value }}
+        run: ./scripts/android_gradle.sh assemble --console=plain
+
+      - name: Publish to GitHub Packages
+        if: ${{ inputs.publish }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INFERS_VERSION: ${{ steps.version.outputs.value }}
+        run: ./scripts/android_gradle.sh publishAllPublicationsToGitHubPackagesRepository --console=plain

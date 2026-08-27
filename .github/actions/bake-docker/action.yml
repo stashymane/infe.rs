@@ -1,0 +1,46 @@
+name: Bake Docker images
+description: Build and load infers Docker images with GitHub Actions layer cache.
+
+inputs:
+  targets:
+    description: Multiline bake target list (builder, android, …)
+    required: false
+    default: |
+      builder
+      android
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Docker meta (builder)
+      id: meta-builder
+      uses: docker/metadata-action@v5
+      with:
+        images: infers-builder
+        bake-target: docker-metadata-action-builder
+        tags: type=raw,value=latest
+
+    - name: Docker meta (android)
+      id: meta-android
+      uses: docker/metadata-action@v5
+      with:
+        images: infers-android-builder
+        bake-target: docker-metadata-action-android
+        tags: type=raw,value=latest
+
+    - name: Bake Docker images
+      uses: docker/bake-action@v6
+      with:
+        workdir: ./docker
+        files: |
+          ./docker-bake.hcl
+          ${{ steps.meta-builder.outputs.bake-file }}
+          ${{ steps.meta-android.outputs.bake-file }}
+        targets: ${{ inputs.targets }}
+        load: true
+        set: |
+          *.cache-from=type=gha,scope=infers-docker
+          *.cache-to=type=gha,mode=max,scope=infers-docker

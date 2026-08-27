@@ -15,7 +15,8 @@ exclude = [
 resolver = "3"
 
 [workspace.package]
-version = "0.1.0"
+# project version is set by CI, 0.0.0 is used for local builds
+version = "0.0.0-dev"
 edition = "2024"
 license = "GPL-3.0-or-later"
 repository = "https://github.com/stashymane/infers"

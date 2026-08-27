@@ -10,6 +10,9 @@ set -euo pipefail
 
 ROOT="$(cd -- "$(dirname "$0")/.." && pwd)"
 
+echo "==> Docker images (builder)"
+"${ROOT}/scripts/docker_bake.sh" builder
+
 echo "==> ExecuTorch libraries (host)"
 "${ROOT}/scripts/build_executorch.sh" host
 

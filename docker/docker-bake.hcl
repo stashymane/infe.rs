@@ -6,6 +6,9 @@
 #
 # Local context paths are relative to the process CWD. Prefer running bake from
 # docker/, as the project scripts do.
+#
+# CI merges docker/metadata-action bake files that populate the empty
+# docker-metadata-action-* targets (tags/labels). See publish-kotlin.yml.
 
 group "default" {
   targets = ["base", "builder", "android"]
@@ -17,6 +20,10 @@ target "_common" {
   output = ["type=docker"]
 }
 
+# Placeholders overridden by docker/metadata-action bake files in GHA.
+target "docker-metadata-action-builder" {}
+target "docker-metadata-action-android" {}
+
 target "base" {
   inherits = ["_common"]
   context = "./base"
@@ -24,7 +31,7 @@ target "base" {
 }
 
 target "builder" {
-  inherits = ["_common"]
+  inherits = ["_common", "docker-metadata-action-builder"]
   context = "./builder"
   contexts = {
     infers-base = "target:base"
@@ -33,7 +40,7 @@ target "builder" {
 }
 
 target "android" {
-  inherits = ["_common"]
+  inherits = ["_common", "docker-metadata-action-android"]
   context = "./android"
   contexts = {
     infers-base = "target:base"

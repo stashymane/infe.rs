@@ -1,0 +1,20 @@
+name: Build project
+
+on:
+  push:
+    tags-ignore:
+      - "v*"
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: kotlin-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    uses: ./.github/workflows/x-build.yml
+    permissions:
+      contents: read

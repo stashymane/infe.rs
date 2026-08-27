@@ -1,6 +1,6 @@
 plugins {
     id("infers.kmp-feature")
-    alias(libs.plugins.maven.publish)
+    id("infers.maven-publish")
 }
 
 android {

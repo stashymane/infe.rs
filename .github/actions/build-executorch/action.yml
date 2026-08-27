@@ -1,0 +1,19 @@
+name: Build ExecuTorch libraries
+description: Build host and arm64 ExecuTorch static libs (scripts/build_executorch.sh)
+
+runs:
+  using: composite
+  steps:
+    - name: Cache ExecuTorch outputs
+      uses: actions/cache@v4
+      with:
+        path: |
+          target/executorch-libs
+          target/executorch-libs-android-arm64
+        key: executorch-${{ hashFiles('scripts/build_executorch.sh', 'docker/builder/**', 'docker/docker-bake.hcl') }}-v1.4.0
+
+    - name: Build ExecuTorch (host + android-arm64)
+      shell: bash
+      run: |
+        ./scripts/build_executorch.sh host
+        ./scripts/build_executorch.sh android-arm64

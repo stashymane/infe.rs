@@ -2,7 +2,7 @@ plugins {
     id("infers.kmp-library")
     id("infers.ktlint")
     id("infers.explicit-api")
-    alias(libs.plugins.maven.publish)
+    id("infers.maven-publish")
 }
 
 android {

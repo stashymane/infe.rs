@@ -12,6 +12,7 @@ dependencies {
     implementation(libs.kotlin.gradle.plugin)
     implementation(libs.android.gradle.plugin)
     implementation(libs.ktlint.gradle)
+    implementation(libs.maven.publish.gradle.plugin)
 }
 
 gradlePlugin {
@@ -35,6 +36,10 @@ gradlePlugin {
         register("infersKmpFeature") {
             id = "infers.kmp-feature"
             implementationClass = "InfersKmpFeaturePlugin"
+        }
+        register("infersMavenPublish") {
+            id = "infers.maven-publish"
+            implementationClass = "InfersMavenPublishPlugin"
         }
     }
 }

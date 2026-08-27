@@ -7,7 +7,3 @@ plugins {
     alias(libs.plugins.maven.publish) apply false
     alias(libs.plugins.ktlint) apply false
 }
-
-tasks.register<Delete>("clean") {
-    delete(layout.buildDirectory)
-}

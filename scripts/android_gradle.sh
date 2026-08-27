@@ -3,16 +3,27 @@ set -euo pipefail
 
 ROOT="$(cd -- "$(dirname "$0")/.." && pwd)"
 
-export DOCKER_BUILDKIT=1
-# Bake resolves local contexts relative to CWD (not the bake file).
-(
-    cd "${ROOT}/docker"
-    docker buildx bake -f docker-bake.hcl --progress=plain android
-)
-
+# Requires infers-android-builder (./scripts/docker_bake.sh android).
 LOCAL_PROPS="$(mktemp)"
 trap 'rm -f "${LOCAL_PROPS}"' EXIT
 printf 'sdk.dir=/opt/android-sdk\n' > "${LOCAL_PROPS}"
+
+# Forward publish / version env into the container when set.
+# INFERS_VERSION also becomes VERSION_NAME for vanniktech (ORG_GRADLE_PROJECT_*).
+docker_env_args=()
+for var in \
+    GITHUB_ACTOR \
+    GITHUB_TOKEN \
+    GITHUB_REPOSITORY \
+    INFERS_VERSION
+do
+    if [[ -n "${!var:-}" ]]; then
+        docker_env_args+=(-e "${var}")
+    fi
+done
+if [[ -n "${INFERS_VERSION:-}" ]]; then
+    docker_env_args+=(-e "ORG_GRADLE_PROJECT_VERSION_NAME=${INFERS_VERSION}")
+fi
 
 # Persistent named volumes: Gradle + Cargo downloads survive container rebuilds.
 # --network host: wireless/USB adb on the host is visible inside the container.
@@ -31,5 +42,6 @@ docker run --rm --network host \
     -e RUSTUP_HOME=/opt/rustup \
     -e "HOST_UID=$(id -u)" \
     -e "HOST_GID=$(id -g)" \
+    "${docker_env_args[@]}" \
     infers-android-builder \
     "$@"

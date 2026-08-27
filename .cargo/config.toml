@@ -1,3 +1,4 @@
 [env]
+INFERS_VERSION = { value = "0.0.0-dev", force = false }
 EXECUTORCH_RS_LINK = { value = "1", force = false }
 EXECUTORCH_RS_EXECUTORCH_LIB_DIR = { value = "target/executorch-libs", relative = true, force = false }
