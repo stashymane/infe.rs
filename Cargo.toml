@@ -17,6 +17,10 @@ resolver = "3"
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
+license = "GPL-3.0-or-later"
+repository = "https://github.com/stashymane/infers"
+homepage = "https://github.com/stashymane/infers"
+description = "ML pipeline assembly kit"
 
 [workspace.lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_arch, values("spirv"))'] }
@@ -33,6 +37,10 @@ thiserror = "2"
 name = "infers"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description.workspace = true
 
 [dependencies]
 infers-core = { path = "crates/core" }
