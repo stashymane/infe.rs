@@ -15,9 +15,12 @@ docker build \
     -f "${ROOT}/docker/builder/Dockerfile" \
     "${ROOT}/docker/builder"
 
+# Named volume keeps any workspace-side caches across rebuilds (shared with
+# scripts/build_executorch.sh).
 docker_run=(docker run --rm
     -e IMGSZ="${IMGSZ}"
     -e OUTPUT_DIR=/output
+    -v infers-builder-workspace:/workspace
 )
 
 if [[ -n "${YOLO26N_FACE_WEIGHTS:-}" ]]; then

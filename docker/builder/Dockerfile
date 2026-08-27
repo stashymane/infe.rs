@@ -86,6 +86,9 @@ RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
         pyyaml
 
 WORKDIR /workspace
+# Persist ExecuTorch source (and cmake trees) across container runs.
+# scripts/build_*.sh mount the named volume infers-builder-workspace here.
+VOLUME ["/workspace"]
 
 # Scripts/patches last so edits do not bust SDK/toolchain layers.
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh

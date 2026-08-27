@@ -28,8 +28,13 @@ docker build \
     -f "${ROOT}/docker/builder/Dockerfile" \
     "${ROOT}/docker/builder"
 
+# Named volume keeps ExecuTorch source + submodules across rebuilds.
+# FORCE_CLONE=1 discards the persisted checkout and clones fresh.
 docker run --rm \
     -e "TARGET=${TARGET}" \
+    -e "FORCE_CLONE=${FORCE_CLONE:-0}" \
+    -e "EXECUTORCH_VERSION=${EXECUTORCH_VERSION:-v1.4.0}" \
+    -v infers-builder-workspace:/workspace \
     -v "${OUTPUT_DIR}:/output" \
     infers-builder \
     executorch

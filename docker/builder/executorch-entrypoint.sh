@@ -10,11 +10,32 @@ TARGET="${TARGET:-host}"
 ANDROID_NDK_HOME="${ANDROID_NDK_HOME:-/opt/android-ndk}"
 ANDROID_NDK_API="${ANDROID_NDK_API:-26}"
 ANDROID_ABI="${ANDROID_ABI:-arm64-v8a}"
+# Set FORCE_CLONE=1 to discard a persisted /workspace checkout and clone fresh.
+FORCE_CLONE="${FORCE_CLONE:-0}"
 
-echo "Cloning ExecuTorch ${EXECUTORCH_VERSION}..."
-rm -rf "${EXECUTORCH_DIR}"
-git clone --depth 1 --branch "${EXECUTORCH_VERSION}" \
-    https://github.com/pytorch/executorch.git "${EXECUTORCH_DIR}"
+clone_executorch() {
+    echo "Cloning ExecuTorch ${EXECUTORCH_VERSION}..."
+    rm -rf "${EXECUTORCH_DIR}"
+    git clone --depth 1 --branch "${EXECUTORCH_VERSION}" \
+        https://github.com/pytorch/executorch.git "${EXECUTORCH_DIR}"
+}
+
+# Prefer a volume-backed checkout under /workspace so rebuilds skip the full clone.
+if [[ "${FORCE_CLONE}" == "1" ]]; then
+    clone_executorch
+elif [[ -d "${EXECUTORCH_DIR}/.git" ]]; then
+    current_tag="$(git -C "${EXECUTORCH_DIR}" describe --tags --exact-match 2>/dev/null || true)"
+    if [[ "${current_tag}" == "${EXECUTORCH_VERSION}" ]]; then
+        echo "Reusing ExecuTorch ${EXECUTORCH_VERSION} at ${EXECUTORCH_DIR}"
+        # Drop prior patch edits so apply-*.sh scripts stay idempotent and up to date.
+        git -C "${EXECUTORCH_DIR}" reset --hard HEAD
+    else
+        echo "Persisted checkout is '${current_tag:-unknown}', want ${EXECUTORCH_VERSION}; re-cloning..."
+        clone_executorch
+    fi
+else
+    clone_executorch
+fi
 
 cd "${EXECUTORCH_DIR}"
 

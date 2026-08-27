@@ -76,6 +76,9 @@ RUN --mount=type=cache,target=/opt/rustup/downloads,sharing=locked \
     rustup target add aarch64-linux-android --toolchain "${RUST_TOOLCHAIN}"
 
 WORKDIR /workspace
+# Runtime caches survive image rebuilds when scripts/android_gradle.sh mounts
+# the named volumes infers-android-gradle / infers-android-cargo-*.
+VOLUME ["/root/.gradle", "/opt/cargo/registry", "/opt/cargo/git"]
 
 # Entrypoint last so script edits do not bust toolchain layers.
 COPY entrypoint.sh /usr/local/bin/android-entrypoint.sh
