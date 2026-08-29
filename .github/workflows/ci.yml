@@ -20,4 +20,5 @@ jobs:
     uses: ./.github/workflows/x-build.yml
     permissions:
       contents: read
+      actions: write
     secrets: inherit

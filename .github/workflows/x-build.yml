@@ -27,6 +27,7 @@ jobs:
     uses: ./.github/workflows/x-build-executorch.yml
     permissions:
       contents: read
+      actions: write
 
   build:
     name: Build library
@@ -56,10 +57,14 @@ jobs:
         with:
           pattern: executorch-*
           merge-multiple: true
-          path: target
+          path: target/executorch
 
       - name: Verify ExecuTorch layout
-        run: find target/executorch -name '*.a' | head
+        run: |
+          test -f target/executorch/x86_64-unknown-linux-gnu/libexecutorch.a
+          test -f target/executorch/android-arm64/libexecutorch.a
+          test -d target/executorch/executorch
+          find target/executorch -name '*.a' | head
 
       - name: Setup Android host toolchains
         uses: ./.github/actions/setup-android
@@ -98,6 +103,7 @@ jobs:
 
       - name: Cargo build
         env:
+          EXECUTORCH_RS_EXECUTORCH_LIB_DIR: ${{ github.workspace }}/target/executorch/x86_64-unknown-linux-gnu
           EXECUTORCH_SRC: ${{ github.workspace }}/target/executorch/executorch
         run: cargo build --workspace --all-features
 
