@@ -29,6 +29,14 @@ runs:
       uses: nix-community/cache-nix-action@v6
       with:
         primary-key: et-nix-${{ inputs.target }}-${{ hashFiles('flake.lock', 'nix/**') }}
+        restore-prefixes-first-match: et-nix-${{ inputs.target }}-
+        restore-prefixes-all-matches: et-nix-${{ inputs.target }}-
+        gc-max-store-size-linux: ${{ inputs.target == 'android-arm64' && '4G' || '2G' }}
+        purge: true
+        purge-prefixes: et-nix-${{ inputs.target }}-
+        purge-created: 604800
+        purge-last-accessed: 1209600
+        purge-primary-key: never
 
     - name: Build
       shell: bash

@@ -13,6 +13,9 @@ concurrency:
 jobs:
   build:
     name: ExecuTorch (${{ matrix.target }})
+    permissions:
+      contents: read
+      actions: write
     strategy:
       fail-fast: false
       matrix:
