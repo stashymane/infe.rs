@@ -188,7 +188,9 @@ class InfersExceptionMappingTest {
                     .InternalException("boom") to InfersException.InternalError::class,
             )
         for ((ffi, expected) in cases) {
-            val mapped = dev.stashy.infers.internal.mapFfiException(ffi)
+            val mapped =
+                dev.stashy.infers.internal
+                    .mapFfiException(ffi)
             assertEquals(expected, mapped::class)
             assertEquals("boom", mapped.reason)
         }
