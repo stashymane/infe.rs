@@ -17,10 +17,6 @@ dependencies {
 
 gradlePlugin {
     plugins {
-        register("infersCargoFeature") {
-            id = "infers.cargo-feature"
-            implementationClass = "InfersCargoFeaturePlugin"
-        }
         register("infersKmpLibrary") {
             id = "infers.kmp-library"
             implementationClass = "InfersKmpLibraryPlugin"
@@ -32,10 +28,6 @@ gradlePlugin {
         register("infersExplicitApi") {
             id = "infers.explicit-api"
             implementationClass = "InfersExplicitApiPlugin"
-        }
-        register("infersKmpFeature") {
-            id = "infers.kmp-feature"
-            implementationClass = "InfersKmpFeaturePlugin"
         }
         register("infersMavenPublish") {
             id = "infers.maven-publish"

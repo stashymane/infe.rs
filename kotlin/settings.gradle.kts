@@ -23,7 +23,6 @@ rootProject.name = "infers-kotlin"
 include(
     ":infers",
     ":infers-ffi",
-    ":infers-portable",
     ":infers-xnnpack",
     ":infers-vulkan",
 )

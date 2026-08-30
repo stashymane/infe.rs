@@ -1,5 +1,4 @@
 import gobley.gradle.GobleyHost
-import gobley.gradle.Variant
 import gobley.gradle.cargo.dsl.android
 import gobley.gradle.cargo.dsl.jvm
 import gobley.gradle.cargo.tasks.CargoBuildTask
@@ -17,15 +16,17 @@ android {
     namespace = "dev.stashy.infers.ffi"
 }
 
-val cargoFeatures: Set<String> = InfersCargoFeatures.enabled(project)
-val androidApi: Int =
-    libs.versions.android.min.sdk
-        .get()
-        .toInt()
+val androidApi: Int = libs.versions.android.min.sdk
+    .get()
+    .toInt()
 
 cargo {
     packageDirectory = rootProject.layout.projectDirectory.dir("../crates/bindings")
-    features = cargoFeatures
+    features = setOf(
+        "portable",
+        "xnnpack",
+        "vulkan",
+    )
     builds.jvm {
         embedRustLibrary = rustTarget == GobleyHost.current.rustTarget
     }
@@ -41,7 +42,7 @@ uniffi {
         packageName = "dev.stashy.infers.ffi"
         // Generate from the host library so JVM compiles don't require a successful Android build first.
         build = GobleyHost.current.rustTarget
-        variant = Variant.Debug
+        variant = gobley.gradle.Variant.Debug
     }
 }
 
@@ -50,11 +51,10 @@ tasks.withType<CargoBuildTask>().configureEach {
     extraArguments.add("--no-default-features")
 }
 
-val androidExecuTorchLibs =
-    rootProject.layout.projectDirectory
-        .dir("../target/executorch/android-arm64")
-        .asFile
-        .absolutePath
+val androidExecuTorchLibs = rootProject.layout.projectDirectory
+    .dir("../target/executorch/android-arm64")
+    .asFile
+    .absolutePath
 
 // Gobley sets BINDGEN_EXTRA_CLANG_ARGS_<triple> (hyphens) to --sysroot only.
 // bindgen prefers that hyphen form over the underscore variant, and NDK r26+
@@ -88,21 +88,9 @@ kotlin {
             implementation(libs.kotlinx.coroutines.core)
             implementation(libs.atomicfu)
         }
-        androidMain.dependencies {
-            // Android must use the AAR; the default JAR collides with it on instrumented tests.
-            implementation("net.java.dev.jna:jna:${libs.versions.jna.get()}@aar")
-        }
         jvmMain.dependencies {
             implementation(libs.jna)
         }
     }
 }
 
-tasks.register("printInfersCargoFeatures") {
-    group = "help"
-    description = "Prints the Cargo features selected for libinfers_bindings"
-    val features = cargoFeatures
-    doLast {
-        println("infers.cargo.features=${features.joinToString(",")}")
-    }
-}

@@ -8,7 +8,6 @@ infers = "..."
 
 [libraries]
 infers-core = { module = "dev.stashy.infers:infers", version.ref = "infers" }
-infers-portable = { module = "dev.stashy.infers:infers-portable", version.ref = "infers" }
 infers-xnnpack = { module = "dev.stashy.infers:infers-xnnpack", version.ref = "infers" }
 infers-vulkan = { module = "dev.stashy.infers:infers-vulkan", version.ref = "infers" }
 ```
