@@ -11,10 +11,7 @@ import kotlinx.coroutines.withContext
  */
 @OptIn(InfersInternalApi::class)
 context(scope: InferenceScope)
-public suspend fun ImageProcessor.process(
-    buffer: HardwareBuffer,
-    options: ProcessingOptions,
-): Tensor {
+public suspend fun ImageProcessor.process(buffer: HardwareBuffer, options: ProcessingOptions): Tensor {
     val ffiProcessor =
         this as? FfiBackedImageProcessor
             ?: error("ImageProcessor must be an Infers FFI-backed processor")
@@ -34,10 +31,9 @@ public fun android.hardware.HardwareBuffer.toHardwareBuffer(device: Device): Har
 public suspend fun FfiBackedImageProcessor.processHardwareBuffer(
     buffer: HardwareBuffer,
     options: ProcessingOptions,
-): Tensor =
-    withContext(dispatcher) {
-        withFfiErrors {
-            ensureOpen()
-            Tensor.fromFfi(handle.processHardwareBuffer(buffer.handle, options.toFfi()))
-        }
+): Tensor = withContext(dispatcher) {
+    withFfiErrors {
+        ensureOpen()
+        Tensor.fromFfi(handle.processHardwareBuffer(buffer.handle, options.toFfi()))
     }
+}

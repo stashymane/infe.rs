@@ -10,9 +10,8 @@ public class XnnpackConfig(
     public val method: String? = null,
 ) : BackendConfig,
     BackendConfigFfiConvertible {
-    override fun toFfiConfig(): FfiBackendConfig =
-        FfiBackendConfig.Xnnpack(
-            numThreads = numThreads,
-            method = method,
-        )
+    override fun toFfiConfig(): FfiBackendConfig = FfiBackendConfig.Xnnpack(
+        numThreads = numThreads,
+        method = method,
+    )
 }

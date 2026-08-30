@@ -10,9 +10,8 @@ public class VulkanConfig(
     public val method: String? = null,
 ) : BackendConfig,
     BackendConfigFfiConvertible {
-    override fun toFfiConfig(): FfiBackendConfig =
-        FfiBackendConfig.Vulkan(
-            context = context.handle,
-            method = method,
-        )
+    override fun toFfiConfig(): FfiBackendConfig = FfiBackendConfig.Vulkan(
+        context = context.handle,
+        method = method,
+    )
 }

@@ -20,66 +20,63 @@ public interface ImageProcessor : AutoCloseable {
  * parking extra threads.
  */
 public open class FfiBackedImageProcessor
-    @InfersInternalApi
-    public constructor(
-        @property:InfersInternalApi
-        public val handle: FfiImageProcessor,
-        private val ownerName: String,
-        @property:InfersInternalApi
-        public val dispatcher: CoroutineDispatcher = Dispatchers.Default.limitedParallelism(1),
-    ) : ImageProcessor {
-        private val gate = CloseGate(ownerName)
+@InfersInternalApi
+public constructor(
+    @property:InfersInternalApi
+    public val handle: FfiImageProcessor,
+    ownerName: String,
+    @property:InfersInternalApi
+    public val dispatcher: CoroutineDispatcher = Dispatchers.Default.limitedParallelism(1),
+) : ImageProcessor {
+    private val gate = CloseGate(ownerName)
 
-        internal fun ensureOpen() {
+    internal fun ensureOpen() {
+        gate.ensureOpen()
+    }
+
+    override val device: Device
+        get() {
             gate.ensureOpen()
+            return handle.device().fromFfi()
         }
 
-        override val device: Device
-            get() {
-                gate.ensureOpen()
-                return handle.device().fromFfi()
-            }
-
-        /**
-         * Preprocesses [bytes] into a tensor.
-         *
-         * Native calls are not interruptible; cancellation is checked around the call.
-         */
-        @InfersInternalApi
-        public suspend fun processBytes(
-            bytes: ByteArray,
-            width: UInt,
-            height: UInt,
-            format: ImageFormat,
-            options: ProcessingOptions,
-        ): Tensor =
-            withContext(dispatcher) {
-                withFfiErrors {
-                    gate.ensureOpen()
-                    Tensor.fromFfi(
-                        handle.processBytes(
-                            bytes,
-                            width,
-                            height,
-                            format.toFfi(),
-                            options.toFfi(),
-                        ),
-                    )
-                }
-            }
-
-        @InfersInternalApi
-        public suspend fun processBytes(
-            bytes: ByteArray,
-            options: ProcessingOptions,
-        ): Tensor = processBytes(bytes, options.srcW, options.srcH, options.srcFormat, options)
-
-        override fun close() {
-            if (gate.markClosed()) {
-                handle.close()
-            }
+    /**
+     * Preprocesses [bytes] into a tensor.
+     *
+     * Native calls are not interruptible; cancellation is checked around the call.
+     */
+    @InfersInternalApi
+    public suspend fun processBytes(
+        bytes: ByteArray,
+        width: UInt,
+        height: UInt,
+        format: ImageFormat,
+        options: ProcessingOptions,
+    ): Tensor = withContext(dispatcher) {
+        withFfiErrors {
+            gate.ensureOpen()
+            Tensor.fromFfi(
+                handle.processBytes(
+                    bytes,
+                    width,
+                    height,
+                    format.toFfi(),
+                    options.toFfi(),
+                ),
+            )
         }
     }
+
+    @InfersInternalApi
+    public suspend fun processBytes(bytes: ByteArray, options: ProcessingOptions): Tensor =
+        processBytes(bytes, options.srcW, options.srcH, options.srcFormat, options)
+
+    override fun close() {
+        if (gate.markClosed()) {
+            handle.close()
+        }
+    }
+}
 
 public class CpuImageProcessor : FfiBackedImageProcessor {
     @InfersInternalApi

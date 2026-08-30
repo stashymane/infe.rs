@@ -51,13 +51,12 @@ public class ModelSession internal constructor(
      * Native calls are not interruptible; cancellation is checked around the call.
      */
     @InfersInternalApi
-    public suspend fun runInternal(inputs: List<Tensor>): List<Tensor> =
-        withContext(dispatcher) {
-            withFfiErrors {
-                gate.ensureOpen()
-                handle.run(inputs.map { it.handle }).map { Tensor.fromFfi(it) }
-            }
+    public suspend fun runInternal(inputs: List<Tensor>): List<Tensor> = withContext(dispatcher) {
+        withFfiErrors {
+            gate.ensureOpen()
+            handle.run(inputs.map { it.handle }).map { Tensor.fromFfi(it) }
         }
+    }
 
     override fun close() {
         if (gate.markClosed()) {

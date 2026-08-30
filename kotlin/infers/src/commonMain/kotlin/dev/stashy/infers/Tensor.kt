@@ -51,13 +51,12 @@ public class Tensor internal constructor(
      *
      * Native calls are not interruptible; cancellation is checked around the call.
      */
-    public suspend fun readBytes(): ByteArray =
-        withContext(Dispatchers.Default) {
-            withFfiErrors {
-                gate.ensureOpen()
-                handle.readToCpuBytes()
-            }
+    public suspend fun readBytes(): ByteArray = withContext(Dispatchers.Default) {
+        withFfiErrors {
+            gate.ensureOpen()
+            handle.readToCpuBytes()
         }
+    }
 
     /** Decodes little-endian F32 payload after CPU readback. */
     public suspend fun readFloats(): FloatArray = TensorCodec.decodeFloats(readBytes())
@@ -73,13 +72,12 @@ public class Tensor internal constructor(
      *
      * Native calls are not interruptible; cancellation is checked around the call.
      */
-    public suspend fun copyTo(device: Device): Tensor =
-        withContext(Dispatchers.Default) {
-            withFfiErrors {
-                gate.ensureOpen()
-                Tensor.fromFfi(handle.copyToDevice(device.toFfi()))
-            }
+    public suspend fun copyTo(device: Device): Tensor = withContext(Dispatchers.Default) {
+        withFfiErrors {
+            gate.ensureOpen()
+            Tensor.fromFfi(handle.copyToDevice(device.toFfi()))
         }
+    }
 
     override fun close() {
         if (gate.markClosed()) {
@@ -88,33 +86,19 @@ public class Tensor internal constructor(
     }
 
     public companion object {
-        internal fun fromBytes(
-            shape: TensorShape,
-            dtype: DataType,
-            data: ByteArray,
-        ): Tensor =
-            withFfiErrors {
-                Tensor.fromFfi(createTensorFromBytes(shape.toFfi(), dtype.toFfi(), data))
-            }
+        internal fun fromBytes(shape: TensorShape, dtype: DataType, data: ByteArray): Tensor = withFfiErrors {
+            Tensor.fromFfi(createTensorFromBytes(shape.toFfi(), dtype.toFfi(), data))
+        }
 
-        internal fun of(
-            shape: TensorShape,
-            data: FloatArray,
-        ): Tensor = fromBytes(shape, DataType.F32, TensorCodec.encodeFloats(data))
+        internal fun of(shape: TensorShape, data: FloatArray): Tensor =
+            fromBytes(shape, DataType.F32, TensorCodec.encodeFloats(data))
 
-        internal fun of(
-            shape: TensorShape,
-            data: ByteArray,
-        ): Tensor = fromBytes(shape, DataType.U8, data)
+        internal fun of(shape: TensorShape, data: ByteArray): Tensor = fromBytes(shape, DataType.U8, data)
 
-        internal fun of(
-            shape: TensorShape,
-            data: IntArray,
-        ): Tensor = fromBytes(shape, DataType.I32, TensorCodec.encodeInts(data))
+        internal fun of(shape: TensorShape, data: IntArray): Tensor =
+            fromBytes(shape, DataType.I32, TensorCodec.encodeInts(data))
 
-        internal fun of(
-            shape: TensorShape,
-            data: LongArray,
-        ): Tensor = fromBytes(shape, DataType.I64, TensorCodec.encodeLongs(data))
+        internal fun of(shape: TensorShape, data: LongArray): Tensor =
+            fromBytes(shape, DataType.I64, TensorCodec.encodeLongs(data))
     }
 }

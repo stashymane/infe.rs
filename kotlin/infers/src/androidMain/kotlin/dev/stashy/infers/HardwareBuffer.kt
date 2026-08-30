@@ -14,77 +14,69 @@ import dev.stashy.infers.internal.withFfiErrors
  * Use [fromPointer] only when you already have a raw `AHardwareBuffer*` from NDK code.
  */
 public class HardwareBuffer
-    @InfersInternalApi
-    constructor(
-        @property:InfersInternalApi
-        public val handle: HardwareBufferHandle,
-    ) : AutoCloseable {
-        private val gate = CloseGate("HardwareBuffer")
+@InfersInternalApi
+constructor(
+    @property:InfersInternalApi
+    public val handle: HardwareBufferHandle,
+) : AutoCloseable {
+    private val gate = CloseGate("HardwareBuffer")
 
-        public val width: UInt
-            get() {
-                gate.ensureOpen()
-                return handle.width()
-            }
-
-        public val height: UInt
-            get() {
-                gate.ensureOpen()
-                return handle.height()
-            }
-
-        public val format: UInt
-            get() {
-                gate.ensureOpen()
-                return handle.format()
-            }
-
-        public val rawPointer: ULong
-            get() {
-                gate.ensureOpen()
-                return handle.rawPointer()
-            }
-
-        public fun lockCpu(): ByteArray =
-            withFfiErrors {
-                gate.ensureOpen()
-                handle.lockCpu()
-            }
-
-        override fun close() {
-            if (gate.markClosed()) {
-                handle.close()
-            }
+    public val width: UInt
+        get() {
+            gate.ensureOpen()
+            return handle.width()
         }
 
-        public companion object {
-            public fun fromPointer(
-                ptr: ULong,
-                device: Device,
-            ): HardwareBuffer =
-                withFfiErrors {
-                    HardwareBuffer(createHardwareBufferFromRaw(ptr, device.toFfi()))
-                }
+    public val height: UInt
+        get() {
+            gate.ensureOpen()
+            return handle.height()
+        }
 
-            /**
-             * Wrap a platform [android.hardware.HardwareBuffer], converting it to an
-             * `AHardwareBuffer*` via the NDK JNI bridge.
-             */
-            public fun from(
-                buffer: android.hardware.HardwareBuffer,
-                device: Device,
-            ): HardwareBuffer {
-                val ptr = HardwareBufferBridge.nativePointer(buffer)
-                check(ptr != 0L) { "AHardwareBuffer_fromHardwareBuffer returned null" }
-                // Rust `createHardwareBufferFromRaw` acquires its own +1 and releases
-                // on Drop. Do not call nativeRelease here — that would over-free the
-                // GraphicBuffer still owned by [buffer] and crash on close (MTE).
-                return withFfiErrors {
-                    HardwareBuffer(createHardwareBufferFromRaw(ptr.toULong(), device.toFfi()))
-                }
+    public val format: UInt
+        get() {
+            gate.ensureOpen()
+            return handle.format()
+        }
+
+    public val rawPointer: ULong
+        get() {
+            gate.ensureOpen()
+            return handle.rawPointer()
+        }
+
+    public fun lockCpu(): ByteArray = withFfiErrors {
+        gate.ensureOpen()
+        handle.lockCpu()
+    }
+
+    override fun close() {
+        if (gate.markClosed()) {
+            handle.close()
+        }
+    }
+
+    public companion object {
+        public fun fromPointer(ptr: ULong, device: Device): HardwareBuffer = withFfiErrors {
+            HardwareBuffer(createHardwareBufferFromRaw(ptr, device.toFfi()))
+        }
+
+        /**
+         * Wrap a platform [android.hardware.HardwareBuffer], converting it to an
+         * `AHardwareBuffer*` via the NDK JNI bridge.
+         */
+        public fun from(buffer: android.hardware.HardwareBuffer, device: Device): HardwareBuffer {
+            val ptr = HardwareBufferBridge.nativePointer(buffer)
+            check(ptr != 0L) { "AHardwareBuffer_fromHardwareBuffer returned null" }
+            // Rust `createHardwareBufferFromRaw` acquires its own +1 and releases
+            // on Drop. Do not call nativeRelease here — that would over-free the
+            // GraphicBuffer still owned by [buffer] and crash on close (MTE).
+            return withFfiErrors {
+                HardwareBuffer(createHardwareBufferFromRaw(ptr.toULong(), device.toFfi()))
             }
         }
     }
+}
 
 /** JNI entry points implemented in `libinfers_bindings` (`android_jni.rs`). */
 internal object HardwareBufferBridge {

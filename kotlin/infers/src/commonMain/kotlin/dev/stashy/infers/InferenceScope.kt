@@ -49,10 +49,7 @@ public class InferenceScope internal constructor() {
      * Preprocesses [bytes] with [this] processor. The returned [Tensor] is owned
      * by the scope.
      */
-    public suspend fun ImageProcessor.process(
-        bytes: ByteArray,
-        options: ProcessingOptions,
-    ): Tensor {
+    public suspend fun ImageProcessor.process(bytes: ByteArray, options: ProcessingOptions): Tensor {
         val processor =
             this as? FfiBackedImageProcessor
                 ?: error("ImageProcessor must be an Infers FFI-backed processor")
@@ -71,28 +68,16 @@ public class InferenceScope internal constructor() {
     public suspend fun ModelSession.run(inputs: List<Tensor>): List<Tensor> = runInternal(inputs).map { register(it) }
 
     /** Creates a float tensor owned by the scope. */
-    public fun tensorOf(
-        shape: TensorShape,
-        data: FloatArray,
-    ): Tensor = register(Tensor.of(shape, data))
+    public fun tensorOf(shape: TensorShape, data: FloatArray): Tensor = register(Tensor.of(shape, data))
 
     /** Creates a U8 tensor owned by the scope. */
-    public fun tensorOf(
-        shape: TensorShape,
-        data: ByteArray,
-    ): Tensor = register(Tensor.of(shape, data))
+    public fun tensorOf(shape: TensorShape, data: ByteArray): Tensor = register(Tensor.of(shape, data))
 
     /** Creates an I32 tensor owned by the scope. */
-    public fun tensorOf(
-        shape: TensorShape,
-        data: IntArray,
-    ): Tensor = register(Tensor.of(shape, data))
+    public fun tensorOf(shape: TensorShape, data: IntArray): Tensor = register(Tensor.of(shape, data))
 
     /** Creates an I64 tensor owned by the scope. */
-    public fun tensorOf(
-        shape: TensorShape,
-        data: LongArray,
-    ): Tensor = register(Tensor.of(shape, data))
+    public fun tensorOf(shape: TensorShape, data: LongArray): Tensor = register(Tensor.of(shape, data))
 }
 
 /**

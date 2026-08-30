@@ -49,88 +49,79 @@ public fun BackendConfig.toFfi(): FfiBackendConfig {
 public fun Tensor.Companion.fromFfi(handle: FfiTensorBuffer): Tensor = Tensor(handle)
 
 @InfersInternalApi
-public fun Device.toFfi(): FfiDevice =
-    FfiDevice(
-        kind = kind.toFfi(),
-        id = id,
-        name = name,
-    )
+public fun Device.toFfi(): FfiDevice = FfiDevice(
+    kind = kind.toFfi(),
+    id = id,
+    name = name,
+)
 
 @InfersInternalApi
-public fun FfiDevice.fromFfi(): Device =
-    Device(
-        kind = kind.fromFfi(),
-        id = id,
-        name = name,
-    )
+public fun FfiDevice.fromFfi(): Device = Device(
+    kind = kind.fromFfi(),
+    id = id,
+    name = name,
+)
 
 @InfersInternalApi
-public fun DeviceKind.toFfi(): FfiDeviceKind =
-    when (this) {
-        DeviceKind.Cpu -> FfiDeviceKind.CPU
-        DeviceKind.Gpu -> FfiDeviceKind.GPU
-        DeviceKind.Npu -> FfiDeviceKind.NPU
-    }
+public fun DeviceKind.toFfi(): FfiDeviceKind = when (this) {
+    DeviceKind.Cpu -> FfiDeviceKind.CPU
+    DeviceKind.Gpu -> FfiDeviceKind.GPU
+    DeviceKind.Npu -> FfiDeviceKind.NPU
+}
 
 @InfersInternalApi
-public fun FfiDeviceKind.fromFfi(): DeviceKind =
-    when (this) {
-        FfiDeviceKind.CPU -> DeviceKind.Cpu
-        FfiDeviceKind.GPU -> DeviceKind.Gpu
-        FfiDeviceKind.NPU -> DeviceKind.Npu
-    }
+public fun FfiDeviceKind.fromFfi(): DeviceKind = when (this) {
+    FfiDeviceKind.CPU -> DeviceKind.Cpu
+    FfiDeviceKind.GPU -> DeviceKind.Gpu
+    FfiDeviceKind.NPU -> DeviceKind.Npu
+}
 
 @InfersInternalApi
-public fun FfiDataType.fromFfi(): DataType =
-    when (this) {
-        FfiDataType.U8 -> DataType.U8
-        FfiDataType.I8 -> DataType.I8
-        FfiDataType.I16 -> DataType.I16
-        FfiDataType.I32 -> DataType.I32
-        FfiDataType.I64 -> DataType.I64
-        FfiDataType.F16 -> DataType.F16
-        FfiDataType.F32 -> DataType.F32
-        FfiDataType.F64 -> DataType.F64
-    }
+public fun FfiDataType.fromFfi(): DataType = when (this) {
+    FfiDataType.U8 -> DataType.U8
+    FfiDataType.I8 -> DataType.I8
+    FfiDataType.I16 -> DataType.I16
+    FfiDataType.I32 -> DataType.I32
+    FfiDataType.I64 -> DataType.I64
+    FfiDataType.F16 -> DataType.F16
+    FfiDataType.F32 -> DataType.F32
+    FfiDataType.F64 -> DataType.F64
+}
 
 @InfersInternalApi
-public fun DataType.toFfi(): FfiDataType =
-    when (this) {
-        DataType.U8 -> FfiDataType.U8
-        DataType.I8 -> FfiDataType.I8
-        DataType.I16 -> FfiDataType.I16
-        DataType.I32 -> FfiDataType.I32
-        DataType.I64 -> FfiDataType.I64
-        DataType.F16 -> FfiDataType.F16
-        DataType.F32 -> FfiDataType.F32
-        DataType.F64 -> FfiDataType.F64
-    }
+public fun DataType.toFfi(): FfiDataType = when (this) {
+    DataType.U8 -> FfiDataType.U8
+    DataType.I8 -> FfiDataType.I8
+    DataType.I16 -> FfiDataType.I16
+    DataType.I32 -> FfiDataType.I32
+    DataType.I64 -> FfiDataType.I64
+    DataType.F16 -> FfiDataType.F16
+    DataType.F32 -> FfiDataType.F32
+    DataType.F64 -> FfiDataType.F64
+}
 
 @InfersInternalApi
-public fun ImageFormat.toFfi(): FfiImageFormat =
-    when (this) {
-        ImageFormat.Rgb888 -> FfiImageFormat.RGB888
-        ImageFormat.Rgbf32 -> FfiImageFormat.RGBF32
-        ImageFormat.Nv12 -> FfiImageFormat.NV12
-        ImageFormat.I420 -> FfiImageFormat.I420
-    }
+public fun ImageFormat.toFfi(): FfiImageFormat = when (this) {
+    ImageFormat.Rgb888 -> FfiImageFormat.RGB888
+    ImageFormat.Rgbf32 -> FfiImageFormat.RGBF32
+    ImageFormat.Nv12 -> FfiImageFormat.NV12
+    ImageFormat.I420 -> FfiImageFormat.I420
+}
 
 @InfersInternalApi
-public fun FitMode.toFfi(): FfiFitMode =
-    when (this) {
-        FitMode.Stretch -> FfiFitMode.STRETCH
-        FitMode.Contain -> FfiFitMode.CONTAIN
-        FitMode.Crop -> FfiFitMode.CROP
-    }
+public fun FitMode.toFfi(): FfiFitMode = when (this) {
+    FitMode.Stretch -> FfiFitMode.STRETCH
+    FitMode.Contain -> FfiFitMode.CONTAIN
+    FitMode.Crop -> FfiFitMode.CROP
+}
 
 @InfersInternalApi
-public fun Rotation.toFfi(): FfiRotation =
-    when (this) {
-        Rotation.None -> FfiRotation.NONE
-        Rotation.Rot90 -> FfiRotation.ROT90
-        Rotation.Rot180 -> FfiRotation.ROT180
-        Rotation.Rot270 -> FfiRotation.ROT270
-    }
+public fun Rotation.toFfi(): FfiRotation = when (this) {
+    Rotation.None -> FfiRotation.NONE
+    Rotation.Rot90 -> FfiRotation.ROT90
+    Rotation.Rot180 -> FfiRotation.ROT180
+    Rotation.Rot270 -> FfiRotation.ROT270
+}
 
 @InfersInternalApi
 public fun TensorShape.toFfi(): FfiTensorShape = FfiTensorShape(dims = dims)
@@ -139,66 +130,63 @@ public fun TensorShape.toFfi(): FfiTensorShape = FfiTensorShape(dims = dims)
 public fun FfiTensorShape.fromFfi(): TensorShape = TensorShape(dims = dims)
 
 @InfersInternalApi
-public fun ProcessingOptions.toFfi(): FfiProcessingOptions =
-    FfiProcessingOptions(
-        srcW = srcW,
-        srcH = srcH,
-        cropX = cropX,
-        cropY = cropY,
-        cropW = cropW,
-        cropH = cropH,
-        destW = destW,
-        destH = destH,
-        srcFormat = srcFormat.toFfi(),
-        destFormat = destFormat.toFfi(),
-        fitMode = fitMode.toFfi(),
-        rotation = rotation.toFfi(),
-    )
+public fun ProcessingOptions.toFfi(): FfiProcessingOptions = FfiProcessingOptions(
+    srcW = srcW,
+    srcH = srcH,
+    cropX = cropX,
+    cropY = cropY,
+    cropW = cropW,
+    cropH = cropH,
+    destW = destW,
+    destH = destH,
+    srcFormat = srcFormat.toFfi(),
+    destFormat = destFormat.toFfi(),
+    fitMode = fitMode.toFfi(),
+    rotation = rotation.toFfi(),
+)
 
 @InfersInternalApi
-public fun mapFfiException(error: FfiInfersException): InfersException =
-    when (error) {
-        is FfiInfersException.InvalidShape -> {
-            InfersException.InvalidShape(error.reason)
-        }
-
-        is FfiInfersException.DeviceMismatch -> {
-            InfersException.DeviceMismatch(error.expected, error.actual)
-        }
-
-        is FfiInfersException.UnsupportedType -> {
-            InfersException.UnsupportedType(error.reason)
-        }
-
-        is FfiInfersException.BufferAllocationFailed -> {
-            InfersException.BufferAllocationFailed(error.reason)
-        }
-
-        is FfiInfersException.ModelLoadFailed -> {
-            InfersException.ModelLoadFailed(error.reason)
-        }
-
-        is FfiInfersException.InferenceFailed -> {
-            InfersException.InferenceFailed(error.reason)
-        }
-
-        is FfiInfersException.ProcessingFailed -> {
-            InfersException.ProcessingFailed(error.reason)
-        }
-
-        is FfiInfersException.PlatformException -> {
-            InfersException.PlatformError(error.reason)
-        }
-
-        is FfiInfersException.InternalException -> {
-            InfersException.InternalError(error.reason)
-        }
+public fun mapFfiException(error: FfiInfersException): InfersException = when (error) {
+    is FfiInfersException.InvalidShape -> {
+        InfersException.InvalidShape(error.reason)
     }
+
+    is FfiInfersException.DeviceMismatch -> {
+        InfersException.DeviceMismatch(error.expected, error.actual)
+    }
+
+    is FfiInfersException.UnsupportedType -> {
+        InfersException.UnsupportedType(error.reason)
+    }
+
+    is FfiInfersException.BufferAllocationFailed -> {
+        InfersException.BufferAllocationFailed(error.reason)
+    }
+
+    is FfiInfersException.ModelLoadFailed -> {
+        InfersException.ModelLoadFailed(error.reason)
+    }
+
+    is FfiInfersException.InferenceFailed -> {
+        InfersException.InferenceFailed(error.reason)
+    }
+
+    is FfiInfersException.ProcessingFailed -> {
+        InfersException.ProcessingFailed(error.reason)
+    }
+
+    is FfiInfersException.PlatformException -> {
+        InfersException.PlatformError(error.reason)
+    }
+
+    is FfiInfersException.InternalException -> {
+        InfersException.InternalError(error.reason)
+    }
+}
 
 /** Runs [block], remapping generated UniFFI exceptions to [InfersException]. */
-@InfersInternalApi public inline fun <T> withFfiErrors(block: () -> T): T =
-    try {
-        block()
-    } catch (e: FfiInfersException) {
-        throw mapFfiException(e)
-    }
+@InfersInternalApi public inline fun <T> withFfiErrors(block: () -> T): T = try {
+    block()
+} catch (e: FfiInfersException) {
+    throw mapFfiException(e)
+}
