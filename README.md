@@ -56,8 +56,8 @@ You may also build these assets directly:
 
 ```bash
 nix build .#executorch-x86_64-unknown-linux-gnu --out-link target/executorch/x86_64-unknown-linux-gnu
-nix build .#executorch-src --out-link target/executorch/executorch
-# or both targets + sources:
+nix build .#executorch-android-arm64 --out-link target/executorch/android-arm64
+# or both targets:
 nix build .#executorch-libs --out-link target/executorch
 ```
 

@@ -55,11 +55,6 @@ val androidExecuTorchLibs =
         .dir("../target/executorch/android-arm64")
         .asFile
         .absolutePath
-val executorchSrc =
-    rootProject.layout.projectDirectory
-        .dir("../target/executorch/executorch")
-        .asFile
-        .absolutePath
 
 // Gobley sets BINDGEN_EXTRA_CLANG_ARGS_<triple> (hyphens) to --sysroot only.
 // bindgen prefers that hyphen form over the underscore variant, and NDK r26+
@@ -84,7 +79,6 @@ afterEvaluate {
         // are filtered out via ndk.abiFilters.
         if (!triple.startsWith("aarch64-")) return@configureEach
         additionalEnvironment.put("EXECUTORCH_RS_EXECUTORCH_LIB_DIR", androidExecuTorchLibs)
-        additionalEnvironment.put("EXECUTORCH_SRC", executorchSrc)
     }
 }
 

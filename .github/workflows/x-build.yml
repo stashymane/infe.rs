@@ -62,8 +62,9 @@ jobs:
       - name: Verify ExecuTorch layout
         run: |
           test -f target/executorch/x86_64-unknown-linux-gnu/libexecutorch.a
+          test -f target/executorch/x86_64-unknown-linux-gnu/backends/vulkan/libinfers_et_vulkan_ffi.a
           test -f target/executorch/android-arm64/libexecutorch.a
-          test -d target/executorch/executorch
+          test -f target/executorch/android-arm64/backends/vulkan/libinfers_et_vulkan_ffi.a
           find target/executorch -name '*.a' | head
 
       - name: Setup Android host toolchains
@@ -104,14 +105,12 @@ jobs:
       - name: Cargo build
         env:
           EXECUTORCH_RS_EXECUTORCH_LIB_DIR: ${{ github.workspace }}/target/executorch/x86_64-unknown-linux-gnu
-          EXECUTORCH_SRC: ${{ github.workspace }}/target/executorch/executorch
         run: cargo build --workspace --all-features
 
       - name: Gradle assemble
         if: ${{ !inputs.publish }}
         env:
           INFERS_VERSION: ${{ steps.version.outputs.value }}
-          EXECUTORCH_SRC: ${{ github.workspace }}/target/executorch/executorch
         run: ./scripts/android_gradle.sh assemble --console=plain
 
       - name: Publish to GitHub Packages
@@ -119,5 +118,4 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           INFERS_VERSION: ${{ steps.version.outputs.value }}
-          EXECUTORCH_SRC: ${{ github.workspace }}/target/executorch/executorch
         run: ./scripts/android_gradle.sh publishAllPublicationsToGitHubPackagesRepository --console=plain

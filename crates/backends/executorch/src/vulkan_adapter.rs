@@ -12,7 +12,7 @@ use infers_gpu::ash::vk::Handle;
 use parking_lot::{Mutex, MutexGuard};
 use std::sync::{Arc, OnceLock};
 
-// Implemented in `cpp/vulkan_external_adapter.cpp` against patched ExecuTorch.
+// Implemented in `nix/vulkan-ffi/` and linked via `libinfers_et_vulkan_ffi.a`.
 unsafe extern "C" {
     fn infers_et_set_external_vulkan_adapter(
         instance: *mut std::ffi::c_void,

@@ -29,11 +29,4 @@ rm -rf "${out}"
 nix build ".#executorch-${TARGET}" --out-link /tmp/et-libs
 cp -a /tmp/et-libs/. "${out}"
 
-if [[ "${TARGET}" == x86_64-unknown-linux-gnu ]]; then
-    src="${ROOT}/target/executorch/executorch"
-    rm -rf "${src}"
-    nix build .#executorch-src --out-link /tmp/et-src
-    cp -a /tmp/et-src/. "${src}"
-fi
-
-find "${ROOT}/target/executorch" -name '*.a' | head
+find "${out}" -name '*.a' | head

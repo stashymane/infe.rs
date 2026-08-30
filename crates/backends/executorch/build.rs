@@ -15,9 +15,6 @@ fn main() {
         .unwrap_or_else(|_| workspace_root.join("target/executorch/x86_64-unknown-linux-gnu"));
 
     println!("cargo:rerun-if-env-changed=EXECUTORCH_RS_EXECUTORCH_LIB_DIR");
-    println!("cargo:rerun-if-env-changed=EXECUTORCH_SRC");
-    println!("cargo:rerun-if-changed=cpp/vulkan_external_adapter.cpp");
-    println!("cargo:rerun-if-changed=cpp/vulkan_gpu_input.cpp");
 
     if feature_enabled("portable") {
         link_portable(&libs_dir);
@@ -123,49 +120,25 @@ fn link_xnnpack(libs_dir: &Path) {
     }
 }
 
-fn executorch_src_dir() -> Option<PathBuf> {
-    let src = env::var("EXECUTORCH_SRC").ok()?;
-    let path = PathBuf::from(src);
-    if path
-        .join("src/executorch/backends/vulkan/runtime/graph/ComputeGraph.h")
-        .exists()
-    {
-        Some(path)
-    } else {
-        None
-    }
-}
-
 fn link_vulkan(libs_dir: &Path) {
-    let vulkan_backend = libs_dir.join("backends/vulkan/libvulkan_backend.a");
+    let vulkan_dir = libs_dir.join("backends/vulkan");
+    let vulkan_backend = vulkan_dir.join("libvulkan_backend.a");
+    let vulkan_ffi = vulkan_dir.join("libinfers_et_vulkan_ffi.a");
     require_file(&vulkan_backend, "vulkan", "libvulkan_backend.a");
-
-    let mut builder = cc::Build::new();
-    builder
-        .cpp(true)
-        .std("c++17")
-        .file("cpp/vulkan_external_adapter.cpp")
-        .file("cpp/vulkan_gpu_input.cpp")
-        .flag_if_supported("-Wno-unused-parameter");
-
-    if let Some(src) = executorch_src_dir() {
-        println!("cargo:rerun-if-changed={}", src.display());
-        builder.define("INFERS_ET_EXECUTORCH_SRC", None);
-        builder.include(src.join("src"));
-        // ET keeps these under the Vulkan backend tree (not repo-root third-party/).
-        let vulkan_tp = src.join("backends/vulkan/third-party");
-        builder.include(vulkan_tp.join("Vulkan-Headers/include"));
-        builder.include(vulkan_tp.join("volk"));
-        builder.include(vulkan_tp.join("VulkanMemoryAllocator"));
-    }
-
-    builder.compile("infers_et_vulkan_ffi");
-
-    println!(
-        "cargo:rustc-link-search=native={}",
-        libs_dir.join("backends/vulkan").display()
+    require_file(
+        &vulkan_ffi,
+        "vulkan",
+        "libinfers_et_vulkan_ffi.a (Nix-built Vulkan FFI)",
     );
+
+    println!("cargo:rustc-link-search=native={}", vulkan_dir.display());
+    println!("cargo:rustc-link-lib=static=infers_et_vulkan_ffi");
     println!("cargo:rustc-link-lib=static:+whole-archive=vulkan_backend");
-    println!("cargo:rustc-link-lib=dylib=vulkan");
-    println!("cargo:rustc-link-lib=dylib=stdc++");
+
+    let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
+    let target_vendor = env::var("CARGO_CFG_TARGET_VENDOR").unwrap_or_default();
+    if target_os == "linux" && target_vendor != "android" {
+        println!("cargo:rustc-link-lib=dylib=vulkan");
+        println!("cargo:rustc-link-lib=dylib=stdc++");
+    }
 }

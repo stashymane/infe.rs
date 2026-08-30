@@ -933,7 +933,6 @@ dependencies = [
 name = "infers-backend-executorch"
 version = "0.0.0-dev"
 dependencies = [
- "cc",
  "executorch",
  "infers-core",
  "infers-gpu",

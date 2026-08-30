@@ -1,7 +1,6 @@
 //! C ABI wrapper around ExecuTorch's Vulkan external adapter registration.
 //!
-//! Compiles against `vulkan_backend` symbols; include paths come from the
-//! ExecuTorch source tree when present, otherwise a forward declaration is used.
+//! Compiles against `vulkan_backend` symbols from the patched ExecuTorch tree.
 //!
 //! ExecuTorch's `set_and_get_external_adapter` constructs an `Adapter` /
 //! `PhysicalDevice` without going through `runtime()`, which is the only path

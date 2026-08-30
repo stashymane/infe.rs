@@ -1,9 +1,8 @@
 //! GPU input staging helpers for ExecuTorch Vulkan delegate integration.
 //!
-//! When linked against a patched `libvulkan_backend.a` (see
-//! `nix/patches/vulkan-gpu-input.patch`), the Vulkan backend registers its
-//! `ComputeGraph` at init and honors a per-input skip mask after GPU copies into
-//! delegate staging buffers.
+//! Requires patched ExecuTorch sources (see `nix/patches/vulkan-gpu-input.patch`).
+//! The Vulkan backend registers its `ComputeGraph` at init and honors a per-input
+//! skip mask after GPU copies into delegate staging buffers.
 
 #include <atomic>
 #include <cstdint>
@@ -14,10 +13,8 @@
 
 #include <vulkan/vulkan.h>
 
-#if defined(INFERS_ET_EXECUTORCH_SRC)
 #include <executorch/backends/vulkan/runtime/api/containers/StagingBuffer.h>
 #include <executorch/backends/vulkan/runtime/graph/ComputeGraph.h>
-#endif
 
 namespace {
 
@@ -59,7 +56,6 @@ int infers_et_vulkan_input_staging_buffer(
     VkBuffer* out_buffer,
     VkDeviceSize* out_offset,
     VkDeviceSize* out_size) {
-#if defined(INFERS_ET_EXECUTORCH_SRC)
     if (graph_ptr == nullptr || out_buffer == nullptr || out_offset == nullptr ||
         out_size == nullptr) {
         return -1;
@@ -83,14 +79,6 @@ int infers_et_vulkan_input_staging_buffer(
     *out_offset = dst.mem_offset();
     *out_size = dst.mem_size();
     return 0;
-#else
-    (void)graph_ptr;
-    (void)input_index;
-    (void)out_buffer;
-    (void)out_offset;
-    (void)out_size;
-    return -100;
-#endif
 }
 
 } // extern "C"

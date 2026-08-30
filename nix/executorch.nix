@@ -19,7 +19,7 @@ let
     fetchSubmodules = true;
   };
 
-  requiredLibs = [
+  cmakeLibs = [
     "libexecutorch.a"
     "libexecutorch_core.a"
     "extension/data_loader/libextension_data_loader.a"
@@ -38,6 +38,9 @@ let
     "backends/vulkan/libvulkan_backend.a"
   ];
 
+  infersVulkanFfi = ./vulkan-ffi;
+  infersVulkanFfiDir = "backends/vulkan/infers-ffi";
+
   src = pkgs.stdenv.mkDerivation {
     name = "executorch";
     inherit version;
@@ -48,6 +51,11 @@ let
       ./patches/vulkan-sharedobject-algorithm.patch
       ./patches/vulkan-squeeze-algorithm.patch
     ];
+    postPatch = ''
+      mkdir -p ${infersVulkanFfiDir}
+      cp ${infersVulkanFfi}/vulkan_external_adapter.cpp ${infersVulkanFfiDir}/
+      cp ${infersVulkanFfi}/vulkan_gpu_input.cpp ${infersVulkanFfiDir}/
+    '';
     installPhase = ''
       runHook preInstall
       mkdir -p "$out"
@@ -83,6 +91,9 @@ let
       extraCmakeFlags ? [ ],
       extraNativeBuildInputs ? [ ],
       extraPreConfigure ? "",
+      ffiCxx ? "$CXX",
+      ffiAr ? "$AR",
+      ffiCxxFlags ? "-fPIC",
       extraAttrs ? { },
     }:
     pkgs.stdenv.mkDerivation (
@@ -118,10 +129,36 @@ let
               exit 1
             fi
             install -Dm644 ${rel} "$out/${rel}"
-          '') requiredLibs}
+          '') cmakeLibs}
           if [ -f kleidiai/libkleidiai.a ]; then
             install -Dm644 kleidiai/libkleidiai.a "$out/kleidiai/libkleidiai.a"
           fi
+
+          et_root="$NIX_BUILD_TOP/$sourceRoot"
+          vulkan_tp="$et_root/backends/vulkan/third-party"
+          ffi_src="$et_root/${infersVulkanFfiDir}"
+          ffi_build=$(mktemp -d)
+          (
+            ${ffiCxx} -std=c++17 -Wno-unused-parameter ${ffiCxxFlags} \
+              -I"$et_root/src" \
+              -I"$vulkan_tp/Vulkan-Headers/include" \
+              -I"$vulkan_tp/volk" \
+              -I"$vulkan_tp/VulkanMemoryAllocator" \
+              -c "$ffi_src/vulkan_external_adapter.cpp" \
+              -o "$ffi_build/vulkan_external_adapter.o"
+            ${ffiCxx} -std=c++17 -Wno-unused-parameter ${ffiCxxFlags} \
+              -I"$et_root/src" \
+              -I"$vulkan_tp/Vulkan-Headers/include" \
+              -I"$vulkan_tp/volk" \
+              -I"$vulkan_tp/VulkanMemoryAllocator" \
+              -c "$ffi_src/vulkan_gpu_input.cpp" \
+              -o "$ffi_build/vulkan_gpu_input.o"
+            ${ffiAr} rcs "$ffi_build/libinfers_et_vulkan_ffi.a" \
+              "$ffi_build/vulkan_external_adapter.o" \
+              "$ffi_build/vulkan_gpu_input.o"
+            install -Dm644 "$ffi_build/libinfers_et_vulkan_ffi.a" "$out/backends/vulkan/libinfers_et_vulkan_ffi.a"
+          )
+          rm -rf "$ffi_build"
           runHook postInstall
         '';
       }
@@ -145,6 +182,8 @@ let
       export ANDROID_NDK_HOME=${androidNdk}
       export ANDROID_NDK_ROOT=${androidNdk}
     '';
+    ffiCxx = "${androidNdk}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android${ndkApi}-clang++";
+    ffiAr = "${androidNdk}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar";
     extraAttrs = {
       hardeningDisable = [ "all" ];
     };
@@ -154,7 +193,6 @@ let
     mkdir -p "$out"
     ln -s ${linux} "$out/x86_64-unknown-linux-gnu"
     ln -s ${android} "$out/android-arm64"
-    ln -s ${src} "$out/executorch"
   '';
 in
 {
