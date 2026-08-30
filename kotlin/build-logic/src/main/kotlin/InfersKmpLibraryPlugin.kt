@@ -40,20 +40,6 @@ class InfersKmpLibraryPlugin : Plugin<Project> {
             compilerOptions {
                 optIn.add("kotlinx.coroutines.ExperimentalCoroutinesApi")
             }
-
-            sourceSets.getByName("commonTest").dependencies {
-                implementation(catalog.findLibrary("kotlin-test").get())
-                implementation(catalog.findLibrary("kotlinx-coroutines-test").get())
-            }
-
-            sourceSets.matching { it.name == "androidInstrumentedTest" }.configureEach {
-                dependencies {
-                    implementation(catalog.findLibrary("androidx-test-ext-junit").get())
-                    implementation(catalog.findLibrary("androidx-test-runner").get())
-                    implementation(catalog.findLibrary("kotlin-test").get())
-                    implementation(catalog.findLibrary("kotlinx-coroutines-test").get())
-                }
-            }
         }
 
         target.extensions.configure<LibraryExtension> {

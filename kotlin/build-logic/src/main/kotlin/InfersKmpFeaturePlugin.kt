@@ -35,11 +35,5 @@ class InfersKmpFeaturePlugin : Plugin<Project> {
             dependsOn(checkFeature)
         }
 
-        // Host-side unit tests cannot load Android JNI libs; use jvmTest instead.
-        target.tasks.matching {
-            it.name == "testDebugUnitTest" || it.name == "testReleaseUnitTest"
-        }.configureEach {
-            enabled = false
-        }
     }
 }

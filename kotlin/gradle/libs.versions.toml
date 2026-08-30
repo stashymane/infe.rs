@@ -11,7 +11,6 @@ ktlint-cli = "1.8.0"
 maven-publish = "0.37.0"
 android-compile-sdk = "36"
 android-min-sdk = "26"
-androidx-test-ext-junit = "1.3.0"
 androidx-test-runner = "1.7.0"
 jvm-target = "17"
 
@@ -26,7 +25,6 @@ kotlin-gradle-plugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", v
 android-gradle-plugin = { module = "com.android.tools.build:gradle", version.ref = "agp" }
 ktlint-gradle = { module = "org.jlleitschuh.gradle:ktlint-gradle", version.ref = "ktlint" }
 maven-publish-gradle-plugin = { module = "com.vanniktech:gradle-maven-publish-plugin", version.ref = "maven-publish" }
-androidx-test-ext-junit = { module = "androidx.test.ext:junit", version.ref = "androidx-test-ext-junit" }
 androidx-test-runner = { module = "androidx.test:runner", version.ref = "androidx-test-runner" }
 
 [plugins]

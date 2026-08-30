@@ -15,12 +15,18 @@ kotlin {
     }
     sourceSets {
         commonMain.dependencies {
-            implementation(project(":infers-ffi"))
+            implementation(projects.infersFfi)
             api(libs.kotlinx.coroutines.core)
             api(libs.kotlinx.io.core)
         }
-        commonTest.dependencies {
+        jvmTest.dependencies {
+            implementation(libs.kotlin.test)
             implementation(libs.kotlinx.coroutines.test)
+        }
+        androidInstrumentedTest.dependencies {
+            implementation(libs.kotlin.test)
+            implementation(libs.kotlinx.coroutines.test)
+            implementation(libs.androidx.test.runner)
         }
     }
 }

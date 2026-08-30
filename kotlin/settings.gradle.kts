@@ -1,3 +1,5 @@
+enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")
+
 pluginManagement {
     includeBuild("build-logic")
     repositories {
@@ -24,5 +26,4 @@ include(
     ":infers-portable",
     ":infers-xnnpack",
     ":infers-vulkan",
-    ":infers-consumer-test",
 )
