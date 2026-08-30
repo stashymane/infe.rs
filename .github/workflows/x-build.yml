@@ -1,4 +1,4 @@
-name: Project builder
+name: Build project
 
 on:
   workflow_call:
@@ -18,9 +18,6 @@ concurrency:
   group: build-${{ github.workflow }}-${{ github.ref }}-${{ inputs.publish || false }}
   cancel-in-progress: ${{ !inputs.publish }}
 
-permissions:
-  contents: read
-
 jobs:
   executorch:
     name: Build ExecuTorch
@@ -33,9 +30,11 @@ jobs:
     name: Build library
     needs: executorch
     runs-on: ubuntu-latest
+    env:
+      EXECUTORCH_RS_EXECUTORCH_LIB_DIR: ${{ github.workspace }}/target/executorch/x86_64-unknown-linux-gnu
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target
     steps:
-      - name: Checkout
-        uses: actions/checkout@v7
+      - uses: actions/checkout@v7
 
       - name: Resolve version
         id: version
@@ -50,10 +49,11 @@ jobs:
             version="0.0.0-dev"
           fi
           echo "value=${version}" >> "${GITHUB_OUTPUT}"
-          echo "INFERS_VERSION=${version}"
+          echo "INFERS_VERSION=${version}" >> "${GITHUB_ENV}"
+          echo "ORG_GRADLE_PROJECT_VERSION_NAME=${version}" >> "${GITHUB_ENV}"
 
       - name: Download ExecuTorch artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: executorch-*
           merge-multiple: true
@@ -67,55 +67,37 @@ jobs:
           test -f target/executorch/android-arm64/backends/vulkan/libinfers_et_vulkan_ffi.a
           find target/executorch -name '*.a' | head
 
-      - name: Setup Android host toolchains
-        uses: ./.github/actions/setup-android
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: nightly-2026-04-11
-          components: rust-src, rustc-dev, llvm-tools
-          targets: aarch64-linux-android
-
       - name: Install host Vulkan libs
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends libvulkan-dev
 
-      - name: Cache Cargo
-        uses: actions/cache@v4
+      - name: Set up JDK 25
+        uses: actions/setup-java@v6
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-          key: cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml') }}
-          restore-keys: |
-            cargo-${{ runner.os }}-
+          distribution: temurin
+          java-version: "25"
 
-      - name: Cache Gradle
-        uses: actions/cache@v4
+      - name: Setup Android host toolchains
+        uses: ./.github/actions/setup-android
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Install Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: gradle-${{ runner.os }}-${{ hashFiles('kotlin/**/*.gradle.kts', 'kotlin/gradle/libs.versions.toml', 'kotlin/gradle/wrapper/gradle-wrapper.properties') }}
-          restore-keys: |
-            gradle-${{ runner.os }}-
+          target: aarch64-linux-android
 
       - name: Cargo build
-        env:
-          EXECUTORCH_RS_EXECUTORCH_LIB_DIR: ${{ github.workspace }}/target/executorch/x86_64-unknown-linux-gnu
         run: cargo build --workspace --all-features
 
       - name: Gradle assemble
         if: ${{ !inputs.publish }}
-        env:
-          INFERS_VERSION: ${{ steps.version.outputs.value }}
-        run: ./scripts/android_gradle.sh assemble --console=plain
+        working-directory: kotlin
+        run: ./gradlew assemble --console=plain
 
       - name: Publish to GitHub Packages
         if: ${{ inputs.publish }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          INFERS_VERSION: ${{ steps.version.outputs.value }}
-        run: ./scripts/android_gradle.sh publishAllPublicationsToGitHubPackagesRepository --console=plain
+        working-directory: kotlin
+        run: ./gradlew publishAllPublicationsToGitHubPackagesRepository --console=plain

@@ -1,18 +1,15 @@
-name: Build project
+name: Continuous integration
 
 on:
   push:
     branches:
-      - "**"
+      - "master"
     tags-ignore:
       - "v*"
   pull_request:
 
-permissions:
-  contents: read
-
 concurrency:
-  group: kotlin-${{ github.ref }}
+  group: ci-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
