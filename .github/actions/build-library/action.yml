@@ -60,7 +60,14 @@ runs:
     #      shell: bash
     #      run: cargo build --workspace --all-features ${{ (inputs.release == 'true' && '--release') || '' }}
 
-    - name: ${{ (inputs.publish == 'true' && 'Publish') || 'Assemble' }} Gradle project
+    - name: Publish Gradle project
+      if: inputs.publish == 'true'
       shell: bash
       working-directory: kotlin
-      run: ./gradlew ${{ (inputs.publish == 'true' && 'publishAllPublicationsToGitHubPackagesRepository') || 'assemble' }} --console=plain
+      run: ./gradlew publishAllPublicationsToGitHubPackagesRepository --console=plain
+
+    - name: Assemble Gradle project
+      if: inputs.publish != 'true'
+      shell: bash
+      working-directory: kotlin
+      run: ./gradlew assemble --console=plain

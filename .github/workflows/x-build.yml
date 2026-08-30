@@ -41,6 +41,10 @@ jobs:
     name: Build library
     needs: executorch
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      actions: read
     env:
       EXECUTORCH_RS_EXECUTORCH_LIB_DIR: ${{ github.workspace }}/target/executorch/x86_64-unknown-linux-gnu
       CARGO_TARGET_DIR: ${{ github.workspace }}/target
@@ -56,6 +60,8 @@ jobs:
       - name: Build library
         uses: ./.github/actions/build-library
         env:
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ github.token }}
           INFERS_VERSION: ${{ steps.version.outputs.version }}
           ORG_GRADLE_PROJECT_VERSION_NAME: ${{ steps.version.outputs.version }}
         with:
