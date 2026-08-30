@@ -1,21 +1,23 @@
-name: Continuous integration
+name: Publish snapshot
 
 on:
   push:
     branches:
-      - "master"
-    tags-ignore:
-      - "v*"
-  pull_request:
+      - master
+  workflow_dispatch:
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: snapshot-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  build:
+  snapshot:
     uses: ./.github/workflows/x-build.yml
+    with:
+      publish: true
+      release: false
     permissions:
       contents: read
+      packages: write
       actions: write
     secrets: inherit

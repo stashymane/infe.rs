@@ -8,23 +8,34 @@ on:
         type: boolean
         required: false
         default: false
-      version:
-        description: Version override (empty = tag or 0.0.0-dev.<sha>)
-        type: string
+      release:
+        description: Build release artifacts (optimized Cargo profile and release Gradle variants)
+        type: boolean
         required: false
-        default: ""
-
-concurrency:
-  group: build-${{ github.workflow }}-${{ github.ref }}-${{ inputs.publish || false }}
-  cancel-in-progress: ${{ !inputs.publish }}
+        default: false
 
 jobs:
   executorch:
-    name: Build ExecuTorch
-    uses: ./.github/workflows/x-build-executorch.yml
-    permissions:
-      contents: read
-      actions: write
+    name: ExecuTorch (${{ matrix.target }})
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [ x86_64-unknown-linux-gnu, android-arm64 ]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - id: build
+        uses: ./.github/actions/build-executorch
+        with:
+          target: ${{ matrix.target }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.build.outputs.artifact }}
+          path: target/executorch
+          if-no-files-found: error
+          retention-days: 7
 
   build:
     name: Build library
@@ -36,68 +47,17 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Resolve version
-        id: version
-        run: |
-          if [[ -n "${{ inputs.version }}" ]]; then
-            version="${{ inputs.version }}"
-          elif [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
-            version="${GITHUB_REF_NAME#v}"
-          elif [[ "${{ inputs.publish }}" == "true" ]]; then
-            version="0.0.0-dev.${GITHUB_SHA:0:7}"
-          else
-            version="0.0.0-dev"
-          fi
-          echo "value=${version}" >> "${GITHUB_OUTPUT}"
-          echo "INFERS_VERSION=${version}" >> "${GITHUB_ENV}"
-          echo "ORG_GRADLE_PROJECT_VERSION_NAME=${version}" >> "${GITHUB_ENV}"
-
-      - name: Download ExecuTorch artifacts
-        uses: actions/download-artifact@v8
+      - id: version
+        uses: ./.github/actions/resolve-version
         with:
-          pattern: executorch-*
-          merge-multiple: true
-          path: target/executorch
+          publish: ${{ inputs.publish }}
+          release: ${{ inputs.release }}
 
-      - name: Verify ExecuTorch layout
-        run: |
-          test -f target/executorch/x86_64-unknown-linux-gnu/libexecutorch.a
-          test -f target/executorch/x86_64-unknown-linux-gnu/backends/vulkan/libinfers_et_vulkan_ffi.a
-          test -f target/executorch/android-arm64/libexecutorch.a
-          test -f target/executorch/android-arm64/backends/vulkan/libinfers_et_vulkan_ffi.a
-          find target/executorch -name '*.a' | head
-
-      - name: Install host Vulkan libs
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libvulkan-dev
-
-      - name: Set up JDK 25
-        uses: actions/setup-java@v6
+      - name: Build library
+        uses: ./.github/actions/build-library
+        env:
+          INFERS_VERSION: ${{ steps.version.outputs.version }}
+          ORG_GRADLE_PROJECT_VERSION_NAME: ${{ steps.version.outputs.version }}
         with:
-          distribution: temurin
-          java-version: "25"
-
-      - name: Setup Android host toolchains
-        uses: ./.github/actions/setup-android
-
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v6
-
-      - name: Install Rust toolchain
-        uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          target: aarch64-linux-android
-
-      - name: Cargo build
-        run: cargo build --workspace --all-features
-
-      - name: Gradle assemble
-        if: ${{ !inputs.publish }}
-        working-directory: kotlin
-        run: ./gradlew assemble --console=plain
-
-      - name: Publish to GitHub Packages
-        if: ${{ inputs.publish }}
-        working-directory: kotlin
-        run: ./gradlew publishAllPublicationsToGitHubPackagesRepository --console=plain
+          publish: ${{ inputs.publish }}
+          release: ${{ inputs.release }}

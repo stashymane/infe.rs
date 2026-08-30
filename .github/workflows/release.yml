@@ -1,27 +1,20 @@
-name: Publish release
+name: Release
 
 on:
   push:
     tags:
       - "v*"
-  workflow_dispatch:
-    inputs:
-      version:
-        description: "Version override"
-        required: false
-        type: string
 
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  publish-kotlin:
-    name: Publish Kotlin modules
+  release:
     uses: ./.github/workflows/x-build.yml
     with:
       publish: true
-      version: ${{ inputs.version || '' }}
+      release: true
     permissions:
       contents: read
       packages: write

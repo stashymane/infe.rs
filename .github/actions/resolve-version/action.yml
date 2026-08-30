@@ -1,0 +1,36 @@
+name: Resolve version
+description: Resolve the project version from publish and release flags.
+
+inputs:
+  publish:
+    description: Whether this build publishes artifacts
+    required: true
+  release:
+    description: Whether this build uses the release profile
+    required: true
+
+outputs:
+  version:
+    description: Resolved project version
+    value: ${{ steps.tag.outputs.value || steps.snapshot.outputs.value || steps.dev.outputs.value }}
+
+runs:
+  using: composite
+  steps:
+    - name: Use tag version
+      id: tag
+      if: inputs.publish == 'true' && inputs.release == 'true'
+      shell: bash
+      run: echo "value=${GITHUB_REF_NAME#v}" >> "${GITHUB_OUTPUT}"
+
+    - name: Use snapshot version
+      id: snapshot
+      if: inputs.publish == 'true' && inputs.release != 'true'
+      shell: bash
+      run: echo "value=$(date -u +%Y%m%d).${GITHUB_SHA:0:7}-SNAPSHOT" >> "${GITHUB_OUTPUT}"
+
+    - name: Use development version
+      id: dev
+      if: inputs.publish != 'true'
+      shell: bash
+      run: echo "value=0.0.0-dev" >> "${GITHUB_OUTPUT}"

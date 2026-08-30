@@ -1,0 +1,66 @@
+name: Build library
+description: Build and optionally publish the infers Kotlin/Rust library.
+
+inputs:
+  publish:
+    description: Publish Kotlin artifacts to GitHub Packages
+    required: true
+  release:
+    description: Build release artifacts (optimized Cargo profile and release Gradle variants)
+    required: true
+  jdk-version:
+    description: Version of the JDK to use
+    required: false
+    default: "25"
+
+runs:
+  using: composite
+  steps:
+    - name: Download ExecuTorch artifacts
+      uses: actions/download-artifact@v8
+      with:
+        pattern: executorch-*
+        merge-multiple: true
+        path: target/executorch
+
+    - name: Verify ExecuTorch layout
+      shell: bash
+      run: |
+        test -f target/executorch/x86_64-unknown-linux-gnu/libexecutorch.a
+        test -f target/executorch/x86_64-unknown-linux-gnu/backends/vulkan/libinfers_et_vulkan_ffi.a
+        test -f target/executorch/android-arm64/libexecutorch.a
+        test -f target/executorch/android-arm64/backends/vulkan/libinfers_et_vulkan_ffi.a
+        find target/executorch -name '*.a' | head
+
+    - name: Install host Vulkan libs
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends libvulkan-dev
+
+    - name: Set up JDK ${{ inputs.jdk-version }}
+      uses: actions/setup-java@v6
+      with:
+        distribution: temurin
+        java-version: ${{ inputs.jdk-version }}
+
+    - name: Setup Android host toolchains
+      uses: ./.github/actions/setup-android
+
+    - name: Setup Gradle
+      uses: gradle/actions/setup-gradle@v6
+
+    - name: Install Rust toolchain
+      uses: actions-rust-lang/setup-rust-toolchain@v1
+      with:
+        target: aarch64-linux-android
+
+    # TODO Restore once migrated from Gobley
+    #    - name: Build Rust crate ${{ (inputs.release == 'true' && ' (release)') || '' }}
+    #      shell: bash
+    #      run: cargo build --workspace --all-features ${{ (inputs.release == 'true' && '--release') || '' }}
+
+    - name: ${{ (inputs.publish == 'true' && 'Publish') || 'Assemble' }} Gradle project
+      shell: bash
+      working-directory: kotlin
+      run: ./gradlew ${{ (inputs.publish == 'true' && 'publishAllPublicationsToGitHubPackagesRepository') || 'assemble' }} --console=plain

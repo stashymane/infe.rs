@@ -1,0 +1,23 @@
+name: Development build
+
+on:
+  pull_request:
+  push:
+    branches-ignore:
+      - master
+  workflow_dispatch:
+
+concurrency:
+  group: dev-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    uses: ./.github/workflows/x-build.yml
+    with:
+      publish: false
+      release: false
+    permissions:
+      contents: read
+      actions: write
+    secrets: inherit
