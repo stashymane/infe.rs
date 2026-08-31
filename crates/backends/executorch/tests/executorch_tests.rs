@@ -371,8 +371,9 @@ fn test_prepare_gpu_inputs_avoids_read_to_cpu() {
         fn copy_to_device(
             &self,
             target: &infers_core::Device,
+            transfer: Option<&dyn infers_core::DeviceTransfer>,
         ) -> Result<Box<dyn TensorBuffer>, infers_core::CoreError> {
-            self.inner.copy_to_device(target)
+            self.inner.copy_to_device(target, transfer)
         }
     }
 

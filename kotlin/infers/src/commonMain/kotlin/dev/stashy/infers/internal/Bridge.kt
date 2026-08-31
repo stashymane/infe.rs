@@ -11,6 +11,7 @@ import dev.stashy.infers.InfersInternalApi
 import dev.stashy.infers.ProcessingOptions
 import dev.stashy.infers.Rotation
 import dev.stashy.infers.Tensor
+import dev.stashy.infers.TensorLayout
 import dev.stashy.infers.TensorShape
 import dev.stashy.infers.ffi.BackendConfig as FfiBackendConfig
 import dev.stashy.infers.ffi.DataType as FfiDataType
@@ -22,6 +23,7 @@ import dev.stashy.infers.ffi.InfersException as FfiInfersException
 import dev.stashy.infers.ffi.ProcessingOptions as FfiProcessingOptions
 import dev.stashy.infers.ffi.Rotation as FfiRotation
 import dev.stashy.infers.ffi.TensorBuffer as FfiTensorBuffer
+import dev.stashy.infers.ffi.TensorLayout as FfiTensorLayout
 import dev.stashy.infers.ffi.TensorShape as FfiTensorShape
 
 /**
@@ -124,6 +126,12 @@ public fun Rotation.toFfi(): FfiRotation = when (this) {
 }
 
 @InfersInternalApi
+public fun TensorLayout.toFfi(): FfiTensorLayout = when (this) {
+    TensorLayout.Nhwc -> FfiTensorLayout.NHWC
+    TensorLayout.Nchw -> FfiTensorLayout.NCHW
+}
+
+@InfersInternalApi
 public fun TensorShape.toFfi(): FfiTensorShape = FfiTensorShape(dims = dims)
 
 @InfersInternalApi
@@ -143,6 +151,7 @@ public fun ProcessingOptions.toFfi(): FfiProcessingOptions = FfiProcessingOption
     destFormat = destFormat.toFfi(),
     fitMode = fitMode.toFfi(),
     rotation = rotation.toFfi(),
+    destLayout = destLayout.toFfi(),
 )
 
 @InfersInternalApi

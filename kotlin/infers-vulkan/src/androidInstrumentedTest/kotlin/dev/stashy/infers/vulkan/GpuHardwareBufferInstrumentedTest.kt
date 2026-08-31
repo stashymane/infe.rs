@@ -24,7 +24,7 @@ class GpuHardwareBufferInstrumentedTest {
                     inferenceScope {
                         val buffer = androidBuffer.toHardwareBuffer(Device.gpu(0u))
                         val tensor = processor.process(buffer, options)
-                        assertEquals(TensorShape.of(1, 2, 2, 3), tensor.shape)
+                        assertEquals(TensorShape.of(1, 3, 2, 2), tensor.shape)
                     }
                 }
             }

@@ -79,7 +79,7 @@ fn test_android_hardware_buffer_with_image_processors() {
 
     let cpu_proc = CpuImageProcessor::new();
     let cpu_out = cpu_proc.process(&cpu_img, &opts).unwrap();
-    assert_eq!(cpu_out.shape().dims(), &[1, 16, 16, 3]);
+    assert_eq!(cpu_out.shape().dims(), &[1, 3, 16, 16]);
 
     let context = match platform_android::create_vulkan_context(&Device::gpu(0)) {
         Ok(ctx) => Arc::new(ctx),
@@ -103,6 +103,6 @@ fn test_android_hardware_buffer_with_image_processors() {
         }
     };
     let gpu_out = gpu_proc.process(&sampled, &opts).unwrap();
-    assert_eq!(gpu_out.shape().dims(), &[1, 16, 16, 3]);
+    assert_eq!(gpu_out.shape().dims(), &[1, 3, 16, 16]);
     assert_eq!(gpu_out.device(), &Device::gpu(0));
 }

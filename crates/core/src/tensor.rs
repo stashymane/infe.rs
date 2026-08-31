@@ -1,6 +1,7 @@
 use crate::device::cpu_device;
 use crate::device::Device;
 use crate::error::CoreError;
+use crate::transfer::DeviceTransfer;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum DataType {
@@ -170,8 +171,16 @@ pub trait TensorBuffer: Send + Sync + std::fmt::Debug {
     /// Explicit readback into CPU host memory
     fn read_to_cpu(&self) -> Result<Box<dyn AnyHostTensor>, CoreError>;
 
-    /// Explicit transfer to another execution device
-    fn copy_to_device(&self, target: &Device) -> Result<Box<dyn TensorBuffer>, CoreError>;
+    /// Explicit transfer to another execution device.
+    ///
+    /// Same-device copies succeed without `transfer`. Cross-device copies require a
+    /// [`DeviceTransfer`] implementor (typically the shared [`VulkanContext`](infers_gpu::VulkanContext)
+    /// behind [`GpuContext`](crate::GpuContext)).
+    fn copy_to_device(
+        &self,
+        target: &Device,
+        transfer: Option<&dyn DeviceTransfer>,
+    ) -> Result<Box<dyn TensorBuffer>, CoreError>;
 }
 
 macro_rules! impl_any_host_tensor_slice {
@@ -290,12 +299,18 @@ macro_rules! impl_cpu_tensor_buffer {
             fn read_to_cpu(&self) -> Result<Box<dyn AnyHostTensor>, CoreError> {
                 Ok(Box::new(self.clone()))
             }
-            fn copy_to_device(&self, target: &Device) -> Result<Box<dyn TensorBuffer>, CoreError> {
+            fn copy_to_device(
+                &self,
+                target: &Device,
+                transfer: Option<&dyn DeviceTransfer>,
+            ) -> Result<Box<dyn TensorBuffer>, CoreError> {
                 if target.is_cpu() {
                     Ok(Box::new(self.clone()))
+                } else if let Some(transfer) = transfer {
+                    transfer.upload_tensor(self)
                 } else {
                     Err(CoreError::BufferTransferFailed(format!(
-                        "Transfer from CPU to {} not supported by pure CPU tensor; use device context allocator",
+                        "Transfer from CPU to {} requires a DeviceTransfer context (e.g. GpuContext)",
                         target
                     )))
                 }

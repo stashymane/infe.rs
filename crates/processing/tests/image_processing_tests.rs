@@ -1,6 +1,7 @@
 use infers_core::{
     CpuImageBuffer, DataType, Device, ImageFormat, ProcessingOptions, Rotation,
 };
+use processing_core::TensorLayout;
 #[cfg(feature = "vulkan")]
 use infers_gpu::VulkanContext;
 use processing::{CpuImageProcessor, FitMode};
@@ -61,13 +62,14 @@ fn test_cpu_processor_contain_rgbf32() {
         dest_w: 64,
         dest_h: 64,
         dest_format: ImageFormat::Rgbf32,
+        dest_layout: TensorLayout::default_for_dest_format(ImageFormat::Rgbf32),
         fit_mode: FitMode::Contain,
         rotation: Rotation::None,
         ..Default::default()
     };
 
     let tensor_buf = processor.process(&input, &opts).unwrap();
-    assert_eq!(tensor_buf.shape().dims(), &[1, 64, 64, 3]);
+    assert_eq!(tensor_buf.shape().dims(), &[1, 3, 64, 64]);
     assert_eq!(tensor_buf.dtype(), DataType::F32);
 
     let host = tensor_buf.read_to_cpu().unwrap();
@@ -154,6 +156,7 @@ fn test_gpu_process_outputs() {
             dest_w: 32,
             dest_h: 32,
             dest_format: ImageFormat::Rgbf32,
+            dest_layout: TensorLayout::default_for_dest_format(ImageFormat::Rgbf32),
             fit_mode: FitMode::Contain,
             rotation: Rotation::Rot90,
             ..Default::default()
@@ -176,7 +179,11 @@ fn test_gpu_process_outputs() {
 
     for opts in test_cases {
         let gpu_buf = gpu_processor.process(&input, &opts).unwrap();
-        assert_eq!(gpu_buf.shape().dims(), &[1, 32, 32, 3]);
+        let expected_dims = match opts.dest_format {
+            ImageFormat::Rgbf32 => &[1, 3, 32, 32],
+            _ => &[1, 32, 32, 3],
+        };
+        assert_eq!(gpu_buf.shape().dims(), expected_dims);
         assert_eq!(gpu_buf.device(), &Device::gpu(0));
 
         let gpu_host = gpu_buf.read_to_cpu().unwrap();

@@ -30,6 +30,7 @@ fn bindings_processing_options(
         dest_format: opts.dest_format.into(),
         fit_mode: opts.fit_mode.into(),
         rotation: opts.rotation.into(),
+        dest_layout: opts.dest_layout.into(),
     }
 }
 
@@ -54,7 +55,7 @@ fn test_end_to_end_face_pipeline_uniffi() {
     assert_eq!(
         detector_input.shape(),
         TensorShape {
-            dims: vec![1, 224, 224, 3]
+            dims: vec![1, 3, 224, 224]
         }
     );
     assert_eq!(detector_input.dtype(), DataType::F32);

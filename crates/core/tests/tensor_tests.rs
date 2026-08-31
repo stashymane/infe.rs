@@ -71,7 +71,7 @@ fn test_opaque_device_tensor_residency_and_explicit_read() {
 
     // Device copy to NPU
     let npu = Device::npu(0);
-    let npu_tensor = gpu_tensor.copy_to_device(&npu).unwrap();
+    let npu_tensor = gpu_tensor.copy_to_device(&npu, None).unwrap();
     assert_eq!(npu_tensor.device(), &npu);
     let npu_host = npu_tensor.read_to_cpu().unwrap();
     assert_eq!(npu_host.as_slice_f32().unwrap(), &initial_values);

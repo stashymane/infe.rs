@@ -32,7 +32,7 @@ class HardwareBufferInstrumentedTest {
                 inferenceScope {
                     val buffer = androidBuffer.toHardwareBuffer(Device.cpu())
                     val tensor = processor.process(buffer, options)
-                    assertEquals(TensorShape.of(1, 2, 2, 3), tensor.shape)
+                    assertEquals(TensorShape.of(1, 3, 2, 2), tensor.shape)
                     assertTrue(tensor.readFloats().isNotEmpty())
                 }
             }

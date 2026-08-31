@@ -54,7 +54,9 @@ fn test_uniffi_tensor_buffers() {
     assert_eq!(1.0f32.to_le_bytes(), 1.0f32.to_ne_bytes());
 
     let cpu_dev = create_cpu_device();
-    let copied = tensor.copy_to_device(cpu_dev).expect("Copy to CPU should succeed");
+    let copied = tensor
+        .copy_to_device(cpu_dev, None)
+        .expect("Copy to CPU should succeed");
     assert_eq!(
         f32_from_le_bytes(&copied.read_to_cpu_bytes().unwrap()),
         data
@@ -82,6 +84,7 @@ fn test_uniffi_image_processor_cpu() {
         dest_format: ImageFormat::Rgbf32,
         fit_mode: FitMode::Stretch,
         rotation: Rotation::None,
+        dest_layout: TensorLayout::Nchw,
     };
 
     let processed = processor
@@ -91,7 +94,7 @@ fn test_uniffi_image_processor_cpu() {
     assert_eq!(
         processed.shape(),
         TensorShape {
-            dims: vec![1, 2, 2, 3]
+            dims: vec![1, 3, 2, 2]
         }
     );
     assert_eq!(processed.dtype(), DataType::F32);

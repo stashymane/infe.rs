@@ -1,9 +1,11 @@
 use crate::device::Device;
 use crate::error::InfersError;
+use crate::gpu_context::GpuContext;
 use infers_core::{
-    bytes_to_vec, CpuTensor, DataType as CoreDataType, TensorBuffer as CoreTensorBuffer,
+    bytes_to_vec, CpuTensor, DataType as CoreDataType, DeviceTransfer, TensorBuffer as CoreTensorBuffer,
     TensorShape as CoreTensorShape,
 };
+use processing::VulkanDeviceTransfer;
 use std::sync::Arc;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, uniffi::Enum)]
@@ -86,14 +88,36 @@ impl TensorBuffer {
         Ok(host.as_bytes().to_vec())
     }
 
-    pub fn copy_to_device(&self, target: Device) -> Result<Arc<TensorBuffer>, InfersError> {
+    pub fn copy_to_device(
+        &self,
+        target: Device,
+        gpu_context: Option<Arc<GpuContext>>,
+    ) -> Result<Arc<TensorBuffer>, InfersError> {
         let target_device: infers_core::Device = target.into();
-        let transferred = self
-            .inner
-            .copy_to_device(&target_device)
-            .map_err(InfersError::from)?;
+        let transfer: Option<VulkanDeviceTransfer> = gpu_context
+            .as_ref()
+            .map(|ctx| VulkanDeviceTransfer::new(Arc::clone(ctx.inner())));
+        let transferred = self.inner.copy_to_device(
+            &target_device,
+            transfer.as_ref().map(|t| t as &dyn DeviceTransfer),
+        )?;
         Ok(Arc::new(TensorBuffer::from_boxed(transferred)))
     }
+}
+
+/// Upload a host-resident tensor to GPU memory using `gpu_context`.
+#[uniffi::export]
+pub fn upload_to_gpu(
+    gpu_context: Arc<GpuContext>,
+    tensor: Arc<TensorBuffer>,
+) -> Result<Arc<TensorBuffer>, InfersError> {
+    let transfer = VulkanDeviceTransfer::new(Arc::clone(gpu_context.inner()));
+    let device = gpu_context.device();
+    let target: infers_core::Device = device.into();
+    let uploaded = tensor
+        .inner
+        .copy_to_device(&target, Some(&transfer))?;
+    Ok(Arc::new(TensorBuffer::from_boxed(uploaded)))
 }
 
 /// Construct a CPU tensor from little-endian raw bytes matching [dtype].

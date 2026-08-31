@@ -1,8 +1,9 @@
 use std::sync::Arc;
 
 use infers_core::{
-    AnyHostTensor, Backend, CoreError, CpuImageBuffer, CpuTensor, DataType, Device, FitMode,
-    ImageFormat, ModelSession, ProcessingOptions, Rotation, SessionConfig, TensorBuffer, TensorShape,
+    AnyHostTensor, Backend, CoreError, CpuImageBuffer, CpuTensor, DataType, Device, DeviceTransfer,
+    FitMode, ImageFormat, ModelSession, ProcessingOptions, Rotation, SessionConfig, TensorBuffer,
+    TensorLayout, TensorShape,
 };
 
 /// Simulated device-resident tensor (e.g. on GPU or NPU) for tests and examples.
@@ -77,7 +78,11 @@ impl TensorBuffer for MockDeviceTensor {
         }
     }
 
-    fn copy_to_device(&self, target: &Device) -> Result<Box<dyn TensorBuffer>, CoreError> {
+    fn copy_to_device(
+        &self,
+        target: &Device,
+        _transfer: Option<&dyn DeviceTransfer>,
+    ) -> Result<Box<dyn TensorBuffer>, CoreError> {
         if &self.device == target {
             Ok(Box::new(self.clone()))
         } else {
@@ -224,6 +229,7 @@ pub fn detector_preprocess_options(dest: u32) -> ProcessingOptions {
         dest_format: ImageFormat::Rgbf32,
         fit_mode: FitMode::Contain,
         rotation: Rotation::None,
+        dest_layout: TensorLayout::Nchw,
     }
 }
 
@@ -247,10 +253,11 @@ pub fn landmarker_preprocess_options(
         dest_format: ImageFormat::Rgbf32,
         fit_mode: FitMode::Stretch,
         rotation: Rotation::None,
+        dest_layout: TensorLayout::Nchw,
     }
 }
 
-/// Mock GPU detector: one input `[1, H, W, 3]`, one output `[1, 4]` bounding box.
+/// Mock GPU detector: one input `[1, 3, H, W]`, one output `[1, 4]` bounding box.
 pub fn mock_gpu_detector(input_side: u32, device: Device) -> MockSession {
     let session_device = device.clone();
     let forward = Arc::new(move |_inputs: &[&dyn TensorBuffer]| {
@@ -264,13 +271,13 @@ pub fn mock_gpu_detector(input_side: u32, device: Device) -> MockSession {
     });
     MockSession::new(
         device,
-        vec![TensorShape::new([1, input_side as usize, input_side as usize, 3]).expect("valid shape")],
+        vec![TensorShape::new([1, 3, input_side as usize, input_side as usize]).expect("valid shape")],
         vec![TensorShape::new([1, 4]).expect("valid shape")],
         forward,
     )
 }
 
-/// Mock GPU landmarker: one input `[1, H, W, 3]`, one output `[1, 4]` landmark pairs.
+/// Mock GPU landmarker: one input `[1, 3, H, W]`, one output `[1, 4]` landmark pairs.
 pub fn mock_gpu_landmarker(input_side: u32, device: Device) -> MockSession {
     let session_device = device.clone();
     let forward = Arc::new(move |_inputs: &[&dyn TensorBuffer]| {
@@ -284,7 +291,7 @@ pub fn mock_gpu_landmarker(input_side: u32, device: Device) -> MockSession {
     });
     MockSession::new(
         device,
-        vec![TensorShape::new([1, input_side as usize, input_side as usize, 3]).expect("valid shape")],
+        vec![TensorShape::new([1, 3, input_side as usize, input_side as usize]).expect("valid shape")],
         vec![TensorShape::new([1, 4]).expect("valid shape")],
         forward,
     )

@@ -75,7 +75,7 @@ public class Tensor internal constructor(
     public suspend fun copyTo(device: Device): Tensor = withContext(Dispatchers.Default) {
         withFfiErrors {
             gate.ensureOpen()
-            Tensor.fromFfi(handle.copyToDevice(device.toFfi()))
+            Tensor.fromFfi(handle.copyToDevice(device.toFfi(), null))
         }
     }
 

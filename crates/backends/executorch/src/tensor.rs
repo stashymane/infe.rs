@@ -2,7 +2,8 @@ use crate::error::ExecuTorchError;
 pub use executorch::ndarray;
 use executorch::tensor::ScalarType;
 use infers_core::{
-    AnyHostTensor, CoreError, CpuTensor, DataType, Device, TensorBuffer, TensorShape,
+    AnyHostTensor, CoreError, CpuTensor, DataType, Device, DeviceTransfer, TensorBuffer,
+    TensorShape,
 };
 use std::sync::Arc;
 
@@ -176,17 +177,45 @@ impl TensorBuffer for ExecuTorchTensorBuffer {
         }
     }
 
-    fn copy_to_device(&self, target: &Device) -> Result<Box<dyn TensorBuffer>, CoreError> {
+    fn copy_to_device(
+        &self,
+        target: &Device,
+        transfer: Option<&dyn DeviceTransfer>,
+    ) -> Result<Box<dyn TensorBuffer>, CoreError> {
         if &self.device == target {
             return Ok(Box::new(self.clone()));
         }
-        // Create new device-resident copy on target device
-        let transferred = ExecuTorchTensorBuffer {
-            device: target.clone(),
-            shape: self.shape.clone(),
-            dtype: self.dtype,
-            data: Arc::clone(&self.data),
-        };
-        Ok(Box::new(transferred))
+        if target.is_cpu() {
+            let host = self.read_to_cpu()?;
+            return match self.dtype {
+                DataType::U8 => Ok(Box::new(CpuTensor::from_u8(
+                    self.shape.clone(),
+                    host.as_slice_u8()?.to_vec(),
+                )?) as Box<dyn TensorBuffer>),
+                DataType::F32 => Ok(Box::new(CpuTensor::from_f32(
+                    self.shape.clone(),
+                    host.as_slice_f32()?.to_vec(),
+                )?) as Box<dyn TensorBuffer>),
+                DataType::I32 => Ok(Box::new(CpuTensor::from_i32(
+                    self.shape.clone(),
+                    host.as_slice_i32()?.to_vec(),
+                )?) as Box<dyn TensorBuffer>),
+                DataType::I64 => Ok(Box::new(CpuTensor::from_i64(
+                    self.shape.clone(),
+                    host.as_slice_i64()?.to_vec(),
+                )?) as Box<dyn TensorBuffer>),
+                other => Err(CoreError::BufferTransferFailed(format!(
+                    "ExecuTorchTensorBuffer CPU copy unsupported for dtype {other:?}"
+                ))),
+            };
+        }
+        if let Some(transfer) = transfer {
+            transfer.upload_bytes(target, self.shape.clone(), self.dtype, self.as_bytes())
+        } else {
+            Err(CoreError::BufferTransferFailed(format!(
+                "Transfer from host ExecuTorch buffer to {} requires a DeviceTransfer context",
+                target
+            )))
+        }
     }
 }

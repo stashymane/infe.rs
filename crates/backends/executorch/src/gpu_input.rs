@@ -6,7 +6,7 @@ use crate::tensor_ptr::tensor_ptr_from_host;
 use executorch::tensor::{TensorPtrBuilder, View};
 use infers_core::{CoreError, DataType, TensorBuffer, TensorShape};
 use infers_gpu::{VulkanBufferHandle, VulkanContext};
-use processing::GpuTensorBuffer;
+use processing::{upload_tensor_buffer, GpuTensorBuffer};
 use std::sync::Arc;
 
 #[link(name = "infers_et_vulkan_ffi")]
@@ -231,46 +231,50 @@ pub fn prepare_inputs(
     let mut gpu_pins = Vec::new();
 
     for (index, input) in inputs.iter().enumerate() {
-        if let Some(gpu) = input.as_any().downcast_ref::<GpuTensorBuffer>() {
-            let src = gpu.vulkan_handle().ok_or_else(|| {
-                CoreError::BufferTransferFailed("GPU tensor buffer already destroyed".into())
-            })?;
-            gpu_pins.push(gpu.clone());
+        let gpu = if let Some(gpu) = input.as_any().downcast_ref::<GpuTensorBuffer>() {
+            gpu.clone()
+        } else if input.device().is_cpu() {
+            upload_tensor_buffer(context, *input)?
+        } else {
+            tensor_ptrs.push(tensor_ptr_from_host(*input)?);
+            continue;
+        };
 
-            let needed = input.shape().byte_size(input.dtype()) as u64;
+        let src = gpu.vulkan_handle().ok_or_else(|| {
+            CoreError::BufferTransferFailed("GPU tensor buffer already destroyed".into())
+        })?;
+        gpu_pins.push(gpu);
 
-            // `skip_staging_mask` only fits one bit per input, so inputs beyond
-            // that cannot be marked and must take the host-visible path.
-            let staging = if index < u64::BITS as usize {
-                vulkan_graph.and_then(|graph| graph.staging_target(index).ok())
-            } else {
-                None
-            };
+        let needed = input.shape().byte_size(input.dtype()) as u64;
 
-            if let Some((dst, staging_size)) = staging {
-                require_transfer_bytes(needed, src.size, &format!("input {index} source"))?;
-                require_transfer_bytes(
-                    needed,
-                    staging_size,
-                    &format!("input {index} ET-VK staging"),
-                )?;
-                context
-                    .copy_buffer(src.buffer, src.offset, dst.buffer, dst.offset, needed)
-                    .map_err(|err| CoreError::BufferTransferFailed(err.to_string()))?;
-                skip_staging_mask |= 1u64 << index;
-                tensor_ptrs.push(placeholder_tensor_ptr(*input)?);
-                continue;
-            }
+        // `skip_staging_mask` only fits one bit per input, so inputs beyond
+        // that cannot be marked and must take the host-visible path.
+        let staging = if index < u64::BITS as usize {
+            vulkan_graph.and_then(|graph| graph.staging_target(index).ok())
+        } else {
+            None
+        };
 
-            let host = HostVisibleInput::new(context, input.shape().clone(), input.dtype())?;
-            host.copy_from_gpu(context, src)
+        if let Some((dst, staging_size)) = staging {
+            require_transfer_bytes(needed, src.size, &format!("input {index} source"))?;
+            require_transfer_bytes(
+                needed,
+                staging_size,
+                &format!("input {index} ET-VK staging"),
+            )?;
+            context
+                .copy_buffer(src.buffer, src.offset, dst.buffer, dst.offset, needed)
                 .map_err(|err| CoreError::BufferTransferFailed(err.to_string()))?;
-            tensor_ptrs.push(host.tensor_ptr()?);
-            host_fallback.push(host);
+            skip_staging_mask |= 1u64 << index;
+            tensor_ptrs.push(placeholder_tensor_ptr(*input)?);
             continue;
         }
 
-        tensor_ptrs.push(tensor_ptr_from_host(*input)?);
+        let host = HostVisibleInput::new(context, input.shape().clone(), input.dtype())?;
+        host.copy_from_gpu(context, src)
+            .map_err(|err| CoreError::BufferTransferFailed(err.to_string()))?;
+        tensor_ptrs.push(host.tensor_ptr()?);
+        host_fallback.push(host);
     }
 
     Ok(GpuInputPlan {
@@ -292,12 +296,7 @@ pub fn set_skip_staging_copy_mask(mask: u64) {
     unsafe { infers_et_vulkan_set_skip_staging_copy_mask(mask) };
 }
 
-/// A correctly-shaped tensor whose data the delegate never reads.
-///
-/// Used for inputs whose bytes were copied straight into the delegate's staging
-/// buffer; the corresponding bit in the skip-staging mask tells the patched
-/// backend to ignore this tensor's memory and use what is already staged.
-/// A minimal placeholder tensor for skip-staging inputs. The patched delegate
+/// Minimal placeholder tensor for skip-staging inputs. The patched delegate
 /// reads staged GPU memory instead; ExecuTorch still requires a tensor with
 /// matching rank/dtype but does not validate the data buffer size when the
 /// skip-staging mask is set.

@@ -12,7 +12,7 @@ class CpuImageProcessorTest {
             assertEquals(DeviceKind.Cpu, processor.device.kind)
             inferenceScope {
                 val out = processor.process(rawBytes, rgb4x4To2x2())
-                assertEquals(TensorShape.of(1, 2, 2, 3), out.shape)
+                assertEquals(TensorShape.of(1, 3, 2, 2), out.shape)
                 assertEquals(DataType.F32, out.dtype)
                 assertEquals(12, out.readFloats().size)
             }

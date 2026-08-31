@@ -180,12 +180,13 @@ public final class dev/stashy/infers/ModelSession : java/lang/AutoCloseable {
 
 public final class dev/stashy/infers/ProcessingOptions {
 	public static final field Companion Ldev/stashy/infers/ProcessingOptions$Companion;
-	public synthetic fun <init> (IIIIIIIILdev/stashy/infers/ImageFormat;Ldev/stashy/infers/ImageFormat;Ldev/stashy/infers/FitMode;Ldev/stashy/infers/Rotation;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
-	public synthetic fun <init> (IIIIIIIILdev/stashy/infers/ImageFormat;Ldev/stashy/infers/ImageFormat;Ldev/stashy/infers/FitMode;Ldev/stashy/infers/Rotation;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (IIIIIIIILdev/stashy/infers/ImageFormat;Ldev/stashy/infers/ImageFormat;Ldev/stashy/infers/FitMode;Ldev/stashy/infers/Rotation;Ldev/stashy/infers/TensorLayout;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (IIIIIIIILdev/stashy/infers/ImageFormat;Ldev/stashy/infers/ImageFormat;Ldev/stashy/infers/FitMode;Ldev/stashy/infers/Rotation;Ldev/stashy/infers/TensorLayout;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun component1-pVg5ArA ()I
 	public final fun component10 ()Ldev/stashy/infers/ImageFormat;
 	public final fun component11 ()Ldev/stashy/infers/FitMode;
 	public final fun component12 ()Ldev/stashy/infers/Rotation;
+	public final fun component13 ()Ldev/stashy/infers/TensorLayout;
 	public final fun component2-pVg5ArA ()I
 	public final fun component3-pVg5ArA ()I
 	public final fun component4-pVg5ArA ()I
@@ -194,8 +195,8 @@ public final class dev/stashy/infers/ProcessingOptions {
 	public final fun component7-pVg5ArA ()I
 	public final fun component8-pVg5ArA ()I
 	public final fun component9 ()Ldev/stashy/infers/ImageFormat;
-	public final fun copy-6vARCmY (IIIIIIIILdev/stashy/infers/ImageFormat;Ldev/stashy/infers/ImageFormat;Ldev/stashy/infers/FitMode;Ldev/stashy/infers/Rotation;)Ldev/stashy/infers/ProcessingOptions;
-	public static synthetic fun copy-6vARCmY$default (Ldev/stashy/infers/ProcessingOptions;IIIIIIIILdev/stashy/infers/ImageFormat;Ldev/stashy/infers/ImageFormat;Ldev/stashy/infers/FitMode;Ldev/stashy/infers/Rotation;ILjava/lang/Object;)Ldev/stashy/infers/ProcessingOptions;
+	public final fun copy-qZslCsc (IIIIIIIILdev/stashy/infers/ImageFormat;Ldev/stashy/infers/ImageFormat;Ldev/stashy/infers/FitMode;Ldev/stashy/infers/Rotation;Ldev/stashy/infers/TensorLayout;)Ldev/stashy/infers/ProcessingOptions;
+	public static synthetic fun copy-qZslCsc$default (Ldev/stashy/infers/ProcessingOptions;IIIIIIIILdev/stashy/infers/ImageFormat;Ldev/stashy/infers/ImageFormat;Ldev/stashy/infers/FitMode;Ldev/stashy/infers/Rotation;Ldev/stashy/infers/TensorLayout;ILjava/lang/Object;)Ldev/stashy/infers/ProcessingOptions;
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getCropH-pVg5ArA ()I
 	public final fun getCropW-pVg5ArA ()I
@@ -203,6 +204,7 @@ public final class dev/stashy/infers/ProcessingOptions {
 	public final fun getCropY-pVg5ArA ()I
 	public final fun getDestFormat ()Ldev/stashy/infers/ImageFormat;
 	public final fun getDestH-pVg5ArA ()I
+	public final fun getDestLayout ()Ldev/stashy/infers/TensorLayout;
 	public final fun getDestW-pVg5ArA ()I
 	public final fun getFitMode ()Ldev/stashy/infers/FitMode;
 	public final fun getRotation ()Ldev/stashy/infers/Rotation;
@@ -224,6 +226,7 @@ public final class dev/stashy/infers/ProcessingOptionsBuilder {
 	public final fun getCropSize ()Lkotlin/Pair;
 	public final fun getDest ()Lkotlin/Pair;
 	public final fun getDestFormat ()Ldev/stashy/infers/ImageFormat;
+	public final fun getDestLayout ()Ldev/stashy/infers/TensorLayout;
 	public final fun getFitMode ()Ldev/stashy/infers/FitMode;
 	public final fun getRotation ()Ldev/stashy/infers/Rotation;
 	public final fun getSource ()Lkotlin/Pair;
@@ -232,6 +235,7 @@ public final class dev/stashy/infers/ProcessingOptionsBuilder {
 	public final fun setCropSize (Lkotlin/Pair;)V
 	public final fun setDest (Lkotlin/Pair;)V
 	public final fun setDestFormat (Ldev/stashy/infers/ImageFormat;)V
+	public final fun setDestLayout (Ldev/stashy/infers/TensorLayout;)V
 	public final fun setFitMode (Ldev/stashy/infers/FitMode;)V
 	public final fun setRotation (Ldev/stashy/infers/Rotation;)V
 	public final fun setSource (Lkotlin/Pair;)V
@@ -266,6 +270,14 @@ public final class dev/stashy/infers/Tensor : java/lang/AutoCloseable {
 }
 
 public final class dev/stashy/infers/Tensor$Companion {
+}
+
+public final class dev/stashy/infers/TensorLayout : java/lang/Enum {
+	public static final field Nchw Ldev/stashy/infers/TensorLayout;
+	public static final field Nhwc Ldev/stashy/infers/TensorLayout;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Ldev/stashy/infers/TensorLayout;
+	public static fun values ()[Ldev/stashy/infers/TensorLayout;
 }
 
 public final class dev/stashy/infers/TensorShape {
@@ -303,6 +315,7 @@ public final class dev/stashy/infers/internal/BridgeKt {
 	public static final fun toFfi (Ldev/stashy/infers/ImageFormat;)Ldev/stashy/infers/ffi/ImageFormat;
 	public static final fun toFfi (Ldev/stashy/infers/ProcessingOptions;)Ldev/stashy/infers/ffi/ProcessingOptions;
 	public static final fun toFfi (Ldev/stashy/infers/Rotation;)Ldev/stashy/infers/ffi/Rotation;
+	public static final fun toFfi (Ldev/stashy/infers/TensorLayout;)Ldev/stashy/infers/ffi/TensorLayout;
 	public static final fun toFfi (Ldev/stashy/infers/TensorShape;)Ldev/stashy/infers/ffi/TensorShape;
 	public static final fun withFfiErrors (Lkotlin/jvm/functions/Function0;)Ljava/lang/Object;
 }

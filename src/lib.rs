@@ -6,8 +6,14 @@
 
 pub use infers_core::*;
 pub use processing::CpuImageProcessor;
+pub use processing::{
+    convert_layout, infer_rgb_layout, model_input_from_preprocess, nhwc_to_nchw_cpu,
+};
 #[cfg(feature = "vulkan")]
-pub use processing::{GpuImageProcessor, GpuTensorBuffer};
+pub use processing::{
+    GpuImageProcessor, GpuTensorBuffer, LayoutGpuPass, VulkanDeviceTransfer,
+    nhwc_to_nchw_gpu, upload_tensor_buffer,
+};
 pub use infers_backend_executorch::{
     ExecuTorchBackend, ExecuTorchBackendConfig, ExecuTorchDelegate, ExecuTorchSession,
     ExecuTorchTensorBuffer, ProgramMetadata, TensorDescriptor,

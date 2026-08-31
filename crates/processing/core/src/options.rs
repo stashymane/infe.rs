@@ -1,5 +1,23 @@
+#[repr(u32)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Default)]
+pub enum TensorLayout {
+    #[default]
+    Nhwc = 0,
+    Nchw = 1,
+}
+
+impl TensorLayout {
+    /// Default output layout: NCHW for normalized f32 model input, NHWC for packed RGB888.
+    pub fn default_for_dest_format(dest_format: ImageFormat) -> Self {
+        match dest_format {
+            ImageFormat::Rgbf32 => Self::Nchw,
+            ImageFormat::Rgb888 | ImageFormat::Nv12 | ImageFormat::I420 => Self::Nhwc,
+        }
+    }
+}
+
 #[repr(C)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ProcessingOptions {
     pub src_w: u32,
     pub src_h: u32,
@@ -13,6 +31,28 @@ pub struct ProcessingOptions {
     pub dest_format: ImageFormat,
     pub fit_mode: FitMode,
     pub rotation: Rotation,
+    pub dest_layout: TensorLayout,
+}
+
+impl Default for ProcessingOptions {
+    fn default() -> Self {
+        let dest_format = ImageFormat::default();
+        Self {
+            src_w: 0,
+            src_h: 0,
+            crop_x: 0,
+            crop_y: 0,
+            crop_w: 0,
+            crop_h: 0,
+            dest_w: 0,
+            dest_h: 0,
+            src_format: ImageFormat::default(),
+            dest_format,
+            fit_mode: FitMode::default(),
+            rotation: Rotation::default(),
+            dest_layout: TensorLayout::default_for_dest_format(dest_format),
+        }
+    }
 }
 
 impl ProcessingOptions {

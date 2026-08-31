@@ -1,4 +1,4 @@
-//! Benchmark the GPU inference pipeline (Vulkan preprocess → layout → Vulkan ET).
+//! Benchmark the GPU inference pipeline (Vulkan preprocess → Vulkan ET).
 //!
 //! The camera frame is allocated once up front and excluded from timings, matching
 //! a host that already holds a buffer from the device camera (or an imported
@@ -9,9 +9,8 @@
 //! cargo run --release --example gpu_pipeline_bench -- --iters 100
 //! ```
 //!
-//! Preprocess stays on the GPU; NHWC→NCHW currently runs on the host before the
-//! Vulkan delegate execute (model metadata requires NCHW). Inference uses the
-//! same shared [`VulkanContext`] as the processor.
+//! Preprocess emits NCHW directly on the GPU and feeds ExecuTorch Vulkan staging
+//! via a GPU→GPU copy in `prepare_inputs`.
 
 #[path = "common/mod.rs"]
 mod common;
@@ -63,7 +62,6 @@ fn main() {
     let imgsz = imgsz_from_input_shape(&session.input_shapes()[0]);
     let frame = camera_frame(args.width, args.height);
     let options = detector_options(args.width, args.height, imgsz);
-    let device = ctx.logical_device().clone();
 
     println!(
         "GPU pipeline bench\n  model:     {}\n  frame:     {}x{} Rgb888 (resident)\n  input:     1x3x{imgsz}x{imgsz} NCHW\n  warmup:    {}\n  iters:     {}\n",
@@ -75,18 +73,18 @@ fn main() {
     );
 
     for _ in 0..args.warmup {
-        run_once(&processor, &mut *session, &frame, &options, &device);
+        run_once(&processor, &mut *session, &frame, &options);
     }
 
     let mut stats = StageStats::default();
     for _ in 0..args.iters {
-        let (preprocess_ms, layout_ms, infer_ms, total_ms) =
-            run_once(&processor, &mut *session, &frame, &options, &device);
-        stats.record(preprocess_ms, layout_ms, infer_ms, total_ms);
+        let (preprocess_ms, infer_ms, total_ms) =
+            run_once(&processor, &mut *session, &frame, &options);
+        stats.record(preprocess_ms, infer_ms, total_ms);
     }
 
     stats.print("GPU (Vulkan preprocess + Vulkan ExecuTorch)");
-    let last = run_once_outputs(&processor, &mut *session, &frame, &options, &device);
+    let last = run_once_outputs(&processor, &mut *session, &frame, &options);
     println!(
         "  last run outputs: {} tensor(s), first shape {:?}",
         last.len(),
@@ -100,15 +98,13 @@ fn run_once(
     session: &mut dyn infers::ModelSession,
     frame: &infers::CpuImageBuffer,
     options: &infers::ProcessingOptions,
-    device: &infers::Device,
 ) -> (
     std::time::Duration,
     std::time::Duration,
     std::time::Duration,
-    std::time::Duration,
 ) {
-    use common::{nhwc_to_nchw_f32, timed};
-    use infers::{ExecuTorchTensorBuffer, TensorBuffer};
+    use common::timed;
+    use infers::TensorBuffer;
 
     let total_start = std::time::Instant::now();
 
@@ -118,24 +114,12 @@ fn run_once(
             .expect("GPU preprocess")
     });
 
-    // Layout convert is host-side today; label the tensor with the Vulkan device
-    // so the session accepts it and prepare_inputs uploads into ET-VK staging.
-    let (nchw, layout) = timed(|| {
-        let host = nhwc_to_nchw_f32(preprocessed.as_ref());
-        ExecuTorchTensorBuffer::from_f32_slice(
-            device.clone(),
-            host.shape().clone(),
-            host.as_slice(),
-        )
-        .expect("nchw GPU-labeled buffer")
-    });
-
     let (_outputs, infer) = timed(|| {
-        let input: &dyn TensorBuffer = &nchw;
+        let input: &dyn TensorBuffer = preprocessed.as_ref();
         session.run(&[input]).expect("Vulkan inference")
     });
 
-    (preprocess, layout, infer, total_start.elapsed())
+    (preprocess, infer, total_start.elapsed())
 }
 
 #[cfg(feature = "vulkan")]
@@ -144,19 +128,9 @@ fn run_once_outputs(
     session: &mut dyn infers::ModelSession,
     frame: &infers::CpuImageBuffer,
     options: &infers::ProcessingOptions,
-    device: &infers::Device,
 ) -> Vec<Box<dyn infers::TensorBuffer>> {
-    use common::nhwc_to_nchw_f32;
-    use infers::{ExecuTorchTensorBuffer, TensorBuffer};
-
     let preprocessed = processor.process(frame, options).expect("GPU preprocess");
-    let host = nhwc_to_nchw_f32(preprocessed.as_ref());
-    let nchw = ExecuTorchTensorBuffer::from_f32_slice(
-        device.clone(),
-        host.shape().clone(),
-        host.as_slice(),
-    )
-    .expect("nchw GPU-labeled buffer");
-    let input: &dyn TensorBuffer = &nchw;
-    session.run(&[input]).expect("Vulkan inference")
+    session
+        .run(&[preprocessed.as_ref()])
+        .expect("Vulkan inference")
 }

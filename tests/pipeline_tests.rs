@@ -34,7 +34,7 @@ fn test_cpu_face_pipeline() {
         .process(&frame, &detector_preprocess_options(224))
         .expect("detector preprocess");
 
-    assert_eq!(detector_input.shape().dims(), &[1, 224, 224, 3]);
+    assert_eq!(detector_input.shape().dims(), &[1, 3, 224, 224]);
     assert_eq!(detector_input.dtype(), DataType::F32);
     assert_eq!(detector_input.device(), &cpu);
 
@@ -126,7 +126,7 @@ fn test_gpu_shared_vulkan_face_pipeline() {
         .expect("gpu detector preprocess");
 
     assert_eq!(detector_input.device(), &gpu);
-    assert_eq!(detector_input.shape().dims(), &[1, 224, 224, 3]);
+    assert_eq!(detector_input.shape().dims(), &[1, 3, 224, 224]);
     assert_eq!(detector_input.dtype(), DataType::F32);
 
     let detector_outputs = detector

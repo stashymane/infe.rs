@@ -130,6 +130,7 @@ impl FaceAnalysisPipeline {
                 dest_format: ImageFormat::Rgbf32,
                 fit_mode: FitMode::Contain,
                 rotation: Rotation::None,
+                dest_layout: infers_core::TensorLayout::Nchw,
             },
         )?;
 
@@ -165,6 +166,7 @@ impl FaceAnalysisPipeline {
                     dest_format: ImageFormat::Rgbf32,
                     fit_mode: FitMode::Stretch,
                     rotation: Rotation::None,
+                    dest_layout: infers_core::TensorLayout::Nchw,
                 },
             )?;
 

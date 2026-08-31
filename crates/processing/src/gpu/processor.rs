@@ -241,7 +241,14 @@ impl GpuImageProcessor {
             ));
         }
 
-        let shape = TensorShape::new(vec![1, dest_h as usize, dest_w as usize, 3])?;
+        let shape = match options.dest_layout {
+            processing_core::TensorLayout::Nhwc => {
+                TensorShape::new(vec![1, dest_h as usize, dest_w as usize, 3])?
+            }
+            processing_core::TensorLayout::Nchw => {
+                TensorShape::new(vec![1, 3, dest_h as usize, dest_w as usize])?
+            }
+        };
         let dtype = match options.dest_format {
             ImageFormat::Rgb888 => DataType::U8,
             ImageFormat::Rgbf32 => DataType::F32,
@@ -750,7 +757,7 @@ fn spirv_words(bytes: &[u8]) -> Result<Vec<u32>, GpuError> {
 }
 
 /// Number of 32-bit words in the shader's `ProcessingOptions` uniform block.
-const OPTIONS_WORDS: usize = 12;
+const OPTIONS_WORDS: usize = 13;
 
 /// Vulkan guarantees uniform buffers may be bound at 64-byte granularity, so the
 /// UBO is padded to that even though the payload is smaller.
@@ -782,6 +789,7 @@ fn options_bytes(options: &ProcessingOptions) -> Vec<u8> {
         options.dest_format as u32,
         options.fit_mode as u32,
         options.rotation as u32,
+        options.dest_layout as u32,
     ];
 
     let mut bytes = vec![0u8; (OPTIONS_WORDS * 4).max(UBO_MIN_BYTES)];

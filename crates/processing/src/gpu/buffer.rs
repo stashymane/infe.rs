@@ -1,6 +1,8 @@
 use infers_core::CoreError;
 use infers_gpu::GpuError;
-use infers_core::{AnyHostTensor, CpuTensor, DataType, Device, TensorBuffer, TensorShape};
+use infers_core::{
+    AnyHostTensor, CpuTensor, DataType, Device, DeviceTransfer, TensorBuffer, TensorShape,
+};
 use infers_gpu::ash::vk;
 use infers_gpu::gpu_allocator::MemoryLocation;
 use infers_gpu::{AllocatedBuffer, VulkanBufferHandle, VulkanContext};
@@ -58,6 +60,11 @@ impl GpuTensorBuffer {
         }
     }
 
+    /// Shared Vulkan context that owns this buffer's device memory.
+    pub fn vulkan_context(&self) -> &Arc<VulkanContext> {
+        &self.inner.context
+    }
+
     /// Buffer, device memory, offset, and byte size for GPU→GPU copies into delegate staging.
     pub fn vulkan_handle(&self) -> Option<VulkanBufferHandle> {
         self.inner.buffer.as_ref().map(|b| b.vulkan_handle())
@@ -70,6 +77,55 @@ impl GpuTensorBuffer {
         dtype: DataType,
     ) -> Result<Self, CoreError> {
         Self::try_allocate(context, shape, dtype).map_err(CoreError::from)
+    }
+
+    /// Upload host bytes into a GPU-resident buffer (staging copy, no shader).
+    pub fn from_host_bytes(
+        context: Arc<VulkanContext>,
+        shape: TensorShape,
+        dtype: DataType,
+        bytes: &[u8],
+    ) -> Result<Self, CoreError> {
+        let expected = shape.byte_size(dtype);
+        if bytes.len() != expected {
+            return Err(CoreError::InvalidShape(format!(
+                "Upload size mismatch: shape {:?} with {:?} requires {} bytes, got {}",
+                shape.dims(),
+                dtype,
+                expected,
+                bytes.len()
+            )));
+        }
+        let device = context.logical_device().clone();
+        Self::try_from_host_bytes(context, device, shape, dtype, bytes).map_err(CoreError::from)
+    }
+
+    fn try_from_host_bytes(
+        context: Arc<VulkanContext>,
+        device: Device,
+        shape: TensorShape,
+        dtype: DataType,
+        bytes: &[u8],
+    ) -> Result<Self, GpuError> {
+        let size = bytes.len() as u64;
+        let mut staging = context.create_buffer(
+            size,
+            vk::BufferUsageFlags::TRANSFER_SRC,
+            MemoryLocation::CpuToGpu,
+            "upload-staging",
+        )?;
+        VulkanContext::write_allocation(&mut staging.allocation, bytes)?;
+
+        let dst = context.create_buffer(
+            size,
+            vk::BufferUsageFlags::TRANSFER_SRC | vk::BufferUsageFlags::STORAGE_BUFFER,
+            MemoryLocation::GpuOnly,
+            "gpu-tensor-upload",
+        )?;
+        context.copy_buffer(staging.buffer, 0, dst.buffer, 0, size)?;
+        context.destroy_buffer(staging);
+
+        Ok(Self::from_allocated(context, device, shape, dtype, dst))
     }
 
     fn try_allocate(
@@ -123,7 +179,11 @@ impl TensorBuffer for GpuTensorBuffer {
         host_tensor(self.dtype, self.shape.clone(), bytes)
     }
 
-    fn copy_to_device(&self, target: &Device) -> Result<Box<dyn TensorBuffer>, infers_core::CoreError> {
+    fn copy_to_device(
+        &self,
+        target: &Device,
+        _transfer: Option<&dyn DeviceTransfer>,
+    ) -> Result<Box<dyn TensorBuffer>, infers_core::CoreError> {
         if target == &self.device {
             Ok(Box::new(self.clone()))
         } else if target.is_cpu() {

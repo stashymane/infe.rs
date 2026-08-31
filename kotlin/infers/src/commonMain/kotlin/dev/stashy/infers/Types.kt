@@ -31,6 +31,11 @@ public enum class Rotation {
     Rot270,
 }
 
+public enum class TensorLayout {
+    Nhwc,
+    Nchw,
+}
+
 public data class TensorShape(
     val dims: List<ULong>,
 ) {
@@ -52,6 +57,7 @@ public data class ProcessingOptions(
     public val destFormat: ImageFormat,
     public val fitMode: FitMode = FitMode.Stretch,
     public val rotation: Rotation = Rotation.None,
+    public val destLayout: TensorLayout = destFormat.defaultLayout(),
 ) {
     public companion object {
         /**
@@ -106,6 +112,8 @@ public class ProcessingOptionsBuilder {
 
     public var rotation: Rotation = Rotation.None
 
+    public var destLayout: TensorLayout? = null
+
     public fun build(): ProcessingOptions {
         val source =
             requireNotNull(source) { "source (width to height) is required" }
@@ -134,8 +142,14 @@ public class ProcessingOptionsBuilder {
             destFormat = destFormat,
             fitMode = fitMode,
             rotation = rotation,
+            destLayout = destLayout ?: destFormat.defaultLayout(),
         )
     }
+}
+
+private fun ImageFormat.defaultLayout(): TensorLayout = when (this) {
+    ImageFormat.Rgbf32 -> TensorLayout.Nchw
+    ImageFormat.Rgb888, ImageFormat.Nv12, ImageFormat.I420 -> TensorLayout.Nhwc
 }
 
 private fun Pair<Int, Int>.toNonNegativeUIntPair(label: String): Pair<UInt, UInt> {

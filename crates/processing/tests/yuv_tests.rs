@@ -2,7 +2,7 @@
 
 use infers_core::{CpuImageBuffer, DataType, Device, ImageFormat, ProcessingOptions};
 use infers_gpu::VulkanContext;
-use processing_core::FitMode;
+use processing_core::{FitMode, TensorLayout};
 use processing::GpuImageProcessor;
 use std::sync::Arc;
 
@@ -131,6 +131,7 @@ fn test_gpu_i420_to_rgbf32() {
         dest_w: 8,
         dest_h: 8,
         dest_format: ImageFormat::Rgbf32,
+        dest_layout: TensorLayout::default_for_dest_format(ImageFormat::Rgbf32),
         fit_mode: FitMode::Stretch,
         ..Default::default()
     };
@@ -138,11 +139,14 @@ fn test_gpu_i420_to_rgbf32() {
     assert_eq!(out.dtype(), DataType::F32);
     let host = out.read_to_cpu().unwrap();
     let vals = host.as_slice_f32().unwrap();
-    let mut r_sum = 0.0;
-    for chunk in vals.chunks_exact(3) {
-        r_sum += chunk[0];
-        assert!((0.0..=1.0).contains(&chunk[0]));
-        assert!(chunk[0] > chunk[1] && chunk[0] > chunk[2]);
+    let hw = 8 * 8;
+    let r_plane = &vals[0..hw];
+    let g_plane = &vals[hw..2 * hw];
+    let b_plane = &vals[2 * hw..3 * hw];
+    let r_sum: f32 = r_plane.iter().sum();
+    for (&r, (&g, &b)) in r_plane.iter().zip(g_plane.iter().zip(b_plane.iter())) {
+        assert!((0.0..=1.0).contains(&r));
+        assert!(r > g && r > b);
     }
-    assert!(r_sum / (vals.len() / 3) as f32 > 0.5);
+    assert!(r_sum / hw as f32 > 0.5);
 }

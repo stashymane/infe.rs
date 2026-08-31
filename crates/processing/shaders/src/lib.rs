@@ -1,6 +1,6 @@
 #![no_std]
 
-use processing_core::{FitMode, ImageFormat, ProcessingOptions, Rotation};
+use processing_core::{FitMode, ImageFormat, ProcessingOptions, Rotation, TensorLayout};
 use spirv_std::glam::{UVec3, Vec2};
 use spirv_std::image::SampledImage;
 #[allow(unused_imports)]
@@ -231,28 +231,44 @@ fn write_rgb888(dst: &mut [u8], dst_w: u32, dx: u32, dy: u32, r: f32, g: f32, b:
     dst[o + 2] = b.round().clamp(0.0, 255.0) as u8;
 }
 
-fn write_rgbf32(dst: &mut [u8], dst_w: u32, dx: u32, dy: u32, r: f32, g: f32, b: f32) {
-    let base = ((dy * dst_w + dx) * 12) as usize;
-    if base + 11 >= dst.len() {
+fn write_rgb888_nchw(dst: &mut [u8], dst_w: u32, dst_h: u32, dx: u32, dy: u32, r: f32, g: f32, b: f32) {
+    let hw = (dst_w * dst_h) as usize;
+    let i = (dy * dst_w + dx) as usize;
+    if i >= hw {
         return;
     }
-    let r_bits = (r / 255.0).to_bits();
-    dst[base] = (r_bits & 0xff) as u8;
-    dst[base + 1] = ((r_bits >> 8) & 0xff) as u8;
-    dst[base + 2] = ((r_bits >> 16) & 0xff) as u8;
-    dst[base + 3] = ((r_bits >> 24) & 0xff) as u8;
+    dst[i] = r.round().clamp(0.0, 255.0) as u8;
+    dst[hw + i] = g.round().clamp(0.0, 255.0) as u8;
+    dst[2 * hw + i] = b.round().clamp(0.0, 255.0) as u8;
+}
 
-    let g_bits = (g / 255.0).to_bits();
-    dst[base + 4] = (g_bits & 0xff) as u8;
-    dst[base + 5] = ((g_bits >> 8) & 0xff) as u8;
-    dst[base + 6] = ((g_bits >> 16) & 0xff) as u8;
-    dst[base + 7] = ((g_bits >> 24) & 0xff) as u8;
+fn store_f32_le(dst: &mut [u8], offset: usize, value: f32) {
+    if offset + 4 > dst.len() {
+        return;
+    }
+    let bits = value.to_bits();
+    dst[offset] = (bits & 0xff) as u8;
+    dst[offset + 1] = ((bits >> 8) & 0xff) as u8;
+    dst[offset + 2] = ((bits >> 16) & 0xff) as u8;
+    dst[offset + 3] = ((bits >> 24) & 0xff) as u8;
+}
 
-    let b_bits = (b / 255.0).to_bits();
-    dst[base + 8] = (b_bits & 0xff) as u8;
-    dst[base + 9] = ((b_bits >> 8) & 0xff) as u8;
-    dst[base + 10] = ((b_bits >> 16) & 0xff) as u8;
-    dst[base + 11] = ((b_bits >> 24) & 0xff) as u8;
+fn write_rgbf32(dst: &mut [u8], dst_w: u32, dx: u32, dy: u32, r: f32, g: f32, b: f32) {
+    let base = ((dy * dst_w + dx) * 12) as usize;
+    store_f32_le(dst, base, r / 255.0);
+    store_f32_le(dst, base + 4, g / 255.0);
+    store_f32_le(dst, base + 8, b / 255.0);
+}
+
+fn write_rgbf32_nchw(dst: &mut [u8], dst_w: u32, dst_h: u32, dx: u32, dy: u32, r: f32, g: f32, b: f32) {
+    let hw = (dst_w * dst_h) as usize;
+    let i = (dy * dst_w + dx) as usize;
+    if i >= hw {
+        return;
+    }
+    store_f32_le(dst, i * 4, r / 255.0);
+    store_f32_le(dst, (hw + i) * 4, g / 255.0);
+    store_f32_le(dst, (2 * hw + i) * 4, b / 255.0);
 }
 
 fn write_dest_pixel(
@@ -264,10 +280,20 @@ fn write_dest_pixel(
     g: f32,
     b: f32,
 ) {
-    match params.dest_format {
-        ImageFormat::Rgb888 => write_rgb888(dst, params.dest_w, dx, dy, r, g, b),
-        ImageFormat::Rgbf32 => write_rgbf32(dst, params.dest_w, dx, dy, r, g, b),
-        ImageFormat::Nv12 | ImageFormat::I420 => {}
+    match (params.dest_format, params.dest_layout) {
+        (ImageFormat::Rgb888, TensorLayout::Nhwc) => {
+            write_rgb888(dst, params.dest_w, dx, dy, r, g, b)
+        }
+        (ImageFormat::Rgb888, TensorLayout::Nchw) => {
+            write_rgb888_nchw(dst, params.dest_w, params.dest_h, dx, dy, r, g, b)
+        }
+        (ImageFormat::Rgbf32, TensorLayout::Nhwc) => {
+            write_rgbf32(dst, params.dest_w, dx, dy, r, g, b)
+        }
+        (ImageFormat::Rgbf32, TensorLayout::Nchw) => {
+            write_rgbf32_nchw(dst, params.dest_w, params.dest_h, dx, dy, r, g, b)
+        }
+        (ImageFormat::Nv12 | ImageFormat::I420, _) => {}
     }
 }
 
@@ -327,4 +353,45 @@ pub fn convert_image(
     };
 
     write_dest_pixel(dst, params, dx, dy, r, g, b);
+}
+
+#[repr(C)]
+pub struct LayoutDims {
+    h: u32,
+    w: u32,
+}
+
+fn load_f32_le(src: &[u8], offset: usize) -> f32 {
+    if offset + 4 > src.len() {
+        return 0.0;
+    }
+    let bits = (src[offset] as u32)
+        | ((src[offset + 1] as u32) << 8)
+        | ((src[offset + 2] as u32) << 16)
+        | ((src[offset + 3] as u32) << 24);
+    f32::from_bits(bits)
+}
+
+/// Transpose `[1, H, W, 3]` f32 NHWC into `[1, 3, H, W]` NCHW on GPU.
+#[spirv(compute(threads(16, 16)))]
+pub fn nhwc_to_nchw_main(
+    #[spirv(global_invocation_id)] gid: UVec3,
+    #[spirv(descriptor_set = 0, binding = 0, uniform)] dims: &LayoutDims,
+    #[spirv(descriptor_set = 0, binding = 1, storage_buffer)] src: &[u8],
+    #[spirv(descriptor_set = 0, binding = 2, storage_buffer)] dst: &mut [u8],
+) {
+    let dx = gid.x;
+    let dy = gid.y;
+    if dx >= dims.w || dy >= dims.h {
+        return;
+    }
+    let hw = (dims.w * dims.h) as usize;
+    let i = (dy * dims.w + dx) as usize;
+    let base = i * 12;
+    let r = load_f32_le(src, base);
+    let g = load_f32_le(src, base + 4);
+    let b = load_f32_le(src, base + 8);
+    store_f32_le(dst, i * 4, r);
+    store_f32_le(dst, (hw + i) * 4, g);
+    store_f32_le(dst, (2 * hw + i) * 4, b);
 }

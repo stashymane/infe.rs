@@ -6,10 +6,7 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use clap::Parser;
-use infers::{
-    CpuImageBuffer, CpuTensor, DataType, ImageFormat, ProcessingOptions, Rotation, TensorBuffer,
-    TensorShape,
-};
+use infers::{CpuImageBuffer, ImageFormat, ProcessingOptions, Rotation, TensorShape, TensorLayout};
 use processing::FitMode;
 
 pub const DEFAULT_FRAME_W: u32 = 1280;
@@ -21,10 +18,10 @@ pub const DEFAULT_THREADS: usize = 4;
 /// Pipeline benchmark options.
 ///
 /// Timing excludes allocating the camera frame buffer (already resident, as from a
-/// device camera). It includes preprocess, NHWC→NCHW layout convert, and inference.
+/// device camera). It includes preprocess and inference.
 #[derive(Clone, Debug, Parser)]
 #[command(
-    about = "Benchmark preprocess → layout → ExecuTorch inference",
+    about = "Benchmark preprocess → ExecuTorch inference",
     after_help = "The camera-like frame is allocated once and excluded from timings."
 )]
 pub struct BenchArgs {
@@ -96,6 +93,7 @@ pub fn camera_frame(width: u32, height: u32) -> CpuImageBuffer {
 }
 
 pub fn detector_options(src_w: u32, src_h: u32, imgsz: u32) -> ProcessingOptions {
+    let dest_format = ImageFormat::Rgbf32;
     ProcessingOptions {
         src_w,
         src_h,
@@ -106,9 +104,10 @@ pub fn detector_options(src_w: u32, src_h: u32, imgsz: u32) -> ProcessingOptions
         dest_w: imgsz,
         dest_h: imgsz,
         src_format: ImageFormat::Rgb888,
-        dest_format: ImageFormat::Rgbf32,
+        dest_format,
         fit_mode: FitMode::Contain,
         rotation: Rotation::None,
+        dest_layout: TensorLayout::default_for_dest_format(dest_format),
     }
 }
 
@@ -125,55 +124,16 @@ pub fn imgsz_from_input_shape(shape: &TensorShape) -> u32 {
     dims[2] as u32
 }
 
-/// Convert processor output `[1, H, W, 3]` (NHWC) to model input `[1, 3, H, W]` (NCHW).
-pub fn nhwc_to_nchw_f32(nhwc: &dyn TensorBuffer) -> CpuTensor<f32> {
-    let dims = nhwc.shape().dims();
-    assert_eq!(
-        dims,
-        &[1, dims[1], dims[2], 3],
-        "expected NHWC [1, H, W, 3], got {dims:?}"
-    );
-    assert_eq!(nhwc.dtype(), DataType::F32);
-
-    let host = nhwc.read_to_cpu().expect("read preprocess output");
-    let src = host.as_slice_f32().expect("f32 preprocess output");
-    let h = dims[1];
-    let w = dims[2];
-    let hw = h * w;
-
-    let mut nchw = vec![0.0f32; 3 * hw];
-    for y in 0..h {
-        for x in 0..w {
-            let i = y * w + x;
-            let base = i * 3;
-            nchw[i] = src[base];
-            nchw[hw + i] = src[base + 1];
-            nchw[2 * hw + i] = src[base + 2];
-        }
-    }
-
-    let shape = TensorShape::new([1, 3, h, w]).expect("nchw shape");
-    CpuTensor::from_f32(shape, nchw).expect("nchw tensor")
-}
-
 #[derive(Default, Clone)]
 pub struct StageStats {
     pub preprocess: Vec<Duration>,
-    pub layout: Vec<Duration>,
     pub infer: Vec<Duration>,
     pub total: Vec<Duration>,
 }
 
 impl StageStats {
-    pub fn record(
-        &mut self,
-        preprocess: Duration,
-        layout: Duration,
-        infer: Duration,
-        total: Duration,
-    ) {
+    pub fn record(&mut self, preprocess: Duration, infer: Duration, total: Duration) {
         self.preprocess.push(preprocess);
-        self.layout.push(layout);
         self.infer.push(infer);
         self.total.push(total);
     }
@@ -181,7 +141,6 @@ impl StageStats {
     pub fn print(&self, label: &str) {
         println!("=== {label} ===");
         print_stage("preprocess", &self.preprocess);
-        print_stage("layout (NHWC→NCHW)", &self.layout);
         print_stage("inference", &self.infer);
         print_stage("total (hot path)", &self.total);
     }

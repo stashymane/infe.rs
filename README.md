@@ -27,11 +27,11 @@ infers = { git = "...", features = ["..."] }
 Benchmarks are available in `examples/` which time how long preprocessing and inference take on the CPU or Vulkan.
 
 ```bash
-# CPU: preprocess -> NHWC→NCHW -> XNNPACK yolo26n-face
+# CPU: preprocess (NCHW) -> XNNPACK yolo26n-face
 cargo run --release --example cpu_pipeline_bench
 cargo run --release --example cpu_pipeline_bench -- --iters 100 --threads 4
 
-# GPU: Vulkan preprocess -> NHWC->NCHW -> Vulkan ExecuTorch
+# GPU: Vulkan preprocess (NCHW on GPU) -> Vulkan ExecuTorch
 cargo run --release --example gpu_pipeline_bench
 cargo run --release --example gpu_pipeline_bench -- --iters 100
 ```

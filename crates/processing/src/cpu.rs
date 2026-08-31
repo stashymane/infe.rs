@@ -8,7 +8,7 @@ use infers_core::{
     TensorShape,
 };
 use parking_lot::Mutex;
-use processing_core::FitMode;
+use processing_core::{FitMode, TensorLayout};
 
 /// High-performance CPU image processor delegating to `fast_image_resize` (SIMD) and `image`
 pub struct CpuImageProcessor {
@@ -208,23 +208,74 @@ impl CpuImageProcessor {
         };
 
         // 4. Format conversion into TensorBuffer
-        let shape = TensorShape::new(vec![1, dest_h as usize, dest_w as usize, 3])?;
-        match options.dest_format {
-            ImageFormat::Rgb888 => {
-                let tensor = CpuTensor::from_u8(shape, dst_rgb_bytes)?;
+        pack_rgb_tensor(
+            &dst_rgb_bytes,
+            dest_w,
+            dest_h,
+            options.dest_format,
+            options.dest_layout,
+        )
+    }
+}
+
+fn pack_rgb_tensor(
+    interleaved: &[u8],
+    dest_w: u32,
+    dest_h: u32,
+    dest_format: ImageFormat,
+    dest_layout: TensorLayout,
+) -> Result<Box<dyn TensorBuffer>, CoreError> {
+    let hw = (dest_h as usize) * (dest_w as usize);
+    let shape = match dest_layout {
+        TensorLayout::Nhwc => TensorShape::new([1, dest_h as usize, dest_w as usize, 3])?,
+        TensorLayout::Nchw => TensorShape::new([1, 3, dest_h as usize, dest_w as usize])?,
+    };
+
+    match dest_format {
+        ImageFormat::Rgb888 => {
+            if dest_layout == TensorLayout::Nhwc {
+                let tensor = CpuTensor::from_u8(shape, interleaved.to_vec())?;
+                Ok(Box::new(tensor))
+            } else {
+                let mut planar = vec![0u8; hw * 3];
+                for y in 0..dest_h as usize {
+                    for x in 0..dest_w as usize {
+                        let i = y * dest_w as usize + x;
+                        let base = i * 3;
+                        planar[i] = interleaved[base];
+                        planar[hw + i] = interleaved[base + 1];
+                        planar[2 * hw + i] = interleaved[base + 2];
+                    }
+                }
+                let tensor = CpuTensor::from_u8(shape, planar)?;
                 Ok(Box::new(tensor))
             }
-            ImageFormat::Rgbf32 => {
-                let mut f32_data = Vec::with_capacity(dst_rgb_bytes.len());
-                for b in dst_rgb_bytes {
+        }
+        ImageFormat::Rgbf32 => {
+            if dest_layout == TensorLayout::Nhwc {
+                let mut f32_data = Vec::with_capacity(interleaved.len());
+                for &b in interleaved {
                     f32_data.push((b as f32) / 255.0);
                 }
                 let tensor = CpuTensor::from_f32(shape, f32_data)?;
                 Ok(Box::new(tensor))
+            } else {
+                let mut planar = vec![0.0f32; hw * 3];
+                for y in 0..dest_h as usize {
+                    for x in 0..dest_w as usize {
+                        let i = y * dest_w as usize + x;
+                        let base = i * 3;
+                        planar[i] = interleaved[base] as f32 / 255.0;
+                        planar[hw + i] = interleaved[base + 1] as f32 / 255.0;
+                        planar[2 * hw + i] = interleaved[base + 2] as f32 / 255.0;
+                    }
+                }
+                let tensor = CpuTensor::from_f32(shape, planar)?;
+                Ok(Box::new(tensor))
             }
-            ImageFormat::Nv12 | ImageFormat::I420 => Err(CoreError::InvalidImageBuffer(
-                "CpuImageProcessor does not support YUV destination".into(),
-            )),
         }
+        ImageFormat::Nv12 | ImageFormat::I420 => Err(CoreError::InvalidImageBuffer(
+            "CpuImageProcessor does not support YUV destination".into(),
+        )),
     }
 }

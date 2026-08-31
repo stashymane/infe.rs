@@ -1,4 +1,4 @@
-pub use processing_core::{FitMode, ImageFormat, ProcessingOptions, Rotation};
+pub use processing_core::{FitMode, ImageFormat, ProcessingOptions, Rotation, TensorLayout};
 
 use crate::device::cpu_device;
 use crate::device::Device;

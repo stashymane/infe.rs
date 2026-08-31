@@ -10,6 +10,7 @@ use processing::GpuImageProcessor;
 use processing_core::{
     FitMode as CoreFitMode, ImageFormat as CoreImageFormat,
     ProcessingOptions as CoreProcessingOptions, Rotation as CoreRotation,
+    TensorLayout as CoreTensorLayout,
 };
 use std::sync::Arc;
 
@@ -51,6 +52,17 @@ uniffi_mirror! {
     [None, Rot90, Rot180, Rot270]
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, uniffi::Enum)]
+pub enum TensorLayout {
+    Nhwc,
+    Nchw,
+}
+
+uniffi_mirror! {
+    TensorLayout <=> CoreTensorLayout,
+    [Nhwc, Nchw]
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct ProcessingOptions {
     pub src_w: u32,
@@ -65,6 +77,7 @@ pub struct ProcessingOptions {
     pub dest_format: ImageFormat,
     pub fit_mode: FitMode,
     pub rotation: Rotation,
+    pub dest_layout: TensorLayout,
 }
 
 impl From<ProcessingOptions> for CoreProcessingOptions {
@@ -82,6 +95,7 @@ impl From<ProcessingOptions> for CoreProcessingOptions {
             dest_format: opts.dest_format.into(),
             fit_mode: opts.fit_mode.into(),
             rotation: opts.rotation.into(),
+            dest_layout: opts.dest_layout.into(),
         }
     }
 }

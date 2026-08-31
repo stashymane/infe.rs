@@ -1,4 +1,4 @@
-//! Benchmark the CPU inference pipeline (preprocess → layout → XNNPACK).
+//! Benchmark the CPU inference pipeline (preprocess → XNNPACK).
 //!
 //! The camera frame is allocated once up front and excluded from timings, matching
 //! a host that already holds a buffer from the device camera.
@@ -11,13 +11,11 @@
 #[path = "common/mod.rs"]
 mod common;
 
-use common::{
-    camera_frame, detector_options, imgsz_from_input_shape, nhwc_to_nchw_f32, require_model,
-    timed, BenchArgs, StageStats,
-};
+use common::{camera_frame, detector_options, imgsz_from_input_shape, require_model, timed, BenchArgs, StageStats};
 use infers::{
     CpuImageProcessor, ExecuTorchBackend, ExecuTorchBackendConfig, ModelSession, TensorBuffer,
 };
+use std::time::Duration;
 
 fn main() {
     let (args, model) = BenchArgs::parse("xnnpack/model.pte");
@@ -49,16 +47,15 @@ fn main() {
         args.iters,
     );
 
-    // Warmup (not recorded).
     for _ in 0..args.warmup {
         run_once(&processor, &mut *session, &frame, &options);
     }
 
     let mut stats = StageStats::default();
     for _ in 0..args.iters {
-        let (preprocess_ms, layout_ms, infer_ms, total_ms) =
+        let (preprocess_ms, infer_ms, total_ms) =
             run_once(&processor, &mut *session, &frame, &options);
-        stats.record(preprocess_ms, layout_ms, infer_ms, total_ms);
+        stats.record(preprocess_ms, infer_ms, total_ms);
     }
 
     stats.print("CPU (XNNPACK)");
@@ -75,12 +72,7 @@ fn run_once(
     session: &mut dyn ModelSession,
     frame: &infers::CpuImageBuffer,
     options: &infers::ProcessingOptions,
-) -> (
-    std::time::Duration,
-    std::time::Duration,
-    std::time::Duration,
-    std::time::Duration,
-) {
+) -> (Duration, Duration, Duration) {
     let total_start = std::time::Instant::now();
 
     let (preprocessed, preprocess) = timed(|| {
@@ -89,14 +81,12 @@ fn run_once(
             .expect("CPU preprocess")
     });
 
-    let (nchw, layout) = timed(|| nhwc_to_nchw_f32(preprocessed.as_ref()));
-
     let (_outputs, infer) = timed(|| {
-        let input: &dyn TensorBuffer = &nchw;
+        let input: &dyn TensorBuffer = preprocessed.as_ref();
         session.run(&[input]).expect("XNNPACK inference")
     });
 
-    (preprocess, layout, infer, total_start.elapsed())
+    (preprocess, infer, total_start.elapsed())
 }
 
 fn run_once_outputs(
@@ -106,7 +96,7 @@ fn run_once_outputs(
     options: &infers::ProcessingOptions,
 ) -> Vec<Box<dyn TensorBuffer>> {
     let preprocessed = processor.process(frame, options).expect("CPU preprocess");
-    let nchw = nhwc_to_nchw_f32(preprocessed.as_ref());
-    let input: &dyn TensorBuffer = &nchw;
-    session.run(&[input]).expect("XNNPACK inference")
+    session
+        .run(&[preprocessed.as_ref()])
+        .expect("XNNPACK inference")
 }
