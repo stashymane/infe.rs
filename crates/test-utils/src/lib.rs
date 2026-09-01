@@ -1,3 +1,5 @@
+pub mod assets;
+
 use std::sync::Arc;
 
 use infers_core::{

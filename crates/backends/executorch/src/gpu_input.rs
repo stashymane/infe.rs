@@ -290,19 +290,20 @@ pub fn set_skip_staging_copy_mask(mask: u64) {
     unsafe { infers_et_vulkan_set_skip_staging_copy_mask(mask) };
 }
 
-/// Minimal placeholder tensor for skip-staging inputs. The patched delegate
-/// reads staged GPU memory instead; ExecuTorch still requires a tensor with
-/// matching rank/dtype but does not validate the data buffer size when the
-/// skip-staging mask is set.
+/// Placeholder tensor for skip-staging inputs. The patched Vulkan delegate
+/// reads GPU staging memory instead of this buffer, but ExecuTorch's runtime
+/// still copies `numel * elem_size` bytes in `Method::set_input` before the
+/// delegate runs. The backing storage must therefore cover the full tensor.
 fn placeholder_tensor_ptr(
     shape: &TensorShape,
     dtype: DataType,
 ) -> Result<OwnedTensorPtr, CoreError> {
     let dims: Vec<i32> = shape.dims().iter().map(|&d| d as i32).collect();
+    let numel = shape.element_count();
     match dtype {
         DataType::F32 => {
             let ptr = unsafe {
-                TensorPtrBuilder::<View<f32>>::from_vec(vec![0.0f32])
+                TensorPtrBuilder::<View<f32>>::from_vec(vec![0.0f32; numel])
                     .sizes(dims.iter().copied())
                     .build()
                     .map_err(|e| {
@@ -313,7 +314,7 @@ fn placeholder_tensor_ptr(
         }
         DataType::U8 => {
             let ptr = unsafe {
-                TensorPtrBuilder::<View<u8>>::from_vec(vec![0u8])
+                TensorPtrBuilder::<View<u8>>::from_vec(vec![0u8; numel])
                     .sizes(dims.iter().copied())
                     .build()
                     .map_err(|e| {

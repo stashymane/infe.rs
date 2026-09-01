@@ -3,7 +3,10 @@ use infers_backend_executorch::{
     ProgramMetadata, ScalarType, XnnpackOptions, VulkanOptions,
 };
 use infers_core::{CoreError, Cpu, DataType, HostTensor, Session, Tensor, TensorShape};
-use std::path::{Path, PathBuf};
+use infers_test_utils::assets::{
+    assert_detector_inference_outputs, detector_input_zeros, read_model_bytes, yolo26n_face_asset,
+    yolo26n_face_imgsz,
+};
 use std::sync::{Arc, OnceLock};
 
 #[cfg(feature = "vulkan")]
@@ -15,14 +18,7 @@ fn shared_vulkan() -> Option<Vulkan> {
     VULKAN.get_or_init(|| Vulkan::new(0).ok()).clone()
 }
 
-fn yolo26n_face_asset(subpath: &str) -> Option<PathBuf> {
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../../target/yolo26n-face")
-        .join(subpath);
-    path.exists().then_some(path)
-}
-
-fn manifest_imgsz(manifest: &Path) -> Option<u32> {
+fn manifest_imgsz(manifest: &std::path::Path) -> Option<u32> {
     let content = std::fs::read_to_string(manifest).ok()?;
     for line in content.lines() {
         let line = line.trim();
@@ -329,4 +325,72 @@ fn test_host_tensor_rejects_size_mismatch() {
         | infers_core::CoreError::InvalidShape(_) => {}
         other => panic!("expected buffer error, got {other:?}"),
     }
+}
+
+#[test]
+fn test_yolo26n_face_xnnpack_inference() {
+    let Some(pte_path) = yolo26n_face_asset("xnnpack/model.pte") else {
+        eprintln!("skipping: target/yolo26n-face/xnnpack/model.pte not built");
+        return;
+    };
+    let Some(imgsz) = yolo26n_face_imgsz() else {
+        eprintln!("skipping: yolo26n-face manifest missing imgsz");
+        return;
+    };
+
+    let bytes = read_model_bytes(&pte_path).expect("read xnnpack model.pte");
+    let backend = ExecuTorchBackend::new();
+    let mut session = backend
+        .load_xnnpack(
+            &bytes,
+            XnnpackOptions {
+                num_threads: 1,
+                method: None,
+            },
+        )
+        .expect("load xnnpack yolo26n-face asset");
+
+    let input = detector_input_zeros(imgsz).expect("detector input tensor");
+    let outputs = session
+        .run(&[&input])
+        .expect("xnnpack inference must complete without crashing");
+
+    let expected_shapes = session.output_shapes().to_vec();
+    assert_detector_inference_outputs(&outputs, &expected_shapes);
+}
+
+#[test]
+#[cfg(feature = "vulkan")]
+fn test_yolo26n_face_vulkan_inference() {
+    let Some(pte_path) = yolo26n_face_asset("vulkan/model.pte") else {
+        eprintln!("skipping: target/yolo26n-face/vulkan/model.pte not built");
+        return;
+    };
+    let Some(imgsz) = yolo26n_face_imgsz() else {
+        eprintln!("skipping: yolo26n-face manifest missing imgsz");
+        return;
+    };
+    let Some(vulkan) = shared_vulkan() else {
+        eprintln!("skipping: no Vulkan device");
+        return;
+    };
+
+    let bytes = read_model_bytes(&pte_path).expect("read vulkan model.pte");
+    let backend = ExecuTorchBackend::new();
+    let mut session = backend
+        .load_vulkan(
+            &bytes,
+            &vulkan,
+            VulkanOptions { method: None },
+        )
+        .expect("load vulkan yolo26n-face asset");
+
+    let cpu_input = detector_input_zeros(imgsz).expect("detector input tensor");
+    let gpu_input = cpu_input.to_device(&vulkan).expect("upload input to GPU");
+    let outputs = session
+        .run(&[&gpu_input])
+        .expect("vulkan inference must complete without crashing");
+
+    let expected_shapes = session.output_shapes().to_vec();
+    assert_detector_inference_outputs(&outputs, &expected_shapes);
 }
