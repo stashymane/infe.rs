@@ -2,6 +2,9 @@ import gobley.gradle.GobleyHost
 import gobley.gradle.cargo.dsl.android
 import gobley.gradle.cargo.dsl.jvm
 import gobley.gradle.cargo.tasks.CargoBuildTask
+import gobley.gradle.rust.targets.RustAndroidTarget
+import gobley.gradle.rust.targets.RustPosixTarget
+import gobley.gradle.rust.targets.RustTarget
 
 plugins {
     id("infers.kmp-library")
@@ -20,6 +23,15 @@ val androidApi: Int = libs.versions.android.min.sdk
     .get()
     .toInt()
 
+val repoRoot = rootProject.layout.projectDirectory.dir("..")
+val executorchOutputDir = repoRoot.dir("target/executorch")
+
+// Prebuilt ExecuTorch trees from scripts/build_executorch.sh / CI artifacts.
+val executorchLibDirs: Map<RustTarget, String> = mapOf(
+    RustAndroidTarget.Arm64 to executorchOutputDir.dir("android-arm64").asFile.absolutePath,
+    RustPosixTarget.LinuxX64 to executorchOutputDir.dir("x86_64-unknown-linux-gnu").asFile.absolutePath,
+)
+
 cargo {
     packageDirectory = rootProject.layout.projectDirectory.dir("../crates/bindings")
     features = setOf(
@@ -33,6 +45,16 @@ cargo {
     builds.android {
         // NDK C++ runtime required by libinfers_bindings.so (and ET/Vulkan deps).
         dynamicLibraries.add("c++_shared")
+    }
+    builds.configureEach {
+        val libDir = executorchLibDirs[rustTarget] ?: return@configureEach
+        variants {
+            buildTaskProvider.configure {
+                // Gobley cargo tasks use a curated env; an empty EXECUTORCH_RS_EXECUTORCH_LIB_DIR
+                // blocks the .cargo/config.toml fallback.
+                additionalEnvironment.put("EXECUTORCH_RS_EXECUTORCH_LIB_DIR", libDir)
+            }
+        }
     }
 }
 
@@ -51,26 +73,16 @@ tasks.withType<CargoBuildTask>().configureEach {
     extraArguments.add("--no-default-features")
 }
 
-val androidExecuTorchLibs = rootProject.layout.projectDirectory
-    .dir("../target/executorch/android-arm64")
-    .asFile
-    .absolutePath
-
-val hostExecuTorchLibs = rootProject.layout.projectDirectory
-    .dir("../target/executorch/x86_64-unknown-linux-gnu")
-    .asFile
-    .absolutePath
-
 // Gobley sets BINDGEN_EXTRA_CLANG_ARGS_<triple> (hyphens) to --sysroot only.
 // bindgen prefers that hyphen form over the underscore variant, and NDK r26+
 // requires an explicit --target=<triple><api>.
 // Merge after Gobley has configured NDK env — additionalEnvironment is finalized
 // before task actions, so doFirst mutation fails on Gradle 9+.
 afterEvaluate {
-    tasks.withType<CargoBuildTask>().configureEach {
-        val triple = target.get().rustTriple
-        when {
-            triple.contains("android") -> {
+    cargo.builds.android.configureEach {
+        val triple = rustTarget.rustTriple
+        variants {
+            buildTaskProvider.configure {
                 val key = "BINDGEN_EXTRA_CLANG_ARGS_$triple"
                 val previous = additionalEnvironment.get()[key]?.toString().orEmpty()
                 val targetFlag = "--target=$triple$androidApi"
@@ -81,17 +93,6 @@ afterEvaluate {
                         else -> "$targetFlag $previous"
                     }
                 additionalEnvironment.put(key, merged)
-                // Only arm64-v8a has Docker-built ExecuTorch libs; other Android ABIs
-                // are filtered out via ndk.abiFilters.
-                if (triple.startsWith("aarch64-")) {
-                    additionalEnvironment.put("EXECUTORCH_RS_EXECUTORCH_LIB_DIR", androidExecuTorchLibs)
-                }
-            }
-
-            triple == "x86_64-unknown-linux-gnu" -> {
-                // Gobley cargo tasks use a curated env; pass ExecuTorch paths explicitly
-                // (an empty EXECUTORCH_RS_EXECUTORCH_LIB_DIR blocks .cargo/config.toml fallback).
-                additionalEnvironment.put("EXECUTORCH_RS_EXECUTORCH_LIB_DIR", hostExecuTorchLibs)
             }
         }
     }
