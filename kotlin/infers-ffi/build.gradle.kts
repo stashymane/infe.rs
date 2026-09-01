@@ -56,6 +56,11 @@ val androidExecuTorchLibs = rootProject.layout.projectDirectory
     .asFile
     .absolutePath
 
+val hostExecuTorchLibs = rootProject.layout.projectDirectory
+    .dir("../target/executorch/x86_64-unknown-linux-gnu")
+    .asFile
+    .absolutePath
+
 // Gobley sets BINDGEN_EXTRA_CLANG_ARGS_<triple> (hyphens) to --sysroot only.
 // bindgen prefers that hyphen form over the underscore variant, and NDK r26+
 // requires an explicit --target=<triple><api>.
@@ -64,21 +69,31 @@ val androidExecuTorchLibs = rootProject.layout.projectDirectory
 afterEvaluate {
     tasks.withType<CargoBuildTask>().configureEach {
         val triple = target.get().rustTriple
-        if (!triple.contains("android")) return@configureEach
-        val key = "BINDGEN_EXTRA_CLANG_ARGS_$triple"
-        val previous = additionalEnvironment.get()[key]?.toString().orEmpty()
-        val targetFlag = "--target=$triple$androidApi"
-        val merged =
-            when {
-                previous.contains("--target=") -> previous
-                previous.isBlank() -> targetFlag
-                else -> "$targetFlag $previous"
+        when {
+            triple.contains("android") -> {
+                val key = "BINDGEN_EXTRA_CLANG_ARGS_$triple"
+                val previous = additionalEnvironment.get()[key]?.toString().orEmpty()
+                val targetFlag = "--target=$triple$androidApi"
+                val merged =
+                    when {
+                        previous.contains("--target=") -> previous
+                        previous.isBlank() -> targetFlag
+                        else -> "$targetFlag $previous"
+                    }
+                additionalEnvironment.put(key, merged)
+                // Only arm64-v8a has Docker-built ExecuTorch libs; other Android ABIs
+                // are filtered out via ndk.abiFilters.
+                if (triple.startsWith("aarch64-")) {
+                    additionalEnvironment.put("EXECUTORCH_RS_EXECUTORCH_LIB_DIR", androidExecuTorchLibs)
+                }
             }
-        additionalEnvironment.put(key, merged)
-        // Only arm64-v8a has Docker-built ExecuTorch libs; other Android ABIs
-        // are filtered out via ndk.abiFilters.
-        if (!triple.startsWith("aarch64-")) return@configureEach
-        additionalEnvironment.put("EXECUTORCH_RS_EXECUTORCH_LIB_DIR", androidExecuTorchLibs)
+
+            triple == "x86_64-unknown-linux-gnu" -> {
+                // Gobley cargo tasks use a curated env; pass ExecuTorch paths explicitly
+                // (an empty EXECUTORCH_RS_EXECUTORCH_LIB_DIR blocks .cargo/config.toml fallback).
+                additionalEnvironment.put("EXECUTORCH_RS_EXECUTORCH_LIB_DIR", hostExecuTorchLibs)
+            }
+        }
     }
 }
 
@@ -93,4 +108,3 @@ kotlin {
         }
     }
 }
-
