@@ -1,6 +1,6 @@
 use crate::error::AndroidPlatformError;
 use crate::hardware_buffer::AndroidHardwareBufferHandle;
-use infers_core::Device;
+use infers_core::DeviceInfo;
 use infers_gpu::ash::vk;
 use infers_gpu::{
     VulkanContext, VulkanContextOptions, VulkanSampledImage, VulkanSampledImageParts,
@@ -24,7 +24,7 @@ pub fn vulkan_context_options() -> VulkanContextOptions {
     options
 }
 
-pub fn create_vulkan_context(device: &Device) -> Result<VulkanContext, AndroidPlatformError> {
+pub fn create_vulkan_context(device: &DeviceInfo) -> Result<VulkanContext, AndroidPlatformError> {
     VulkanContext::new_with_options(device, vulkan_context_options()).map_err(|err| {
         AndroidPlatformError::VulkanImportError(err.to_string())
     })
@@ -233,7 +233,6 @@ fn import_hardware_buffer(
             width: src.width(),
             height: src.height(),
             format: src.format(),
-            device: src.device().clone(),
         },
     ))
 }

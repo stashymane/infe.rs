@@ -24,5 +24,8 @@ thiserror.workspace = true
 [build-dependencies]
 spirv-builder = { version = "=0.10.0-alpha.1", optional = true }
 
+[dev-dependencies]
+trybuild = "1.0"
+
 [lints]
 workspace = true

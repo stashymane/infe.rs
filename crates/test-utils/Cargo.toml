@@ -9,6 +9,10 @@ description.workspace = true
 
 [dependencies]
 infers-core = { path = "../core" }
+infers-gpu = { path = "../gpu", optional = true }
+
+[features]
+vulkan = ["dep:infers-gpu"]
 
 [lints]
 workspace = true

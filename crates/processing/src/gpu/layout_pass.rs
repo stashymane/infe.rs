@@ -1,12 +1,11 @@
 //! GPU NHWC→NCHW layout transpose compute pass.
 
 use super::SHADERS;
-use super::buffer::GpuTensorBuffer;
-use infers_core::{CoreError, DataType, TensorBuffer, TensorShape};
+use infers_core::{CoreError, DataType, Tensor, TensorShape};
 use infers_gpu::GpuError;
 use infers_gpu::ash::vk;
 use infers_gpu::gpu_allocator::MemoryLocation;
-use infers_gpu::{buffer_barrier, VulkanContext};
+use infers_gpu::{buffer_barrier, tensor_from_allocated, Vulkan, VulkanContext};
 use parking_lot::Mutex;
 use std::sync::Arc;
 
@@ -40,11 +39,17 @@ impl LayoutGpuPass {
         }
     }
 
-    pub fn nhwc_to_nchw(&self, input: &GpuTensorBuffer) -> Result<GpuTensorBuffer, CoreError> {
+    pub fn nhwc_to_nchw(&self, input: &Tensor<Vulkan>) -> Result<Tensor<Vulkan>, CoreError> {
+        if !Arc::ptr_eq(&self.context, input.device().context()) {
+            return Err(CoreError::DeviceMismatch {
+                expected: self.context.device_info().clone(),
+                actual: input.device().info().clone(),
+            });
+        }
         self.try_nhwc_to_nchw(input).map_err(CoreError::from)
     }
 
-    fn try_nhwc_to_nchw(&self, input: &GpuTensorBuffer) -> Result<GpuTensorBuffer, GpuError> {
+    fn try_nhwc_to_nchw(&self, input: &Tensor<Vulkan>) -> Result<Tensor<Vulkan>, GpuError> {
         let dims = input.shape().dims();
         if dims.len() != 4 || dims[0] != 1 || dims[3] != 3 {
             return Err(GpuError::Other(format!(
@@ -61,7 +66,7 @@ impl LayoutGpuPass {
         let w = dims[2];
         let out_shape = TensorShape::new([1, 3, h, w])
             .map_err(|err| GpuError::Other(err.to_string()))?;
-        let src = input.vulkan_handle().ok_or_else(|| {
+        let src = input.storage().vulkan_handle().ok_or_else(|| {
             GpuError::Other("GPU input buffer already destroyed".into())
         })?;
 
@@ -171,22 +176,21 @@ impl LayoutGpuPass {
         }
         ctx.destroy_buffer(ubo);
 
-        Ok(GpuTensorBuffer::from_allocated(
-            Arc::clone(&self.context),
-            self.context.logical_device().clone(),
-            out_shape,
-            DataType::F32,
-            dst,
-        ))
+        Ok(tensor_from_allocated(input.device(), out_shape, DataType::F32, dst))
     }
 }
 
 pub fn nhwc_to_nchw_gpu(
-    context: &Arc<VulkanContext>,
-    input: &GpuTensorBuffer,
-) -> Result<GpuTensorBuffer, CoreError> {
-    LayoutGpuPass::new(Arc::clone(context))
-        .nhwc_to_nchw(input)
+    device: &Vulkan,
+    input: &Tensor<Vulkan>,
+) -> Result<Tensor<Vulkan>, CoreError> {
+    if !Arc::ptr_eq(device.context(), input.device().context()) {
+        return Err(CoreError::DeviceMismatch {
+            expected: device.info().clone(),
+            actual: input.device().info().clone(),
+        });
+    }
+    LayoutGpuPass::new(Arc::clone(device.context())).nhwc_to_nchw(input)
 }
 
 fn create_layout_pipeline(context: &VulkanContext) -> Result<LayoutPipeline, GpuError> {

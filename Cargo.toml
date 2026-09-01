@@ -57,7 +57,7 @@ xnnpack = ["infers-backend-executorch/xnnpack"]
 vulkan = ["infers-backend-executorch/vulkan", "processing/vulkan", "dep:infers-gpu"]
 
 [dev-dependencies]
-infers-test-utils = { path = "crates/test-utils" }
+infers-test-utils = { path = "crates/test-utils", features = ["vulkan"] }
 
 [target.'cfg(target_os = "android")'.dependencies]
 platform-android = { path = "crates/platform/android" }

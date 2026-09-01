@@ -1,8 +1,7 @@
 package dev.stashy.infers.internal
 
-import dev.stashy.infers.BackendConfig
 import dev.stashy.infers.DataType
-import dev.stashy.infers.Device
+import dev.stashy.infers.DeviceInfo
 import dev.stashy.infers.DeviceKind
 import dev.stashy.infers.FitMode
 import dev.stashy.infers.ImageFormat
@@ -10,55 +9,28 @@ import dev.stashy.infers.InfersException
 import dev.stashy.infers.InfersInternalApi
 import dev.stashy.infers.ProcessingOptions
 import dev.stashy.infers.Rotation
-import dev.stashy.infers.Tensor
 import dev.stashy.infers.TensorLayout
 import dev.stashy.infers.TensorShape
-import dev.stashy.infers.ffi.BackendConfig as FfiBackendConfig
 import dev.stashy.infers.ffi.DataType as FfiDataType
-import dev.stashy.infers.ffi.Device as FfiDevice
+import dev.stashy.infers.ffi.DeviceInfo as FfiDeviceInfo
 import dev.stashy.infers.ffi.DeviceKind as FfiDeviceKind
 import dev.stashy.infers.ffi.FitMode as FfiFitMode
 import dev.stashy.infers.ffi.ImageFormat as FfiImageFormat
 import dev.stashy.infers.ffi.InfersException as FfiInfersException
 import dev.stashy.infers.ffi.ProcessingOptions as FfiProcessingOptions
 import dev.stashy.infers.ffi.Rotation as FfiRotation
-import dev.stashy.infers.ffi.TensorBuffer as FfiTensorBuffer
 import dev.stashy.infers.ffi.TensorLayout as FfiTensorLayout
 import dev.stashy.infers.ffi.TensorShape as FfiTensorShape
 
-/**
- * Feature-module [BackendConfig] implementations convert themselves to the
- * generated UniFFI type. Declared here so core's public [BackendConfig] never
- * carries `dev.stashy.infers.ffi` in its signature.
- */
 @InfersInternalApi
-public interface BackendConfigFfiConvertible {
-    public fun toFfiConfig(): FfiBackendConfig
-}
-
-@InfersInternalApi
-public fun BackendConfig.toFfi(): FfiBackendConfig {
-    val convertible =
-        this as? BackendConfigFfiConvertible
-            ?: error(
-                "No FFI converter for ${this::class.simpleName}. " +
-                    "Add the matching Infers feature module dependency.",
-            )
-    return convertible.toFfiConfig()
-}
-
-@InfersInternalApi
-public fun Tensor.Companion.fromFfi(handle: FfiTensorBuffer): Tensor = Tensor(handle)
-
-@InfersInternalApi
-public fun Device.toFfi(): FfiDevice = FfiDevice(
+public fun DeviceInfo.toFfi(): FfiDeviceInfo = FfiDeviceInfo(
     kind = kind.toFfi(),
     id = id,
     name = name,
 )
 
 @InfersInternalApi
-public fun FfiDevice.fromFfi(): Device = Device(
+public fun FfiDeviceInfo.fromFfi(): DeviceInfo = DeviceInfo(
     kind = kind.fromFfi(),
     id = id,
     name = name,
@@ -100,6 +72,14 @@ public fun DataType.toFfi(): FfiDataType = when (this) {
     DataType.F16 -> FfiDataType.F16
     DataType.F32 -> FfiDataType.F32
     DataType.F64 -> FfiDataType.F64
+}
+
+@InfersInternalApi
+public fun FfiImageFormat.fromFfi(): ImageFormat = when (this) {
+    FfiImageFormat.RGB888 -> ImageFormat.Rgb888
+    FfiImageFormat.RGBF32 -> ImageFormat.Rgbf32
+    FfiImageFormat.NV12 -> ImageFormat.Nv12
+    FfiImageFormat.I420 -> ImageFormat.I420
 }
 
 @InfersInternalApi

@@ -9,13 +9,13 @@ class InferenceScopeTest {
     fun closesResourcesWhenBlockThrows() = runTest {
         assertFailsWith<IllegalStateException> {
             inferenceScope {
-                tensorOf(TensorShape.of(1), floatArrayOf(1f))
+                cpuTensorOf(TensorShape.of(1), floatArrayOf(1f))
                 error("boom")
             }
         }
         val escaped =
             inferenceScope {
-                tensorOf(TensorShape.of(1), floatArrayOf(2f))
+                cpuTensorOf(TensorShape.of(1), floatArrayOf(2f))
             }
         assertFailsWith<IllegalStateException> {
             escaped.readBytes()
@@ -26,7 +26,7 @@ class InferenceScopeTest {
     fun closesEvenWhenBlockSucceeds() = runTest {
         val tensor =
             inferenceScope {
-                tensorOf(TensorShape.of(2), floatArrayOf(1f, 2f))
+                cpuTensorOf(TensorShape.of(2), floatArrayOf(1f, 2f))
             }
         assertFailsWith<IllegalStateException> {
             tensor.readFloats()

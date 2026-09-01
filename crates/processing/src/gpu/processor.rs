@@ -1,14 +1,16 @@
 use super::SHADERS;
-use super::buffer::GpuTensorBuffer;
 use infers_core::CoreError;
 use infers_gpu::GpuError;
 use infers_core::{
-    DataType, Device, ImageFormat, ImageInputBuffer, ProcessingOptions, TensorBuffer, TensorShape,
+    DataType, ImageFormat, ProcessingOptions, Tensor, TensorShape,
 };
-use infers_gpu::ash::vk;
-use infers_gpu::ash::vk::Handle;
-use infers_gpu::gpu_allocator::MemoryLocation;
-use infers_gpu::{AllocatedBuffer, buffer_barrier, VulkanContext, VulkanSampledImage};
+use infers_gpu::{
+    ash::vk,
+    ash::vk::Handle,
+    gpu_allocator::MemoryLocation,
+    tensor_from_allocated, AllocatedBuffer, buffer_barrier, Vulkan, VulkanContext,
+    VulkanImage, VulkanSampledImage,
+};
 use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -47,8 +49,8 @@ struct DispatchResources {
 
 /// GPU image processor that dispatches SPIR-V `convert_main` / `convert_image` on a shared context.
 pub struct GpuImageProcessor {
+    vulkan: Vulkan,
     context: Arc<VulkanContext>,
-    device: Device,
     shader_module: vk::ShaderModule,
     set_layout_ssbo: vk::DescriptorSetLayout,
     set_layout_image: vk::DescriptorSetLayout,
@@ -63,12 +65,12 @@ pub struct GpuImageProcessor {
 }
 
 impl GpuImageProcessor {
-    pub fn new(context: Arc<VulkanContext>) -> Result<Self, CoreError> {
-        Self::try_new(context).map_err(CoreError::from)
+    pub fn new(vulkan: Vulkan) -> Result<Self, CoreError> {
+        Self::try_new(vulkan).map_err(CoreError::from)
     }
 
-    fn try_new(context: Arc<VulkanContext>) -> Result<Self, GpuError> {
-        let device = context.logical_device().clone();
+    fn try_new(vulkan: Vulkan) -> Result<Self, GpuError> {
+        let context = Arc::clone(vulkan.context());
         let vkd = context.device();
 
         let words = spirv_words(SHADERS)?;
@@ -185,8 +187,8 @@ impl GpuImageProcessor {
         let frame_pool = FramePool::new(vkd)?;
 
         Ok(Self {
+            vulkan,
             context,
-            device,
             shader_module,
             set_layout_ssbo,
             set_layout_image,
@@ -204,15 +206,26 @@ impl GpuImageProcessor {
         })
     }
 
+    pub fn vulkan(&self) -> &Vulkan {
+        &self.vulkan
+    }
+
     pub fn context(&self) -> &Arc<VulkanContext> {
         &self.context
     }
 
     pub fn process(
         &self,
-        input: &dyn ImageInputBuffer,
+        input: &VulkanImage,
         options: &ProcessingOptions,
-    ) -> Result<Box<dyn TensorBuffer>, CoreError> {
+    ) -> Result<Tensor<Vulkan>, CoreError> {
+        if !Arc::ptr_eq(&self.context, input.context()) {
+            return Err(CoreError::DeviceMismatch {
+                expected: self.vulkan.info().clone(),
+                actual: input.context().device_info().clone(),
+            });
+        }
+
         let (dest_w, dest_h) = (options.dest_w, options.dest_h);
         if dest_w == 0 || dest_h == 0 {
             return Err(CoreError::InvalidImageBuffer(
@@ -264,92 +277,55 @@ impl GpuImageProcessor {
         kernel_opts.src_h = input.height();
         kernel_opts.src_format = src_format;
 
-        if let Some(bytes) = input.as_bytes() {
-            let expected = src_format.frame_bytes(input.width(), input.height()) as usize;
-            if bytes.len() != expected {
-                return Err(CoreError::InvalidImageBuffer(format!(
-                    "YUV/RGB source size mismatch: expected {expected} bytes, got {}",
-                    bytes.len()
-                )));
+        match input {
+            VulkanImage::Linear(buf) => {
+                let gpu = buf.gpu_buffer().ok_or_else(|| {
+                    CoreError::InvalidImageBuffer("linear GPU image buffer destroyed".into())
+                })?;
+                self.dispatch_from_linear(gpu, &kernel_opts, shape, dtype)
+                    .map_err(CoreError::from)
             }
-            return self
-                .dispatch_ssbo(bytes, &kernel_opts, shape, dtype)
-                .map_err(CoreError::from);
-        }
-
-        if let Some(sampled) = input.as_any().downcast_ref::<VulkanSampledImage>() {
-            return self
+            VulkanImage::Sampled(sampled) => self
                 .dispatch_sampled(sampled, &kernel_opts, shape, dtype)
-                .map_err(CoreError::from);
+                .map_err(CoreError::from),
         }
-
-        Err(CoreError::InvalidImageBuffer(
-            "GPU sampled path requires host bytes or a Vulkan sampled image".into(),
-        ))
     }
 
-    fn dispatch_ssbo(
+    fn dispatch_from_linear(
         &self,
-        src_bytes: &[u8],
+        src_gpu: &AllocatedBuffer,
         options: &ProcessingOptions,
         shape: TensorShape,
         dtype: DataType,
-    ) -> Result<Box<dyn TensorBuffer>, GpuError> {
+    ) -> Result<Tensor<Vulkan>, GpuError> {
         let dst_size = shape.byte_size(dtype) as u64;
         let ctx = self.context.as_ref();
-        let src_size = src_bytes.len() as u64;
 
         let mut dispatch = self.record_lock.lock();
         pool_buffer(
             ctx,
-            &mut dispatch.frame.staging_src,
-            src_size,
-            vk::BufferUsageFlags::TRANSFER_SRC,
-            MemoryLocation::CpuToGpu,
-            "src-staging",
-        )?;
-        pool_buffer(
-            ctx,
-            &mut dispatch.frame.src,
-            src_size,
-            vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::STORAGE_BUFFER,
-            MemoryLocation::GpuOnly,
-            "src-ssbo",
-        )?;
-        let ubo_bytes = options_bytes(options);
-        pool_buffer(
-            ctx,
             &mut dispatch.frame.ubo,
-            ubo_bytes.len() as u64,
+            options_bytes(options).len() as u64,
             vk::BufferUsageFlags::UNIFORM_BUFFER,
             MemoryLocation::CpuToGpu,
             "convert-ubo",
         )?;
-        VulkanContext::write_allocation(
-            &mut dispatch.frame.staging_src.as_mut().unwrap().allocation,
-            src_bytes,
-        )?;
+        let ubo_bytes = options_bytes(options);
         VulkanContext::write_allocation(
             &mut dispatch.frame.ubo.as_mut().unwrap().allocation,
             &ubo_bytes,
         )?;
 
-        let staging_src_buf = dispatch.frame.staging_src.as_ref().unwrap().buffer;
-        let src_buf = dispatch.frame.src.as_ref().unwrap().buffer;
-        let src_buf_size = dispatch.frame.src.as_ref().unwrap().size;
-        let ubo_buf = dispatch.frame.ubo.as_ref().unwrap().buffer;
-
         let dst = ctx.create_buffer(
             dst_size,
-            vk::BufferUsageFlags::TRANSFER_SRC | vk::BufferUsageFlags::STORAGE_BUFFER,
+            vk::BufferUsageFlags::STORAGE_BUFFER | vk::BufferUsageFlags::TRANSFER_SRC,
             MemoryLocation::GpuOnly,
             "dst-ssbo",
         )?;
 
         let vkd = ctx.device();
+        let ubo_buf = dispatch.frame.ubo.as_ref().unwrap().buffer;
         let desc_pool = *self.desc_pool.lock();
-        // SAFETY: the pool belongs to this device and `record_lock` is held, so
-        // no other dispatch holds sets allocated from it.
         unsafe { vkd.reset_descriptor_pool(desc_pool, vk::DescriptorPoolResetFlags::empty())? };
         let set = unsafe {
             vkd.allocate_descriptor_sets(
@@ -364,9 +340,9 @@ impl GpuImageProcessor {
             .offset(0)
             .range(ubo_bytes.len() as u64);
         let src_info = vk::DescriptorBufferInfo::default()
-            .buffer(src_buf)
+            .buffer(src_gpu.buffer)
             .offset(0)
-            .range(src_buf_size);
+            .range(src_gpu.size);
         let dst_info = vk::DescriptorBufferInfo::default()
             .buffer(dst.buffer)
             .offset(0)
@@ -382,13 +358,11 @@ impl GpuImageProcessor {
         let begin = vk::CommandBufferBeginInfo::default()
             .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
         unsafe { vkd.begin_command_buffer(cmd, &begin)? };
-        let copy = vk::BufferCopy::default().size(src_size);
         unsafe {
-            vkd.cmd_copy_buffer(cmd, staging_src_buf, src_buf, &[copy]);
             buffer_barrier(
                 vkd,
                 cmd,
-                src_buf,
+                src_gpu.buffer,
                 vk::PipelineStageFlags::TRANSFER,
                 vk::PipelineStageFlags::COMPUTE_SHADER,
                 vk::AccessFlags::TRANSFER_WRITE,
@@ -419,13 +393,7 @@ impl GpuImageProcessor {
         }
         self.submit_and_wait(cmd, &mut dispatch.frame)?;
 
-        Ok(Box::new(GpuTensorBuffer::from_allocated(
-            Arc::clone(&self.context),
-            self.device.clone(),
-            shape,
-            dtype,
-            dst,
-        )))
+        Ok(tensor_from_allocated(&self.vulkan, shape, dtype, dst))
     }
 
     fn dispatch_sampled(
@@ -434,7 +402,7 @@ impl GpuImageProcessor {
         options: &ProcessingOptions,
         shape: TensorShape,
         dtype: DataType,
-    ) -> Result<Box<dyn TensorBuffer>, GpuError> {
+    ) -> Result<Tensor<Vulkan>, GpuError> {
         let dst_size = shape.byte_size(dtype) as u64;
         let ctx = self.context.as_ref();
 
@@ -624,13 +592,7 @@ impl GpuImageProcessor {
         }
         self.submit_and_wait(cmd, &mut dispatch.frame)?;
 
-        Ok(Box::new(GpuTensorBuffer::from_allocated(
-            Arc::clone(&self.context),
-            self.device.clone(),
-            shape,
-            dtype,
-            dst,
-        )))
+        Ok(tensor_from_allocated(&self.vulkan, shape, dtype, dst))
     }
 
     fn alloc_cmd(&self) -> Result<vk::CommandBuffer, GpuError> {

@@ -1,117 +1,89 @@
 use std::sync::Arc;
 
 use infers_core::{
-    AnyHostTensor, Backend, CoreError, CpuImageBuffer, CpuTensor, DataType, Device, DeviceTransfer,
-    FitMode, ImageFormat, ModelSession, ProcessingOptions, Rotation, SessionConfig, TensorBuffer,
-    TensorLayout, TensorShape,
+    CoreError, Cpu, FitMode, HostImage, HostTensor, ImageFormat, ProcessingOptions,
+    Rotation, Session, Tensor, TensorLayout, TensorShape,
 };
 
-/// Simulated device-resident tensor (e.g. on GPU or NPU) for tests and examples.
-#[derive(Clone, Debug)]
-pub struct MockDeviceTensor {
-    device: Device,
-    shape: TensorShape,
-    dtype: DataType,
-    raw_payload: Vec<u8>,
-}
+#[cfg(feature = "vulkan")]
+use infers_gpu::Vulkan;
 
-impl MockDeviceTensor {
-    pub fn from_f32_slice(device: Device, shape: TensorShape, values: &[f32]) -> Self {
-        let mut raw_payload = Vec::with_capacity(values.len() * 4);
-        for &v in values {
-            raw_payload.extend_from_slice(&v.to_ne_bytes());
-        }
-        Self {
-            device,
-            shape,
-            dtype: DataType::F32,
-            raw_payload,
-        }
-    }
-}
+pub type CpuForwardFn =
+    Arc<dyn Fn(&[&Tensor<Cpu>]) -> Result<Vec<Tensor<Cpu>>, CoreError> + Send + Sync>;
 
-impl TensorBuffer for MockDeviceTensor {
-    fn shape(&self) -> &TensorShape {
-        &self.shape
-    }
-
-    fn dtype(&self) -> DataType {
-        self.dtype
-    }
-
-    fn device(&self) -> &Device {
-        &self.device
-    }
-
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
-    fn read_to_cpu(&self) -> Result<Box<dyn AnyHostTensor>, CoreError> {
-        match self.dtype {
-            DataType::F32 => {
-                let mut data = Vec::with_capacity(self.shape.element_count());
-                for chunk in self.raw_payload.chunks_exact(4) {
-                    let val = f32::from_ne_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
-                    data.push(val);
-                }
-                let tensor = CpuTensor::from_f32(self.shape.clone(), data)?;
-                Ok(Box::new(tensor))
-            }
-            DataType::U8 => {
-                let tensor = CpuTensor::from_u8(self.shape.clone(), self.raw_payload.clone())?;
-                Ok(Box::new(tensor))
-            }
-            DataType::I32 => {
-                let mut data = Vec::with_capacity(self.shape.element_count());
-                for chunk in self.raw_payload.chunks_exact(4) {
-                    let val = i32::from_ne_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
-                    data.push(val);
-                }
-                let tensor = CpuTensor::from_i32(self.shape.clone(), data)?;
-                Ok(Box::new(tensor))
-            }
-            _ => Err(CoreError::BufferTransferFailed(format!(
-                "Readback for dtype {:?} not implemented in mock",
-                self.dtype
-            ))),
-        }
-    }
-
-    fn copy_to_device(
-        &self,
-        target: &Device,
-        _transfer: Option<&dyn DeviceTransfer>,
-    ) -> Result<Box<dyn TensorBuffer>, CoreError> {
-        if &self.device == target {
-            Ok(Box::new(self.clone()))
-        } else {
-            Ok(Box::new(MockDeviceTensor {
-                device: target.clone(),
-                shape: self.shape.clone(),
-                dtype: self.dtype,
-                raw_payload: self.raw_payload.clone(),
-            }))
-        }
-    }
-}
-
-pub type ForwardFn =
-    Arc<dyn Fn(&[&dyn TensorBuffer]) -> Result<Vec<Box<dyn TensorBuffer>>, CoreError> + Send + Sync>;
-
-pub struct MockSession {
-    device: Device,
+pub struct MockCpuSession {
     input_shapes: Vec<TensorShape>,
     output_shapes: Vec<TensorShape>,
-    forward: ForwardFn,
+    forward: CpuForwardFn,
 }
 
-impl MockSession {
+impl MockCpuSession {
     pub fn new(
-        device: Device,
         input_shapes: Vec<TensorShape>,
         output_shapes: Vec<TensorShape>,
-        forward: ForwardFn,
+        forward: CpuForwardFn,
+    ) -> Self {
+        Self {
+            input_shapes,
+            output_shapes,
+            forward,
+        }
+    }
+}
+
+impl Session<Cpu> for MockCpuSession {
+    type Output = Tensor<Cpu>;
+
+    fn device(&self) -> &Cpu {
+        &Cpu
+    }
+
+    fn input_shapes(&self) -> &[TensorShape] {
+        &self.input_shapes
+    }
+
+    fn output_shapes(&self) -> &[TensorShape] {
+        &self.output_shapes
+    }
+
+    fn run(&mut self, inputs: &[&Tensor<Cpu>]) -> Result<Vec<Tensor<Cpu>>, CoreError> {
+        for (i, input) in inputs.iter().enumerate() {
+            if i < self.input_shapes.len()
+                && input.shape() != &self.input_shapes[i]
+                && input.shape().element_count() != self.input_shapes[i].element_count()
+            {
+                return Err(CoreError::InvalidShape(format!(
+                    "Input {} shape mismatch: expected {:?}, got {:?}",
+                    i,
+                    self.input_shapes[i].dims(),
+                    input.shape().dims()
+                )));
+            }
+        }
+
+        (self.forward)(inputs)
+    }
+}
+
+#[cfg(feature = "vulkan")]
+pub type VulkanForwardFn =
+    Arc<dyn Fn(&[&Tensor<Vulkan>]) -> Result<Vec<Tensor<Cpu>>, CoreError> + Send + Sync>;
+
+#[cfg(feature = "vulkan")]
+pub struct MockGpuSession {
+    device: Vulkan,
+    input_shapes: Vec<TensorShape>,
+    output_shapes: Vec<TensorShape>,
+    forward: VulkanForwardFn,
+}
+
+#[cfg(feature = "vulkan")]
+impl MockGpuSession {
+    pub fn new(
+        device: Vulkan,
+        input_shapes: Vec<TensorShape>,
+        output_shapes: Vec<TensorShape>,
+        forward: VulkanForwardFn,
     ) -> Self {
         Self {
             device,
@@ -122,8 +94,11 @@ impl MockSession {
     }
 }
 
-impl ModelSession for MockSession {
-    fn device(&self) -> &Device {
+#[cfg(feature = "vulkan")]
+impl Session<Vulkan> for MockGpuSession {
+    type Output = Tensor<Cpu>;
+
+    fn device(&self) -> &Vulkan {
         &self.device
     }
 
@@ -135,12 +110,12 @@ impl ModelSession for MockSession {
         &self.output_shapes
     }
 
-    fn run(&mut self, inputs: &[&dyn TensorBuffer]) -> Result<Vec<Box<dyn TensorBuffer>>, CoreError> {
+    fn run(&mut self, inputs: &[&Tensor<Vulkan>]) -> Result<Vec<Tensor<Cpu>>, CoreError> {
         for (i, input) in inputs.iter().enumerate() {
-            if input.device() != &self.device {
+            if !Arc::ptr_eq(input.device().context(), self.device.context()) {
                 return Err(CoreError::DeviceMismatch {
-                    expected: self.device.clone(),
-                    actual: input.device().clone(),
+                    expected: self.device.info().clone(),
+                    actual: input.device().info().clone(),
                 });
             }
             if i < self.input_shapes.len()
@@ -160,59 +135,25 @@ impl ModelSession for MockSession {
     }
 }
 
-pub struct MockBackend {
-    name: &'static str,
-    devices: Vec<Device>,
-    default_forward: Option<ForwardFn>,
+pub fn cpu_tensor_f32(shape: TensorShape, values: &[f32]) -> Result<Tensor<Cpu>, CoreError> {
+    let host = HostTensor::from_f32(shape, values.to_vec())?;
+    Tensor::from_host(&Cpu, &host)
 }
 
-impl MockBackend {
-    pub fn new(name: &'static str) -> Self {
-        Self {
-            name,
-            devices: vec![Device::cpu(), Device::gpu(0), Device::npu(0)],
-            default_forward: None,
-        }
-    }
+pub fn read_f32_output(outputs: &[Tensor<Cpu>]) -> Result<Vec<f32>, CoreError> {
+    Ok(outputs[0].read_to_host()?.as_slice_f32()?.to_vec())
 }
 
-impl Backend for MockBackend {
-    fn name(&self) -> &'static str {
-        self.name
-    }
-
-    fn available_devices(&self) -> Vec<Device> {
-        self.devices.clone()
-    }
-
-    fn load_model_with_config(
-        &self,
-        _model_bytes: &[u8],
-        config: &SessionConfig,
-    ) -> Result<Box<dyn ModelSession>, CoreError> {
-        let forward = self.default_forward.clone().unwrap_or_else(|| {
-            let dev = config.device.clone();
-            Arc::new(move |_inputs: &[&dyn TensorBuffer]| {
-                let out_shape = TensorShape::new([1, 4]).expect("valid shape");
-                let dummy_data = vec![10.0f32, 20.0, 100.0, 150.0];
-                let out_tensor = MockDeviceTensor::from_f32_slice(dev.clone(), out_shape, &dummy_data);
-                Ok(vec![Box::new(out_tensor) as Box<dyn TensorBuffer>])
-            })
-        });
-
-        Ok(Box::new(MockSession::new(
-            config.device.clone(),
-            vec![TensorShape::new([1, 3, 224, 224]).expect("valid shape")],
-            vec![TensorShape::new([1, 4]).expect("valid shape")],
-            forward,
-        )))
-    }
+#[cfg(feature = "vulkan")]
+pub fn gpu_tensor_f32(device: &Vulkan, shape: TensorShape, values: &[f32]) -> Result<Tensor<Vulkan>, CoreError> {
+    let cpu = cpu_tensor_f32(shape, values)?;
+    cpu.to_device(device)
 }
 
 /// Solid-color 640×480 RGB camera frame for pipeline tests.
-pub fn camera_frame_640x480(fill: u8) -> CpuImageBuffer {
+pub fn camera_frame_640x480(fill: u8) -> HostImage {
     let bytes = vec![fill; 640 * 480 * 3];
-    CpuImageBuffer::new(640, 480, ImageFormat::Rgb888, bytes).expect("valid frame buffer")
+    HostImage::new(640, 480, ImageFormat::Rgb888, bytes).expect("valid frame buffer")
 }
 
 pub fn detector_preprocess_options(dest: u32) -> ProcessingOptions {
@@ -257,39 +198,42 @@ pub fn landmarker_preprocess_options(
     }
 }
 
-/// Mock GPU detector: one input `[1, 3, H, W]`, one output `[1, 4]` bounding box.
-pub fn mock_gpu_detector(input_side: u32, device: Device) -> MockSession {
-    let session_device = device.clone();
-    let forward = Arc::new(move |_inputs: &[&dyn TensorBuffer]| {
+/// Mock CPU detector: one input `[1, 3, H, W]`, one output `[1, 4]` bounding box.
+pub fn mock_cpu_detector(input_side: u32) -> MockCpuSession {
+    let forward = Arc::new(move |_inputs: &[&Tensor<Cpu>]| {
         let shape = TensorShape::new([1, 4]).expect("valid shape");
         let boxes = vec![10.0f32, 20.0, 100.0, 120.0];
-        Ok(vec![Box::new(MockDeviceTensor::from_f32_slice(
-            session_device.clone(),
-            shape,
-            &boxes,
-        )) as Box<dyn TensorBuffer>])
+        cpu_tensor_f32(shape, &boxes).map(|t| vec![t])
     });
-    MockSession::new(
-        device,
+    MockCpuSession::new(
         vec![TensorShape::new([1, 3, input_side as usize, input_side as usize]).expect("valid shape")],
         vec![TensorShape::new([1, 4]).expect("valid shape")],
         forward,
     )
 }
 
-/// Mock GPU landmarker: one input `[1, 3, H, W]`, one output `[1, 4]` landmark pairs.
-pub fn mock_gpu_landmarker(input_side: u32, device: Device) -> MockSession {
-    let session_device = device.clone();
-    let forward = Arc::new(move |_inputs: &[&dyn TensorBuffer]| {
+/// Mock CPU landmarker: one input `[1, 3, H, W]`, one output `[1, 4]` landmark pairs.
+pub fn mock_cpu_landmarker(input_side: u32) -> MockCpuSession {
+    let forward = Arc::new(move |_inputs: &[&Tensor<Cpu>]| {
         let shape = TensorShape::new([1, 4]).expect("valid shape");
         let points = vec![30.0f32, 40.0, 50.0, 60.0];
-        Ok(vec![Box::new(MockDeviceTensor::from_f32_slice(
-            session_device.clone(),
-            shape,
-            &points,
-        )) as Box<dyn TensorBuffer>])
+        cpu_tensor_f32(shape, &points).map(|t| vec![t])
     });
-    MockSession::new(
+    MockCpuSession::new(
+        vec![TensorShape::new([1, 3, input_side as usize, input_side as usize]).expect("valid shape")],
+        vec![TensorShape::new([1, 4]).expect("valid shape")],
+        forward,
+    )
+}
+
+#[cfg(feature = "vulkan")]
+pub fn mock_gpu_detector(device: Vulkan, input_side: u32) -> MockGpuSession {
+    let forward = Arc::new(move |_inputs: &[&Tensor<Vulkan>]| {
+        let shape = TensorShape::new([1, 4]).expect("valid shape");
+        let boxes = vec![10.0f32, 20.0, 100.0, 120.0];
+        cpu_tensor_f32(shape, &boxes).map(|t| vec![t])
+    });
+    MockGpuSession::new(
         device,
         vec![TensorShape::new([1, 3, input_side as usize, input_side as usize]).expect("valid shape")],
         vec![TensorShape::new([1, 4]).expect("valid shape")],
@@ -297,7 +241,17 @@ pub fn mock_gpu_landmarker(input_side: u32, device: Device) -> MockSession {
     )
 }
 
-pub fn read_f32_output(outputs: &[Box<dyn TensorBuffer>]) -> Result<Vec<f32>, CoreError> {
-    let host = outputs[0].read_to_cpu()?;
-    Ok(host.as_slice_f32()?.to_vec())
+#[cfg(feature = "vulkan")]
+pub fn mock_gpu_landmarker(device: Vulkan, input_side: u32) -> MockGpuSession {
+    let forward = Arc::new(move |_inputs: &[&Tensor<Vulkan>]| {
+        let shape = TensorShape::new([1, 4]).expect("valid shape");
+        let points = vec![30.0f32, 40.0, 50.0, 60.0];
+        cpu_tensor_f32(shape, &points).map(|t| vec![t])
+    });
+    MockGpuSession::new(
+        device,
+        vec![TensorShape::new([1, 3, input_side as usize, input_side as usize]).expect("valid shape")],
+        vec![TensorShape::new([1, 4]).expect("valid shape")],
+        forward,
+    )
 }

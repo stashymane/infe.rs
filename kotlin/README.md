@@ -23,8 +23,9 @@ val processor = CpuImageProcessor() // image processing utils for the CPU
 
 cameraSource.forEach { frame ->
     inferenceScope { // memory cleanup scope - processing functions are only provided within this scope
-        val input = processor.process(frame, options)
-        val outputs = session.run(input)
+        val image = HostImage.fromBytes(frame.bytes, frame.width, frame.height, frame.format)
+        val input = processor.process(image, options)
+        val outputs = session.infer(input)
         outputFlow.emit(outputs.first().readFloats())
     }
 }

@@ -5,26 +5,17 @@ import kotlin.test.assertEquals
 
 class DeviceTest {
     @Test
-    fun cpuDeviceFactory() {
-        val device = Device.cpu()
-        assertEquals(DeviceKind.Cpu, device.kind)
-        assertEquals(0u, device.id)
-        assertEquals("CPU", device.name)
+    fun cpuDeviceSingleton() {
+        assertEquals(DeviceKind.Cpu, CpuDevice.info.kind)
+        assertEquals(0u, CpuDevice.info.id)
+        assertEquals("CPU", CpuDevice.info.name)
     }
 
     @Test
-    fun gpuDeviceFactory() {
-        val device = Device.gpu(0u)
-        assertEquals(DeviceKind.Gpu, device.kind)
-        assertEquals(0u, device.id)
-        assertEquals("GPU:0", device.name)
-    }
-
-    @Test
-    fun npuDeviceFactory() {
-        val device = Device.npu(0u)
-        assertEquals(DeviceKind.Npu, device.kind)
-        assertEquals(0u, device.id)
-        assertEquals("NPU:0", device.name)
+    fun deviceInfoRecord() {
+        val info = DeviceInfo(DeviceKind.Gpu, 0u, "GPU:0")
+        assertEquals(DeviceKind.Gpu, info.kind)
+        assertEquals(0u, info.id)
+        assertEquals("GPU:0", info.name)
     }
 }

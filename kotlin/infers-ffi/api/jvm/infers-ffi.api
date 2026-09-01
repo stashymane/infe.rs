@@ -1,35 +1,3 @@
-public abstract class dev/stashy/infers/ffi/BackendConfig : dev/stashy/infers/ffi/Disposable {
-	public fun close ()V
-}
-
-public final class dev/stashy/infers/ffi/BackendConfig$Vulkan : dev/stashy/infers/ffi/BackendConfig {
-	public fun <init> (Ldev/stashy/infers/ffi/GpuContext;Ljava/lang/String;)V
-	public final fun component1 ()Ldev/stashy/infers/ffi/GpuContext;
-	public final fun component2 ()Ljava/lang/String;
-	public final fun copy (Ldev/stashy/infers/ffi/GpuContext;Ljava/lang/String;)Ldev/stashy/infers/ffi/BackendConfig$Vulkan;
-	public static synthetic fun copy$default (Ldev/stashy/infers/ffi/BackendConfig$Vulkan;Ldev/stashy/infers/ffi/GpuContext;Ljava/lang/String;ILjava/lang/Object;)Ldev/stashy/infers/ffi/BackendConfig$Vulkan;
-	public fun destroy ()V
-	public fun equals (Ljava/lang/Object;)Z
-	public final fun getContext ()Ldev/stashy/infers/ffi/GpuContext;
-	public final fun getMethod ()Ljava/lang/String;
-	public fun hashCode ()I
-	public fun toString ()Ljava/lang/String;
-}
-
-public final class dev/stashy/infers/ffi/BackendConfig$Xnnpack : dev/stashy/infers/ffi/BackendConfig {
-	public synthetic fun <init> (ILjava/lang/String;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
-	public final fun component1-pVg5ArA ()I
-	public final fun component2 ()Ljava/lang/String;
-	public final fun copy-qim9Vi0 (ILjava/lang/String;)Ldev/stashy/infers/ffi/BackendConfig$Xnnpack;
-	public static synthetic fun copy-qim9Vi0$default (Ldev/stashy/infers/ffi/BackendConfig$Xnnpack;ILjava/lang/String;ILjava/lang/Object;)Ldev/stashy/infers/ffi/BackendConfig$Xnnpack;
-	public fun destroy ()V
-	public fun equals (Ljava/lang/Object;)Z
-	public final fun getMethod ()Ljava/lang/String;
-	public final fun getNumThreads-pVg5ArA ()I
-	public fun hashCode ()I
-	public fun toString ()Ljava/lang/String;
-}
-
 public final class dev/stashy/infers/ffi/ByteBuffer {
 	public static final synthetic fun box-impl (Ljava/nio/ByteBuffer;)Ldev/stashy/infers/ffi/ByteBuffer;
 	public static fun constructor-impl (Ljava/nio/ByteBuffer;)Ljava/nio/ByteBuffer;
@@ -61,6 +29,116 @@ public final class dev/stashy/infers/ffi/ByteBuffer {
 	public final synthetic fun unbox-impl ()Ljava/nio/ByteBuffer;
 }
 
+public class dev/stashy/infers/ffi/CpuDevice : dev/stashy/infers/ffi/CpuDeviceInterface, dev/stashy/infers/ffi/Disposable {
+	public static final field Companion Ldev/stashy/infers/ffi/CpuDevice$Companion;
+	public fun <init> ()V
+	public fun <init> (Lcom/sun/jna/Pointer;)V
+	public fun <init> (Ldev/stashy/infers/ffi/NoPointer;)V
+	public fun close ()V
+	public fun destroy ()V
+	protected final fun getCleanable ()Ldev/stashy/infers/ffi/UniffiCleaner$Cleanable;
+	protected final fun getPointer ()Lcom/sun/jna/Pointer;
+	public fun info ()Ldev/stashy/infers/ffi/DeviceInfo;
+	public final fun uniffiClonePointer ()Lcom/sun/jna/Pointer;
+}
+
+public final class dev/stashy/infers/ffi/CpuDevice$Companion {
+}
+
+public abstract interface class dev/stashy/infers/ffi/CpuDeviceInterface {
+	public static final field Companion Ldev/stashy/infers/ffi/CpuDeviceInterface$Companion;
+	public abstract fun info ()Ldev/stashy/infers/ffi/DeviceInfo;
+}
+
+public final class dev/stashy/infers/ffi/CpuDeviceInterface$Companion {
+}
+
+public class dev/stashy/infers/ffi/CpuImageProcessor : dev/stashy/infers/ffi/CpuImageProcessorInterface, dev/stashy/infers/ffi/Disposable {
+	public static final field Companion Ldev/stashy/infers/ffi/CpuImageProcessor$Companion;
+	public fun <init> ()V
+	public fun <init> (Lcom/sun/jna/Pointer;)V
+	public fun <init> (Ldev/stashy/infers/ffi/NoPointer;)V
+	public fun close ()V
+	public fun destroy ()V
+	public fun deviceInfo ()Ldev/stashy/infers/ffi/DeviceInfo;
+	protected final fun getCleanable ()Ldev/stashy/infers/ffi/UniffiCleaner$Cleanable;
+	protected final fun getPointer ()Lcom/sun/jna/Pointer;
+	public fun process (Ldev/stashy/infers/ffi/HostImage;Ldev/stashy/infers/ffi/ProcessingOptions;)Ldev/stashy/infers/ffi/CpuTensor;
+	public final fun uniffiClonePointer ()Lcom/sun/jna/Pointer;
+}
+
+public final class dev/stashy/infers/ffi/CpuImageProcessor$Companion {
+}
+
+public abstract interface class dev/stashy/infers/ffi/CpuImageProcessorInterface {
+	public static final field Companion Ldev/stashy/infers/ffi/CpuImageProcessorInterface$Companion;
+	public abstract fun deviceInfo ()Ldev/stashy/infers/ffi/DeviceInfo;
+	public abstract fun process (Ldev/stashy/infers/ffi/HostImage;Ldev/stashy/infers/ffi/ProcessingOptions;)Ldev/stashy/infers/ffi/CpuTensor;
+}
+
+public final class dev/stashy/infers/ffi/CpuImageProcessorInterface$Companion {
+}
+
+public class dev/stashy/infers/ffi/CpuSession : dev/stashy/infers/ffi/CpuSessionInterface, dev/stashy/infers/ffi/Disposable {
+	public static final field Companion Ldev/stashy/infers/ffi/CpuSession$Companion;
+	public fun <init> (Lcom/sun/jna/Pointer;)V
+	public fun <init> (Ldev/stashy/infers/ffi/NoPointer;)V
+	public fun close ()V
+	public fun destroy ()V
+	public fun deviceInfo ()Ldev/stashy/infers/ffi/DeviceInfo;
+	protected final fun getCleanable ()Ldev/stashy/infers/ffi/UniffiCleaner$Cleanable;
+	protected final fun getPointer ()Lcom/sun/jna/Pointer;
+	public fun inputShapes ()Ljava/util/List;
+	public fun outputShapes ()Ljava/util/List;
+	public fun run (Ljava/util/List;)Ljava/util/List;
+	public final fun uniffiClonePointer ()Lcom/sun/jna/Pointer;
+}
+
+public final class dev/stashy/infers/ffi/CpuSession$Companion {
+}
+
+public abstract interface class dev/stashy/infers/ffi/CpuSessionInterface {
+	public static final field Companion Ldev/stashy/infers/ffi/CpuSessionInterface$Companion;
+	public abstract fun deviceInfo ()Ldev/stashy/infers/ffi/DeviceInfo;
+	public abstract fun inputShapes ()Ljava/util/List;
+	public abstract fun outputShapes ()Ljava/util/List;
+	public abstract fun run (Ljava/util/List;)Ljava/util/List;
+}
+
+public final class dev/stashy/infers/ffi/CpuSessionInterface$Companion {
+}
+
+public class dev/stashy/infers/ffi/CpuTensor : dev/stashy/infers/ffi/CpuTensorInterface, dev/stashy/infers/ffi/Disposable {
+	public static final field Companion Ldev/stashy/infers/ffi/CpuTensor$Companion;
+	public fun <init> (Lcom/sun/jna/Pointer;)V
+	public fun <init> (Ldev/stashy/infers/ffi/NoPointer;)V
+	public fun byteSize-s-VKNKU ()J
+	public fun close ()V
+	public fun destroy ()V
+	public fun deviceInfo ()Ldev/stashy/infers/ffi/DeviceInfo;
+	public fun dtype ()Ldev/stashy/infers/ffi/DataType;
+	protected final fun getCleanable ()Ldev/stashy/infers/ffi/UniffiCleaner$Cleanable;
+	protected final fun getPointer ()Lcom/sun/jna/Pointer;
+	public fun readBytes ()[B
+	public fun shape ()Ldev/stashy/infers/ffi/TensorShape;
+	public final fun uniffiClonePointer ()Lcom/sun/jna/Pointer;
+}
+
+public final class dev/stashy/infers/ffi/CpuTensor$Companion {
+}
+
+public abstract interface class dev/stashy/infers/ffi/CpuTensorInterface {
+	public static final field Companion Ldev/stashy/infers/ffi/CpuTensorInterface$Companion;
+	public abstract fun byteSize-s-VKNKU ()J
+	public abstract fun deviceInfo ()Ldev/stashy/infers/ffi/DeviceInfo;
+	public abstract fun dtype ()Ldev/stashy/infers/ffi/DataType;
+	public abstract fun readBytes ()[B
+	public abstract fun shape ()Ldev/stashy/infers/ffi/TensorShape;
+}
+
+public final class dev/stashy/infers/ffi/CpuTensorInterface$Companion {
+}
+
 public final class dev/stashy/infers/ffi/DataType : java/lang/Enum {
 	public static final field Companion Ldev/stashy/infers/ffi/DataType$Companion;
 	public static final field F16 Ldev/stashy/infers/ffi/DataType;
@@ -79,14 +157,14 @@ public final class dev/stashy/infers/ffi/DataType : java/lang/Enum {
 public final class dev/stashy/infers/ffi/DataType$Companion {
 }
 
-public final class dev/stashy/infers/ffi/Device {
-	public static final field Companion Ldev/stashy/infers/ffi/Device$Companion;
+public final class dev/stashy/infers/ffi/DeviceInfo {
+	public static final field Companion Ldev/stashy/infers/ffi/DeviceInfo$Companion;
 	public synthetic fun <init> (Ldev/stashy/infers/ffi/DeviceKind;JLjava/lang/String;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun component1 ()Ldev/stashy/infers/ffi/DeviceKind;
 	public final fun component2-s-VKNKU ()J
 	public final fun component3 ()Ljava/lang/String;
-	public final fun copy-z13BHRw (Ldev/stashy/infers/ffi/DeviceKind;JLjava/lang/String;)Ldev/stashy/infers/ffi/Device;
-	public static synthetic fun copy-z13BHRw$default (Ldev/stashy/infers/ffi/Device;Ldev/stashy/infers/ffi/DeviceKind;JLjava/lang/String;ILjava/lang/Object;)Ldev/stashy/infers/ffi/Device;
+	public final fun copy-z13BHRw (Ldev/stashy/infers/ffi/DeviceKind;JLjava/lang/String;)Ldev/stashy/infers/ffi/DeviceInfo;
+	public static synthetic fun copy-z13BHRw$default (Ldev/stashy/infers/ffi/DeviceInfo;Ldev/stashy/infers/ffi/DeviceKind;JLjava/lang/String;ILjava/lang/Object;)Ldev/stashy/infers/ffi/DeviceInfo;
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getId-s-VKNKU ()J
 	public final fun getKind ()Ldev/stashy/infers/ffi/DeviceKind;
@@ -98,7 +176,7 @@ public final class dev/stashy/infers/ffi/Device {
 	public fun toString ()Ljava/lang/String;
 }
 
-public final class dev/stashy/infers/ffi/Device$Companion {
+public final class dev/stashy/infers/ffi/DeviceInfo$Companion {
 }
 
 public final class dev/stashy/infers/ffi/DeviceKind : java/lang/Enum {
@@ -132,13 +210,14 @@ public class dev/stashy/infers/ffi/FfiBackend : dev/stashy/infers/ffi/Disposable
 	public fun <init> ()V
 	public fun <init> (Lcom/sun/jna/Pointer;)V
 	public fun <init> (Ldev/stashy/infers/ffi/NoPointer;)V
-	public fun availableDevices ()Ljava/util/List;
 	public fun close ()V
 	public fun destroy ()V
 	protected final fun getCleanable ()Ldev/stashy/infers/ffi/UniffiCleaner$Cleanable;
 	protected final fun getPointer ()Lcom/sun/jna/Pointer;
-	public fun loadModel ([BLdev/stashy/infers/ffi/BackendConfig;)Ldev/stashy/infers/ffi/ModelSession;
-	public fun loadModelFromFile (Ljava/lang/String;Ldev/stashy/infers/ffi/BackendConfig;)Ldev/stashy/infers/ffi/ModelSession;
+	public fun loadVulkan ([BLdev/stashy/infers/ffi/GpuDevice;Ldev/stashy/infers/ffi/VulkanOptions;)Ldev/stashy/infers/ffi/GpuSession;
+	public fun loadVulkanFromFile (Ljava/lang/String;Ldev/stashy/infers/ffi/GpuDevice;Ldev/stashy/infers/ffi/VulkanOptions;)Ldev/stashy/infers/ffi/GpuSession;
+	public fun loadXnnpack ([BLdev/stashy/infers/ffi/XnnpackOptions;)Ldev/stashy/infers/ffi/CpuSession;
+	public fun loadXnnpackFromFile (Ljava/lang/String;Ldev/stashy/infers/ffi/XnnpackOptions;)Ldev/stashy/infers/ffi/CpuSession;
 	public final fun uniffiClonePointer ()Lcom/sun/jna/Pointer;
 }
 
@@ -147,9 +226,10 @@ public final class dev/stashy/infers/ffi/FfiBackend$Companion {
 
 public abstract interface class dev/stashy/infers/ffi/FfiBackendInterface {
 	public static final field Companion Ldev/stashy/infers/ffi/FfiBackendInterface$Companion;
-	public abstract fun availableDevices ()Ljava/util/List;
-	public abstract fun loadModel ([BLdev/stashy/infers/ffi/BackendConfig;)Ldev/stashy/infers/ffi/ModelSession;
-	public abstract fun loadModelFromFile (Ljava/lang/String;Ldev/stashy/infers/ffi/BackendConfig;)Ldev/stashy/infers/ffi/ModelSession;
+	public abstract fun loadVulkan ([BLdev/stashy/infers/ffi/GpuDevice;Ldev/stashy/infers/ffi/VulkanOptions;)Ldev/stashy/infers/ffi/GpuSession;
+	public abstract fun loadVulkanFromFile (Ljava/lang/String;Ldev/stashy/infers/ffi/GpuDevice;Ldev/stashy/infers/ffi/VulkanOptions;)Ldev/stashy/infers/ffi/GpuSession;
+	public abstract fun loadXnnpack ([BLdev/stashy/infers/ffi/XnnpackOptions;)Ldev/stashy/infers/ffi/CpuSession;
+	public abstract fun loadXnnpackFromFile (Ljava/lang/String;Ldev/stashy/infers/ffi/XnnpackOptions;)Ldev/stashy/infers/ffi/CpuSession;
 }
 
 public final class dev/stashy/infers/ffi/FfiBackendInterface$Companion {
@@ -210,26 +290,6 @@ public final class dev/stashy/infers/ffi/FfiConverterOptionalString : dev/stashy
 	public fun write-OHYOuyI (Ljava/lang/String;Ljava/nio/ByteBuffer;)V
 }
 
-public final class dev/stashy/infers/ffi/FfiConverterOptionalTypeGpuContext : dev/stashy/infers/ffi/FfiConverterRustBuffer {
-	public static final field INSTANCE Ldev/stashy/infers/ffi/FfiConverterOptionalTypeGpuContext;
-	public fun allocationSize-I7RO_PI (Ldev/stashy/infers/ffi/GpuContext;)J
-	public synthetic fun allocationSize-I7RO_PI (Ljava/lang/Object;)J
-	public fun lift (Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;)Ldev/stashy/infers/ffi/GpuContext;
-	public synthetic fun lift (Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;)Ljava/lang/Object;
-	public synthetic fun lift (Ljava/lang/Object;)Ljava/lang/Object;
-	public fun liftFromRustBuffer (Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;)Ldev/stashy/infers/ffi/GpuContext;
-	public synthetic fun liftFromRustBuffer (Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;)Ljava/lang/Object;
-	public fun lower (Ldev/stashy/infers/ffi/GpuContext;)Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;
-	public synthetic fun lower (Ljava/lang/Object;)Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;
-	public synthetic fun lower (Ljava/lang/Object;)Ljava/lang/Object;
-	public fun lowerIntoRustBuffer (Ldev/stashy/infers/ffi/GpuContext;)Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;
-	public synthetic fun lowerIntoRustBuffer (Ljava/lang/Object;)Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;
-	public fun read-JPGhLiY (Ljava/nio/ByteBuffer;)Ldev/stashy/infers/ffi/GpuContext;
-	public synthetic fun read-JPGhLiY (Ljava/nio/ByteBuffer;)Ljava/lang/Object;
-	public fun write-OHYOuyI (Ldev/stashy/infers/ffi/GpuContext;Ljava/nio/ByteBuffer;)V
-	public synthetic fun write-OHYOuyI (Ljava/lang/Object;Ljava/nio/ByteBuffer;)V
-}
-
 public abstract interface class dev/stashy/infers/ffi/FfiConverterRustBuffer : dev/stashy/infers/ffi/FfiConverter {
 	public fun lift (Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;)Ljava/lang/Object;
 	public synthetic fun lift (Ljava/lang/Object;)Ljava/lang/Object;
@@ -244,8 +304,8 @@ public final class dev/stashy/infers/ffi/FfiConverterRustBuffer$DefaultImpls {
 	public static fun lowerIntoRustBuffer (Ldev/stashy/infers/ffi/FfiConverterRustBuffer;Ljava/lang/Object;)Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;
 }
 
-public final class dev/stashy/infers/ffi/FfiConverterSequenceTypeDevice : dev/stashy/infers/ffi/FfiConverterRustBuffer {
-	public static final field INSTANCE Ldev/stashy/infers/ffi/FfiConverterSequenceTypeDevice;
+public final class dev/stashy/infers/ffi/FfiConverterSequenceTypeCpuTensor : dev/stashy/infers/ffi/FfiConverterRustBuffer {
+	public static final field INSTANCE Ldev/stashy/infers/ffi/FfiConverterSequenceTypeCpuTensor;
 	public synthetic fun allocationSize-I7RO_PI (Ljava/lang/Object;)J
 	public fun allocationSize-I7RO_PI (Ljava/util/List;)J
 	public synthetic fun lift (Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;)Ljava/lang/Object;
@@ -264,8 +324,8 @@ public final class dev/stashy/infers/ffi/FfiConverterSequenceTypeDevice : dev/st
 	public fun write-OHYOuyI (Ljava/util/List;Ljava/nio/ByteBuffer;)V
 }
 
-public final class dev/stashy/infers/ffi/FfiConverterSequenceTypeTensorBuffer : dev/stashy/infers/ffi/FfiConverterRustBuffer {
-	public static final field INSTANCE Ldev/stashy/infers/ffi/FfiConverterSequenceTypeTensorBuffer;
+public final class dev/stashy/infers/ffi/FfiConverterSequenceTypeGpuTensor : dev/stashy/infers/ffi/FfiConverterRustBuffer {
+	public static final field INSTANCE Ldev/stashy/infers/ffi/FfiConverterSequenceTypeGpuTensor;
 	public synthetic fun allocationSize-I7RO_PI (Ljava/lang/Object;)J
 	public fun allocationSize-I7RO_PI (Ljava/util/List;)J
 	public synthetic fun lift (Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;)Ljava/lang/Object;
@@ -342,23 +402,75 @@ public final class dev/stashy/infers/ffi/FfiConverterString : dev/stashy/infers/
 	public fun write-OHYOuyI (Ljava/lang/String;Ljava/nio/ByteBuffer;)V
 }
 
-public final class dev/stashy/infers/ffi/FfiConverterTypeBackendConfig : dev/stashy/infers/ffi/FfiConverterRustBuffer {
-	public static final field INSTANCE Ldev/stashy/infers/ffi/FfiConverterTypeBackendConfig;
-	public fun allocationSize-I7RO_PI (Ldev/stashy/infers/ffi/BackendConfig;)J
+public final class dev/stashy/infers/ffi/FfiConverterTypeCpuDevice : dev/stashy/infers/ffi/FfiConverter {
+	public static final field INSTANCE Ldev/stashy/infers/ffi/FfiConverterTypeCpuDevice;
+	public fun allocationSize-I7RO_PI (Ldev/stashy/infers/ffi/CpuDevice;)J
 	public synthetic fun allocationSize-I7RO_PI (Ljava/lang/Object;)J
-	public fun lift (Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;)Ldev/stashy/infers/ffi/BackendConfig;
-	public synthetic fun lift (Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;)Ljava/lang/Object;
+	public fun lift (Lcom/sun/jna/Pointer;)Ldev/stashy/infers/ffi/CpuDevice;
 	public synthetic fun lift (Ljava/lang/Object;)Ljava/lang/Object;
-	public fun liftFromRustBuffer (Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;)Ldev/stashy/infers/ffi/BackendConfig;
+	public fun liftFromRustBuffer (Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;)Ldev/stashy/infers/ffi/CpuDevice;
 	public synthetic fun liftFromRustBuffer (Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;)Ljava/lang/Object;
-	public fun lower (Ldev/stashy/infers/ffi/BackendConfig;)Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;
-	public synthetic fun lower (Ljava/lang/Object;)Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;
+	public fun lower (Ldev/stashy/infers/ffi/CpuDevice;)Lcom/sun/jna/Pointer;
 	public synthetic fun lower (Ljava/lang/Object;)Ljava/lang/Object;
-	public fun lowerIntoRustBuffer (Ldev/stashy/infers/ffi/BackendConfig;)Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;
+	public fun lowerIntoRustBuffer (Ldev/stashy/infers/ffi/CpuDevice;)Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;
 	public synthetic fun lowerIntoRustBuffer (Ljava/lang/Object;)Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;
-	public fun read-JPGhLiY (Ljava/nio/ByteBuffer;)Ldev/stashy/infers/ffi/BackendConfig;
+	public fun read-JPGhLiY (Ljava/nio/ByteBuffer;)Ldev/stashy/infers/ffi/CpuDevice;
 	public synthetic fun read-JPGhLiY (Ljava/nio/ByteBuffer;)Ljava/lang/Object;
-	public fun write-OHYOuyI (Ldev/stashy/infers/ffi/BackendConfig;Ljava/nio/ByteBuffer;)V
+	public fun write-OHYOuyI (Ldev/stashy/infers/ffi/CpuDevice;Ljava/nio/ByteBuffer;)V
+	public synthetic fun write-OHYOuyI (Ljava/lang/Object;Ljava/nio/ByteBuffer;)V
+}
+
+public final class dev/stashy/infers/ffi/FfiConverterTypeCpuImageProcessor : dev/stashy/infers/ffi/FfiConverter {
+	public static final field INSTANCE Ldev/stashy/infers/ffi/FfiConverterTypeCpuImageProcessor;
+	public fun allocationSize-I7RO_PI (Ldev/stashy/infers/ffi/CpuImageProcessor;)J
+	public synthetic fun allocationSize-I7RO_PI (Ljava/lang/Object;)J
+	public fun lift (Lcom/sun/jna/Pointer;)Ldev/stashy/infers/ffi/CpuImageProcessor;
+	public synthetic fun lift (Ljava/lang/Object;)Ljava/lang/Object;
+	public fun liftFromRustBuffer (Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;)Ldev/stashy/infers/ffi/CpuImageProcessor;
+	public synthetic fun liftFromRustBuffer (Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;)Ljava/lang/Object;
+	public fun lower (Ldev/stashy/infers/ffi/CpuImageProcessor;)Lcom/sun/jna/Pointer;
+	public synthetic fun lower (Ljava/lang/Object;)Ljava/lang/Object;
+	public fun lowerIntoRustBuffer (Ldev/stashy/infers/ffi/CpuImageProcessor;)Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;
+	public synthetic fun lowerIntoRustBuffer (Ljava/lang/Object;)Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;
+	public fun read-JPGhLiY (Ljava/nio/ByteBuffer;)Ldev/stashy/infers/ffi/CpuImageProcessor;
+	public synthetic fun read-JPGhLiY (Ljava/nio/ByteBuffer;)Ljava/lang/Object;
+	public fun write-OHYOuyI (Ldev/stashy/infers/ffi/CpuImageProcessor;Ljava/nio/ByteBuffer;)V
+	public synthetic fun write-OHYOuyI (Ljava/lang/Object;Ljava/nio/ByteBuffer;)V
+}
+
+public final class dev/stashy/infers/ffi/FfiConverterTypeCpuSession : dev/stashy/infers/ffi/FfiConverter {
+	public static final field INSTANCE Ldev/stashy/infers/ffi/FfiConverterTypeCpuSession;
+	public fun allocationSize-I7RO_PI (Ldev/stashy/infers/ffi/CpuSession;)J
+	public synthetic fun allocationSize-I7RO_PI (Ljava/lang/Object;)J
+	public fun lift (Lcom/sun/jna/Pointer;)Ldev/stashy/infers/ffi/CpuSession;
+	public synthetic fun lift (Ljava/lang/Object;)Ljava/lang/Object;
+	public fun liftFromRustBuffer (Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;)Ldev/stashy/infers/ffi/CpuSession;
+	public synthetic fun liftFromRustBuffer (Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;)Ljava/lang/Object;
+	public fun lower (Ldev/stashy/infers/ffi/CpuSession;)Lcom/sun/jna/Pointer;
+	public synthetic fun lower (Ljava/lang/Object;)Ljava/lang/Object;
+	public fun lowerIntoRustBuffer (Ldev/stashy/infers/ffi/CpuSession;)Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;
+	public synthetic fun lowerIntoRustBuffer (Ljava/lang/Object;)Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;
+	public fun read-JPGhLiY (Ljava/nio/ByteBuffer;)Ldev/stashy/infers/ffi/CpuSession;
+	public synthetic fun read-JPGhLiY (Ljava/nio/ByteBuffer;)Ljava/lang/Object;
+	public fun write-OHYOuyI (Ldev/stashy/infers/ffi/CpuSession;Ljava/nio/ByteBuffer;)V
+	public synthetic fun write-OHYOuyI (Ljava/lang/Object;Ljava/nio/ByteBuffer;)V
+}
+
+public final class dev/stashy/infers/ffi/FfiConverterTypeCpuTensor : dev/stashy/infers/ffi/FfiConverter {
+	public static final field INSTANCE Ldev/stashy/infers/ffi/FfiConverterTypeCpuTensor;
+	public fun allocationSize-I7RO_PI (Ldev/stashy/infers/ffi/CpuTensor;)J
+	public synthetic fun allocationSize-I7RO_PI (Ljava/lang/Object;)J
+	public fun lift (Lcom/sun/jna/Pointer;)Ldev/stashy/infers/ffi/CpuTensor;
+	public synthetic fun lift (Ljava/lang/Object;)Ljava/lang/Object;
+	public fun liftFromRustBuffer (Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;)Ldev/stashy/infers/ffi/CpuTensor;
+	public synthetic fun liftFromRustBuffer (Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;)Ljava/lang/Object;
+	public fun lower (Ldev/stashy/infers/ffi/CpuTensor;)Lcom/sun/jna/Pointer;
+	public synthetic fun lower (Ljava/lang/Object;)Ljava/lang/Object;
+	public fun lowerIntoRustBuffer (Ldev/stashy/infers/ffi/CpuTensor;)Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;
+	public synthetic fun lowerIntoRustBuffer (Ljava/lang/Object;)Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;
+	public fun read-JPGhLiY (Ljava/nio/ByteBuffer;)Ldev/stashy/infers/ffi/CpuTensor;
+	public synthetic fun read-JPGhLiY (Ljava/nio/ByteBuffer;)Ljava/lang/Object;
+	public fun write-OHYOuyI (Ldev/stashy/infers/ffi/CpuTensor;Ljava/nio/ByteBuffer;)V
 	public synthetic fun write-OHYOuyI (Ljava/lang/Object;Ljava/nio/ByteBuffer;)V
 }
 
@@ -382,23 +494,23 @@ public final class dev/stashy/infers/ffi/FfiConverterTypeDataType : dev/stashy/i
 	public synthetic fun write-OHYOuyI (Ljava/lang/Object;Ljava/nio/ByteBuffer;)V
 }
 
-public final class dev/stashy/infers/ffi/FfiConverterTypeDevice : dev/stashy/infers/ffi/FfiConverterRustBuffer {
-	public static final field INSTANCE Ldev/stashy/infers/ffi/FfiConverterTypeDevice;
-	public fun allocationSize-I7RO_PI (Ldev/stashy/infers/ffi/Device;)J
+public final class dev/stashy/infers/ffi/FfiConverterTypeDeviceInfo : dev/stashy/infers/ffi/FfiConverterRustBuffer {
+	public static final field INSTANCE Ldev/stashy/infers/ffi/FfiConverterTypeDeviceInfo;
+	public fun allocationSize-I7RO_PI (Ldev/stashy/infers/ffi/DeviceInfo;)J
 	public synthetic fun allocationSize-I7RO_PI (Ljava/lang/Object;)J
-	public fun lift (Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;)Ldev/stashy/infers/ffi/Device;
+	public fun lift (Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;)Ldev/stashy/infers/ffi/DeviceInfo;
 	public synthetic fun lift (Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;)Ljava/lang/Object;
 	public synthetic fun lift (Ljava/lang/Object;)Ljava/lang/Object;
-	public fun liftFromRustBuffer (Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;)Ldev/stashy/infers/ffi/Device;
+	public fun liftFromRustBuffer (Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;)Ldev/stashy/infers/ffi/DeviceInfo;
 	public synthetic fun liftFromRustBuffer (Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;)Ljava/lang/Object;
-	public fun lower (Ldev/stashy/infers/ffi/Device;)Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;
+	public fun lower (Ldev/stashy/infers/ffi/DeviceInfo;)Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;
 	public synthetic fun lower (Ljava/lang/Object;)Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;
 	public synthetic fun lower (Ljava/lang/Object;)Ljava/lang/Object;
-	public fun lowerIntoRustBuffer (Ldev/stashy/infers/ffi/Device;)Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;
+	public fun lowerIntoRustBuffer (Ldev/stashy/infers/ffi/DeviceInfo;)Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;
 	public synthetic fun lowerIntoRustBuffer (Ljava/lang/Object;)Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;
-	public fun read-JPGhLiY (Ljava/nio/ByteBuffer;)Ldev/stashy/infers/ffi/Device;
+	public fun read-JPGhLiY (Ljava/nio/ByteBuffer;)Ldev/stashy/infers/ffi/DeviceInfo;
 	public synthetic fun read-JPGhLiY (Ljava/nio/ByteBuffer;)Ljava/lang/Object;
-	public fun write-OHYOuyI (Ldev/stashy/infers/ffi/Device;Ljava/nio/ByteBuffer;)V
+	public fun write-OHYOuyI (Ldev/stashy/infers/ffi/DeviceInfo;Ljava/nio/ByteBuffer;)V
 	public synthetic fun write-OHYOuyI (Ljava/lang/Object;Ljava/nio/ByteBuffer;)V
 }
 
@@ -460,21 +572,93 @@ public final class dev/stashy/infers/ffi/FfiConverterTypeFitMode : dev/stashy/in
 	public synthetic fun write-OHYOuyI (Ljava/lang/Object;Ljava/nio/ByteBuffer;)V
 }
 
-public final class dev/stashy/infers/ffi/FfiConverterTypeGpuContext : dev/stashy/infers/ffi/FfiConverter {
-	public static final field INSTANCE Ldev/stashy/infers/ffi/FfiConverterTypeGpuContext;
-	public fun allocationSize-I7RO_PI (Ldev/stashy/infers/ffi/GpuContext;)J
+public final class dev/stashy/infers/ffi/FfiConverterTypeGpuDevice : dev/stashy/infers/ffi/FfiConverter {
+	public static final field INSTANCE Ldev/stashy/infers/ffi/FfiConverterTypeGpuDevice;
+	public fun allocationSize-I7RO_PI (Ldev/stashy/infers/ffi/GpuDevice;)J
 	public synthetic fun allocationSize-I7RO_PI (Ljava/lang/Object;)J
-	public fun lift (Lcom/sun/jna/Pointer;)Ldev/stashy/infers/ffi/GpuContext;
+	public fun lift (Lcom/sun/jna/Pointer;)Ldev/stashy/infers/ffi/GpuDevice;
 	public synthetic fun lift (Ljava/lang/Object;)Ljava/lang/Object;
-	public fun liftFromRustBuffer (Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;)Ldev/stashy/infers/ffi/GpuContext;
+	public fun liftFromRustBuffer (Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;)Ldev/stashy/infers/ffi/GpuDevice;
 	public synthetic fun liftFromRustBuffer (Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;)Ljava/lang/Object;
-	public fun lower (Ldev/stashy/infers/ffi/GpuContext;)Lcom/sun/jna/Pointer;
+	public fun lower (Ldev/stashy/infers/ffi/GpuDevice;)Lcom/sun/jna/Pointer;
 	public synthetic fun lower (Ljava/lang/Object;)Ljava/lang/Object;
-	public fun lowerIntoRustBuffer (Ldev/stashy/infers/ffi/GpuContext;)Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;
+	public fun lowerIntoRustBuffer (Ldev/stashy/infers/ffi/GpuDevice;)Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;
 	public synthetic fun lowerIntoRustBuffer (Ljava/lang/Object;)Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;
-	public fun read-JPGhLiY (Ljava/nio/ByteBuffer;)Ldev/stashy/infers/ffi/GpuContext;
+	public fun read-JPGhLiY (Ljava/nio/ByteBuffer;)Ldev/stashy/infers/ffi/GpuDevice;
 	public synthetic fun read-JPGhLiY (Ljava/nio/ByteBuffer;)Ljava/lang/Object;
-	public fun write-OHYOuyI (Ldev/stashy/infers/ffi/GpuContext;Ljava/nio/ByteBuffer;)V
+	public fun write-OHYOuyI (Ldev/stashy/infers/ffi/GpuDevice;Ljava/nio/ByteBuffer;)V
+	public synthetic fun write-OHYOuyI (Ljava/lang/Object;Ljava/nio/ByteBuffer;)V
+}
+
+public final class dev/stashy/infers/ffi/FfiConverterTypeGpuImage : dev/stashy/infers/ffi/FfiConverter {
+	public static final field INSTANCE Ldev/stashy/infers/ffi/FfiConverterTypeGpuImage;
+	public fun allocationSize-I7RO_PI (Ldev/stashy/infers/ffi/GpuImage;)J
+	public synthetic fun allocationSize-I7RO_PI (Ljava/lang/Object;)J
+	public fun lift (Lcom/sun/jna/Pointer;)Ldev/stashy/infers/ffi/GpuImage;
+	public synthetic fun lift (Ljava/lang/Object;)Ljava/lang/Object;
+	public fun liftFromRustBuffer (Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;)Ldev/stashy/infers/ffi/GpuImage;
+	public synthetic fun liftFromRustBuffer (Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;)Ljava/lang/Object;
+	public fun lower (Ldev/stashy/infers/ffi/GpuImage;)Lcom/sun/jna/Pointer;
+	public synthetic fun lower (Ljava/lang/Object;)Ljava/lang/Object;
+	public fun lowerIntoRustBuffer (Ldev/stashy/infers/ffi/GpuImage;)Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;
+	public synthetic fun lowerIntoRustBuffer (Ljava/lang/Object;)Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;
+	public fun read-JPGhLiY (Ljava/nio/ByteBuffer;)Ldev/stashy/infers/ffi/GpuImage;
+	public synthetic fun read-JPGhLiY (Ljava/nio/ByteBuffer;)Ljava/lang/Object;
+	public fun write-OHYOuyI (Ldev/stashy/infers/ffi/GpuImage;Ljava/nio/ByteBuffer;)V
+	public synthetic fun write-OHYOuyI (Ljava/lang/Object;Ljava/nio/ByteBuffer;)V
+}
+
+public final class dev/stashy/infers/ffi/FfiConverterTypeGpuImageProcessor : dev/stashy/infers/ffi/FfiConverter {
+	public static final field INSTANCE Ldev/stashy/infers/ffi/FfiConverterTypeGpuImageProcessor;
+	public fun allocationSize-I7RO_PI (Ldev/stashy/infers/ffi/GpuImageProcessor;)J
+	public synthetic fun allocationSize-I7RO_PI (Ljava/lang/Object;)J
+	public fun lift (Lcom/sun/jna/Pointer;)Ldev/stashy/infers/ffi/GpuImageProcessor;
+	public synthetic fun lift (Ljava/lang/Object;)Ljava/lang/Object;
+	public fun liftFromRustBuffer (Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;)Ldev/stashy/infers/ffi/GpuImageProcessor;
+	public synthetic fun liftFromRustBuffer (Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;)Ljava/lang/Object;
+	public fun lower (Ldev/stashy/infers/ffi/GpuImageProcessor;)Lcom/sun/jna/Pointer;
+	public synthetic fun lower (Ljava/lang/Object;)Ljava/lang/Object;
+	public fun lowerIntoRustBuffer (Ldev/stashy/infers/ffi/GpuImageProcessor;)Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;
+	public synthetic fun lowerIntoRustBuffer (Ljava/lang/Object;)Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;
+	public fun read-JPGhLiY (Ljava/nio/ByteBuffer;)Ldev/stashy/infers/ffi/GpuImageProcessor;
+	public synthetic fun read-JPGhLiY (Ljava/nio/ByteBuffer;)Ljava/lang/Object;
+	public fun write-OHYOuyI (Ldev/stashy/infers/ffi/GpuImageProcessor;Ljava/nio/ByteBuffer;)V
+	public synthetic fun write-OHYOuyI (Ljava/lang/Object;Ljava/nio/ByteBuffer;)V
+}
+
+public final class dev/stashy/infers/ffi/FfiConverterTypeGpuSession : dev/stashy/infers/ffi/FfiConverter {
+	public static final field INSTANCE Ldev/stashy/infers/ffi/FfiConverterTypeGpuSession;
+	public fun allocationSize-I7RO_PI (Ldev/stashy/infers/ffi/GpuSession;)J
+	public synthetic fun allocationSize-I7RO_PI (Ljava/lang/Object;)J
+	public fun lift (Lcom/sun/jna/Pointer;)Ldev/stashy/infers/ffi/GpuSession;
+	public synthetic fun lift (Ljava/lang/Object;)Ljava/lang/Object;
+	public fun liftFromRustBuffer (Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;)Ldev/stashy/infers/ffi/GpuSession;
+	public synthetic fun liftFromRustBuffer (Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;)Ljava/lang/Object;
+	public fun lower (Ldev/stashy/infers/ffi/GpuSession;)Lcom/sun/jna/Pointer;
+	public synthetic fun lower (Ljava/lang/Object;)Ljava/lang/Object;
+	public fun lowerIntoRustBuffer (Ldev/stashy/infers/ffi/GpuSession;)Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;
+	public synthetic fun lowerIntoRustBuffer (Ljava/lang/Object;)Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;
+	public fun read-JPGhLiY (Ljava/nio/ByteBuffer;)Ldev/stashy/infers/ffi/GpuSession;
+	public synthetic fun read-JPGhLiY (Ljava/nio/ByteBuffer;)Ljava/lang/Object;
+	public fun write-OHYOuyI (Ldev/stashy/infers/ffi/GpuSession;Ljava/nio/ByteBuffer;)V
+	public synthetic fun write-OHYOuyI (Ljava/lang/Object;Ljava/nio/ByteBuffer;)V
+}
+
+public final class dev/stashy/infers/ffi/FfiConverterTypeGpuTensor : dev/stashy/infers/ffi/FfiConverter {
+	public static final field INSTANCE Ldev/stashy/infers/ffi/FfiConverterTypeGpuTensor;
+	public fun allocationSize-I7RO_PI (Ldev/stashy/infers/ffi/GpuTensor;)J
+	public synthetic fun allocationSize-I7RO_PI (Ljava/lang/Object;)J
+	public fun lift (Lcom/sun/jna/Pointer;)Ldev/stashy/infers/ffi/GpuTensor;
+	public synthetic fun lift (Ljava/lang/Object;)Ljava/lang/Object;
+	public fun liftFromRustBuffer (Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;)Ldev/stashy/infers/ffi/GpuTensor;
+	public synthetic fun liftFromRustBuffer (Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;)Ljava/lang/Object;
+	public fun lower (Ldev/stashy/infers/ffi/GpuTensor;)Lcom/sun/jna/Pointer;
+	public synthetic fun lower (Ljava/lang/Object;)Ljava/lang/Object;
+	public fun lowerIntoRustBuffer (Ldev/stashy/infers/ffi/GpuTensor;)Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;
+	public synthetic fun lowerIntoRustBuffer (Ljava/lang/Object;)Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;
+	public fun read-JPGhLiY (Ljava/nio/ByteBuffer;)Ldev/stashy/infers/ffi/GpuTensor;
+	public synthetic fun read-JPGhLiY (Ljava/nio/ByteBuffer;)Ljava/lang/Object;
+	public fun write-OHYOuyI (Ldev/stashy/infers/ffi/GpuTensor;Ljava/nio/ByteBuffer;)V
 	public synthetic fun write-OHYOuyI (Ljava/lang/Object;Ljava/nio/ByteBuffer;)V
 }
 
@@ -493,6 +677,24 @@ public final class dev/stashy/infers/ffi/FfiConverterTypeHardwareBufferHandle : 
 	public fun read-JPGhLiY (Ljava/nio/ByteBuffer;)Ldev/stashy/infers/ffi/HardwareBufferHandle;
 	public synthetic fun read-JPGhLiY (Ljava/nio/ByteBuffer;)Ljava/lang/Object;
 	public fun write-OHYOuyI (Ldev/stashy/infers/ffi/HardwareBufferHandle;Ljava/nio/ByteBuffer;)V
+	public synthetic fun write-OHYOuyI (Ljava/lang/Object;Ljava/nio/ByteBuffer;)V
+}
+
+public final class dev/stashy/infers/ffi/FfiConverterTypeHostImage : dev/stashy/infers/ffi/FfiConverter {
+	public static final field INSTANCE Ldev/stashy/infers/ffi/FfiConverterTypeHostImage;
+	public fun allocationSize-I7RO_PI (Ldev/stashy/infers/ffi/HostImage;)J
+	public synthetic fun allocationSize-I7RO_PI (Ljava/lang/Object;)J
+	public fun lift (Lcom/sun/jna/Pointer;)Ldev/stashy/infers/ffi/HostImage;
+	public synthetic fun lift (Ljava/lang/Object;)Ljava/lang/Object;
+	public fun liftFromRustBuffer (Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;)Ldev/stashy/infers/ffi/HostImage;
+	public synthetic fun liftFromRustBuffer (Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;)Ljava/lang/Object;
+	public fun lower (Ldev/stashy/infers/ffi/HostImage;)Lcom/sun/jna/Pointer;
+	public synthetic fun lower (Ljava/lang/Object;)Ljava/lang/Object;
+	public fun lowerIntoRustBuffer (Ldev/stashy/infers/ffi/HostImage;)Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;
+	public synthetic fun lowerIntoRustBuffer (Ljava/lang/Object;)Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;
+	public fun read-JPGhLiY (Ljava/nio/ByteBuffer;)Ldev/stashy/infers/ffi/HostImage;
+	public synthetic fun read-JPGhLiY (Ljava/nio/ByteBuffer;)Ljava/lang/Object;
+	public fun write-OHYOuyI (Ldev/stashy/infers/ffi/HostImage;Ljava/nio/ByteBuffer;)V
 	public synthetic fun write-OHYOuyI (Ljava/lang/Object;Ljava/nio/ByteBuffer;)V
 }
 
@@ -516,24 +718,6 @@ public final class dev/stashy/infers/ffi/FfiConverterTypeImageFormat : dev/stash
 	public synthetic fun write-OHYOuyI (Ljava/lang/Object;Ljava/nio/ByteBuffer;)V
 }
 
-public final class dev/stashy/infers/ffi/FfiConverterTypeImageProcessor : dev/stashy/infers/ffi/FfiConverter {
-	public static final field INSTANCE Ldev/stashy/infers/ffi/FfiConverterTypeImageProcessor;
-	public fun allocationSize-I7RO_PI (Ldev/stashy/infers/ffi/ImageProcessor;)J
-	public synthetic fun allocationSize-I7RO_PI (Ljava/lang/Object;)J
-	public fun lift (Lcom/sun/jna/Pointer;)Ldev/stashy/infers/ffi/ImageProcessor;
-	public synthetic fun lift (Ljava/lang/Object;)Ljava/lang/Object;
-	public fun liftFromRustBuffer (Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;)Ldev/stashy/infers/ffi/ImageProcessor;
-	public synthetic fun liftFromRustBuffer (Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;)Ljava/lang/Object;
-	public fun lower (Ldev/stashy/infers/ffi/ImageProcessor;)Lcom/sun/jna/Pointer;
-	public synthetic fun lower (Ljava/lang/Object;)Ljava/lang/Object;
-	public fun lowerIntoRustBuffer (Ldev/stashy/infers/ffi/ImageProcessor;)Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;
-	public synthetic fun lowerIntoRustBuffer (Ljava/lang/Object;)Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;
-	public fun read-JPGhLiY (Ljava/nio/ByteBuffer;)Ldev/stashy/infers/ffi/ImageProcessor;
-	public synthetic fun read-JPGhLiY (Ljava/nio/ByteBuffer;)Ljava/lang/Object;
-	public fun write-OHYOuyI (Ldev/stashy/infers/ffi/ImageProcessor;Ljava/nio/ByteBuffer;)V
-	public synthetic fun write-OHYOuyI (Ljava/lang/Object;Ljava/nio/ByteBuffer;)V
-}
-
 public final class dev/stashy/infers/ffi/FfiConverterTypeInfersError : dev/stashy/infers/ffi/FfiConverterRustBuffer {
 	public static final field INSTANCE Ldev/stashy/infers/ffi/FfiConverterTypeInfersError;
 	public fun allocationSize-I7RO_PI (Ldev/stashy/infers/ffi/InfersException;)J
@@ -551,24 +735,6 @@ public final class dev/stashy/infers/ffi/FfiConverterTypeInfersError : dev/stash
 	public fun read-JPGhLiY (Ljava/nio/ByteBuffer;)Ldev/stashy/infers/ffi/InfersException;
 	public synthetic fun read-JPGhLiY (Ljava/nio/ByteBuffer;)Ljava/lang/Object;
 	public fun write-OHYOuyI (Ldev/stashy/infers/ffi/InfersException;Ljava/nio/ByteBuffer;)V
-	public synthetic fun write-OHYOuyI (Ljava/lang/Object;Ljava/nio/ByteBuffer;)V
-}
-
-public final class dev/stashy/infers/ffi/FfiConverterTypeModelSession : dev/stashy/infers/ffi/FfiConverter {
-	public static final field INSTANCE Ldev/stashy/infers/ffi/FfiConverterTypeModelSession;
-	public fun allocationSize-I7RO_PI (Ldev/stashy/infers/ffi/ModelSession;)J
-	public synthetic fun allocationSize-I7RO_PI (Ljava/lang/Object;)J
-	public fun lift (Lcom/sun/jna/Pointer;)Ldev/stashy/infers/ffi/ModelSession;
-	public synthetic fun lift (Ljava/lang/Object;)Ljava/lang/Object;
-	public fun liftFromRustBuffer (Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;)Ldev/stashy/infers/ffi/ModelSession;
-	public synthetic fun liftFromRustBuffer (Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;)Ljava/lang/Object;
-	public fun lower (Ldev/stashy/infers/ffi/ModelSession;)Lcom/sun/jna/Pointer;
-	public synthetic fun lower (Ljava/lang/Object;)Ljava/lang/Object;
-	public fun lowerIntoRustBuffer (Ldev/stashy/infers/ffi/ModelSession;)Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;
-	public synthetic fun lowerIntoRustBuffer (Ljava/lang/Object;)Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;
-	public fun read-JPGhLiY (Ljava/nio/ByteBuffer;)Ldev/stashy/infers/ffi/ModelSession;
-	public synthetic fun read-JPGhLiY (Ljava/nio/ByteBuffer;)Ljava/lang/Object;
-	public fun write-OHYOuyI (Ldev/stashy/infers/ffi/ModelSession;Ljava/nio/ByteBuffer;)V
 	public synthetic fun write-OHYOuyI (Ljava/lang/Object;Ljava/nio/ByteBuffer;)V
 }
 
@@ -612,24 +778,6 @@ public final class dev/stashy/infers/ffi/FfiConverterTypeRotation : dev/stashy/i
 	public synthetic fun write-OHYOuyI (Ljava/lang/Object;Ljava/nio/ByteBuffer;)V
 }
 
-public final class dev/stashy/infers/ffi/FfiConverterTypeTensorBuffer : dev/stashy/infers/ffi/FfiConverter {
-	public static final field INSTANCE Ldev/stashy/infers/ffi/FfiConverterTypeTensorBuffer;
-	public fun allocationSize-I7RO_PI (Ldev/stashy/infers/ffi/TensorBuffer;)J
-	public synthetic fun allocationSize-I7RO_PI (Ljava/lang/Object;)J
-	public fun lift (Lcom/sun/jna/Pointer;)Ldev/stashy/infers/ffi/TensorBuffer;
-	public synthetic fun lift (Ljava/lang/Object;)Ljava/lang/Object;
-	public fun liftFromRustBuffer (Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;)Ldev/stashy/infers/ffi/TensorBuffer;
-	public synthetic fun liftFromRustBuffer (Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;)Ljava/lang/Object;
-	public fun lower (Ldev/stashy/infers/ffi/TensorBuffer;)Lcom/sun/jna/Pointer;
-	public synthetic fun lower (Ljava/lang/Object;)Ljava/lang/Object;
-	public fun lowerIntoRustBuffer (Ldev/stashy/infers/ffi/TensorBuffer;)Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;
-	public synthetic fun lowerIntoRustBuffer (Ljava/lang/Object;)Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;
-	public fun read-JPGhLiY (Ljava/nio/ByteBuffer;)Ldev/stashy/infers/ffi/TensorBuffer;
-	public synthetic fun read-JPGhLiY (Ljava/nio/ByteBuffer;)Ljava/lang/Object;
-	public fun write-OHYOuyI (Ldev/stashy/infers/ffi/TensorBuffer;Ljava/nio/ByteBuffer;)V
-	public synthetic fun write-OHYOuyI (Ljava/lang/Object;Ljava/nio/ByteBuffer;)V
-}
-
 public final class dev/stashy/infers/ffi/FfiConverterTypeTensorLayout : dev/stashy/infers/ffi/FfiConverterRustBuffer {
 	public static final field INSTANCE Ldev/stashy/infers/ffi/FfiConverterTypeTensorLayout;
 	public fun allocationSize-I7RO_PI (Ldev/stashy/infers/ffi/TensorLayout;)J
@@ -667,6 +815,46 @@ public final class dev/stashy/infers/ffi/FfiConverterTypeTensorShape : dev/stash
 	public fun read-JPGhLiY (Ljava/nio/ByteBuffer;)Ldev/stashy/infers/ffi/TensorShape;
 	public synthetic fun read-JPGhLiY (Ljava/nio/ByteBuffer;)Ljava/lang/Object;
 	public fun write-OHYOuyI (Ldev/stashy/infers/ffi/TensorShape;Ljava/nio/ByteBuffer;)V
+	public synthetic fun write-OHYOuyI (Ljava/lang/Object;Ljava/nio/ByteBuffer;)V
+}
+
+public final class dev/stashy/infers/ffi/FfiConverterTypeVulkanOptions : dev/stashy/infers/ffi/FfiConverterRustBuffer {
+	public static final field INSTANCE Ldev/stashy/infers/ffi/FfiConverterTypeVulkanOptions;
+	public fun allocationSize-I7RO_PI (Ldev/stashy/infers/ffi/VulkanOptions;)J
+	public synthetic fun allocationSize-I7RO_PI (Ljava/lang/Object;)J
+	public fun lift (Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;)Ldev/stashy/infers/ffi/VulkanOptions;
+	public synthetic fun lift (Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;)Ljava/lang/Object;
+	public synthetic fun lift (Ljava/lang/Object;)Ljava/lang/Object;
+	public fun liftFromRustBuffer (Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;)Ldev/stashy/infers/ffi/VulkanOptions;
+	public synthetic fun liftFromRustBuffer (Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;)Ljava/lang/Object;
+	public fun lower (Ldev/stashy/infers/ffi/VulkanOptions;)Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;
+	public synthetic fun lower (Ljava/lang/Object;)Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;
+	public synthetic fun lower (Ljava/lang/Object;)Ljava/lang/Object;
+	public fun lowerIntoRustBuffer (Ldev/stashy/infers/ffi/VulkanOptions;)Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;
+	public synthetic fun lowerIntoRustBuffer (Ljava/lang/Object;)Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;
+	public fun read-JPGhLiY (Ljava/nio/ByteBuffer;)Ldev/stashy/infers/ffi/VulkanOptions;
+	public synthetic fun read-JPGhLiY (Ljava/nio/ByteBuffer;)Ljava/lang/Object;
+	public fun write-OHYOuyI (Ldev/stashy/infers/ffi/VulkanOptions;Ljava/nio/ByteBuffer;)V
+	public synthetic fun write-OHYOuyI (Ljava/lang/Object;Ljava/nio/ByteBuffer;)V
+}
+
+public final class dev/stashy/infers/ffi/FfiConverterTypeXnnpackOptions : dev/stashy/infers/ffi/FfiConverterRustBuffer {
+	public static final field INSTANCE Ldev/stashy/infers/ffi/FfiConverterTypeXnnpackOptions;
+	public fun allocationSize-I7RO_PI (Ldev/stashy/infers/ffi/XnnpackOptions;)J
+	public synthetic fun allocationSize-I7RO_PI (Ljava/lang/Object;)J
+	public fun lift (Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;)Ldev/stashy/infers/ffi/XnnpackOptions;
+	public synthetic fun lift (Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;)Ljava/lang/Object;
+	public synthetic fun lift (Ljava/lang/Object;)Ljava/lang/Object;
+	public fun liftFromRustBuffer (Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;)Ldev/stashy/infers/ffi/XnnpackOptions;
+	public synthetic fun liftFromRustBuffer (Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;)Ljava/lang/Object;
+	public fun lower (Ldev/stashy/infers/ffi/XnnpackOptions;)Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;
+	public synthetic fun lower (Ljava/lang/Object;)Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;
+	public synthetic fun lower (Ljava/lang/Object;)Ljava/lang/Object;
+	public fun lowerIntoRustBuffer (Ldev/stashy/infers/ffi/XnnpackOptions;)Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;
+	public synthetic fun lowerIntoRustBuffer (Ljava/lang/Object;)Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;
+	public fun read-JPGhLiY (Ljava/nio/ByteBuffer;)Ldev/stashy/infers/ffi/XnnpackOptions;
+	public synthetic fun read-JPGhLiY (Ljava/nio/ByteBuffer;)Ljava/lang/Object;
+	public fun write-OHYOuyI (Ldev/stashy/infers/ffi/XnnpackOptions;Ljava/nio/ByteBuffer;)V
 	public synthetic fun write-OHYOuyI (Ljava/lang/Object;Ljava/nio/ByteBuffer;)V
 }
 
@@ -719,27 +907,148 @@ public final class dev/stashy/infers/ffi/FitMode : java/lang/Enum {
 public final class dev/stashy/infers/ffi/FitMode$Companion {
 }
 
-public class dev/stashy/infers/ffi/GpuContext : dev/stashy/infers/ffi/Disposable, dev/stashy/infers/ffi/GpuContextInterface {
-	public static final field Companion Ldev/stashy/infers/ffi/GpuContext$Companion;
+public class dev/stashy/infers/ffi/GpuDevice : dev/stashy/infers/ffi/Disposable, dev/stashy/infers/ffi/GpuDeviceInterface {
+	public static final field Companion Ldev/stashy/infers/ffi/GpuDevice$Companion;
+	public synthetic fun <init> (JLkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public fun <init> (Lcom/sun/jna/Pointer;)V
 	public fun <init> (Ldev/stashy/infers/ffi/NoPointer;)V
 	public fun close ()V
 	public fun destroy ()V
-	public fun device ()Ldev/stashy/infers/ffi/Device;
 	protected final fun getCleanable ()Ldev/stashy/infers/ffi/UniffiCleaner$Cleanable;
 	protected final fun getPointer ()Lcom/sun/jna/Pointer;
+	public fun info ()Ldev/stashy/infers/ffi/DeviceInfo;
+	public final fun uniffiClonePointer ()Lcom/sun/jna/Pointer;
+	public fun uploadImage (Ldev/stashy/infers/ffi/HostImage;)Ldev/stashy/infers/ffi/GpuImage;
+	public fun uploadTensor (Ldev/stashy/infers/ffi/CpuTensor;)Ldev/stashy/infers/ffi/GpuTensor;
+}
+
+public final class dev/stashy/infers/ffi/GpuDevice$Companion {
+}
+
+public abstract interface class dev/stashy/infers/ffi/GpuDeviceInterface {
+	public static final field Companion Ldev/stashy/infers/ffi/GpuDeviceInterface$Companion;
+	public abstract fun info ()Ldev/stashy/infers/ffi/DeviceInfo;
+	public abstract fun uploadImage (Ldev/stashy/infers/ffi/HostImage;)Ldev/stashy/infers/ffi/GpuImage;
+	public abstract fun uploadTensor (Ldev/stashy/infers/ffi/CpuTensor;)Ldev/stashy/infers/ffi/GpuTensor;
+}
+
+public final class dev/stashy/infers/ffi/GpuDeviceInterface$Companion {
+}
+
+public class dev/stashy/infers/ffi/GpuImage : dev/stashy/infers/ffi/Disposable, dev/stashy/infers/ffi/GpuImageInterface {
+	public static final field Companion Ldev/stashy/infers/ffi/GpuImage$Companion;
+	public fun <init> (Lcom/sun/jna/Pointer;)V
+	public fun <init> (Ldev/stashy/infers/ffi/NoPointer;)V
+	public fun close ()V
+	public fun destroy ()V
+	public fun format ()Ldev/stashy/infers/ffi/ImageFormat;
+	protected final fun getCleanable ()Ldev/stashy/infers/ffi/UniffiCleaner$Cleanable;
+	protected final fun getPointer ()Lcom/sun/jna/Pointer;
+	public fun height-pVg5ArA ()I
+	public final fun uniffiClonePointer ()Lcom/sun/jna/Pointer;
+	public fun width-pVg5ArA ()I
+}
+
+public final class dev/stashy/infers/ffi/GpuImage$Companion {
+}
+
+public abstract interface class dev/stashy/infers/ffi/GpuImageInterface {
+	public static final field Companion Ldev/stashy/infers/ffi/GpuImageInterface$Companion;
+	public abstract fun format ()Ldev/stashy/infers/ffi/ImageFormat;
+	public abstract fun height-pVg5ArA ()I
+	public abstract fun width-pVg5ArA ()I
+}
+
+public final class dev/stashy/infers/ffi/GpuImageInterface$Companion {
+}
+
+public class dev/stashy/infers/ffi/GpuImageProcessor : dev/stashy/infers/ffi/Disposable, dev/stashy/infers/ffi/GpuImageProcessorInterface {
+	public static final field Companion Ldev/stashy/infers/ffi/GpuImageProcessor$Companion;
+	public fun <init> (Lcom/sun/jna/Pointer;)V
+	public fun <init> (Ldev/stashy/infers/ffi/NoPointer;)V
+	public fun close ()V
+	public fun destroy ()V
+	public fun deviceInfo ()Ldev/stashy/infers/ffi/DeviceInfo;
+	protected final fun getCleanable ()Ldev/stashy/infers/ffi/UniffiCleaner$Cleanable;
+	protected final fun getPointer ()Lcom/sun/jna/Pointer;
+	public fun process (Ldev/stashy/infers/ffi/GpuImage;Ldev/stashy/infers/ffi/ProcessingOptions;)Ldev/stashy/infers/ffi/GpuTensor;
+	public fun processHardwareBuffer (Ldev/stashy/infers/ffi/HardwareBufferHandle;Ldev/stashy/infers/ffi/ProcessingOptions;)Ldev/stashy/infers/ffi/GpuTensor;
 	public final fun uniffiClonePointer ()Lcom/sun/jna/Pointer;
 }
 
-public final class dev/stashy/infers/ffi/GpuContext$Companion {
+public final class dev/stashy/infers/ffi/GpuImageProcessor$Companion {
 }
 
-public abstract interface class dev/stashy/infers/ffi/GpuContextInterface {
-	public static final field Companion Ldev/stashy/infers/ffi/GpuContextInterface$Companion;
-	public abstract fun device ()Ldev/stashy/infers/ffi/Device;
+public abstract interface class dev/stashy/infers/ffi/GpuImageProcessorInterface {
+	public static final field Companion Ldev/stashy/infers/ffi/GpuImageProcessorInterface$Companion;
+	public abstract fun deviceInfo ()Ldev/stashy/infers/ffi/DeviceInfo;
+	public abstract fun process (Ldev/stashy/infers/ffi/GpuImage;Ldev/stashy/infers/ffi/ProcessingOptions;)Ldev/stashy/infers/ffi/GpuTensor;
+	public abstract fun processHardwareBuffer (Ldev/stashy/infers/ffi/HardwareBufferHandle;Ldev/stashy/infers/ffi/ProcessingOptions;)Ldev/stashy/infers/ffi/GpuTensor;
 }
 
-public final class dev/stashy/infers/ffi/GpuContextInterface$Companion {
+public final class dev/stashy/infers/ffi/GpuImageProcessorInterface$Companion {
+}
+
+public class dev/stashy/infers/ffi/GpuSession : dev/stashy/infers/ffi/Disposable, dev/stashy/infers/ffi/GpuSessionInterface {
+	public static final field Companion Ldev/stashy/infers/ffi/GpuSession$Companion;
+	public fun <init> (Lcom/sun/jna/Pointer;)V
+	public fun <init> (Ldev/stashy/infers/ffi/NoPointer;)V
+	public fun close ()V
+	public fun destroy ()V
+	public fun deviceInfo ()Ldev/stashy/infers/ffi/DeviceInfo;
+	protected final fun getCleanable ()Ldev/stashy/infers/ffi/UniffiCleaner$Cleanable;
+	protected final fun getPointer ()Lcom/sun/jna/Pointer;
+	public fun inputShapes ()Ljava/util/List;
+	public fun outputShapes ()Ljava/util/List;
+	public fun run (Ljava/util/List;)Ljava/util/List;
+	public final fun uniffiClonePointer ()Lcom/sun/jna/Pointer;
+}
+
+public final class dev/stashy/infers/ffi/GpuSession$Companion {
+}
+
+public abstract interface class dev/stashy/infers/ffi/GpuSessionInterface {
+	public static final field Companion Ldev/stashy/infers/ffi/GpuSessionInterface$Companion;
+	public abstract fun deviceInfo ()Ldev/stashy/infers/ffi/DeviceInfo;
+	public abstract fun inputShapes ()Ljava/util/List;
+	public abstract fun outputShapes ()Ljava/util/List;
+	public abstract fun run (Ljava/util/List;)Ljava/util/List;
+}
+
+public final class dev/stashy/infers/ffi/GpuSessionInterface$Companion {
+}
+
+public class dev/stashy/infers/ffi/GpuTensor : dev/stashy/infers/ffi/Disposable, dev/stashy/infers/ffi/GpuTensorInterface {
+	public static final field Companion Ldev/stashy/infers/ffi/GpuTensor$Companion;
+	public fun <init> (Lcom/sun/jna/Pointer;)V
+	public fun <init> (Ldev/stashy/infers/ffi/NoPointer;)V
+	public fun byteSize-s-VKNKU ()J
+	public fun close ()V
+	public fun destroy ()V
+	public fun deviceInfo ()Ldev/stashy/infers/ffi/DeviceInfo;
+	public fun download ()Ldev/stashy/infers/ffi/CpuTensor;
+	public fun dtype ()Ldev/stashy/infers/ffi/DataType;
+	protected final fun getCleanable ()Ldev/stashy/infers/ffi/UniffiCleaner$Cleanable;
+	protected final fun getPointer ()Lcom/sun/jna/Pointer;
+	public fun readBytes ()[B
+	public fun shape ()Ldev/stashy/infers/ffi/TensorShape;
+	public final fun uniffiClonePointer ()Lcom/sun/jna/Pointer;
+}
+
+public final class dev/stashy/infers/ffi/GpuTensor$Companion {
+}
+
+public abstract interface class dev/stashy/infers/ffi/GpuTensorInterface {
+	public static final field Companion Ldev/stashy/infers/ffi/GpuTensorInterface$Companion;
+	public abstract fun byteSize-s-VKNKU ()J
+	public abstract fun deviceInfo ()Ldev/stashy/infers/ffi/DeviceInfo;
+	public abstract fun download ()Ldev/stashy/infers/ffi/CpuTensor;
+	public abstract fun dtype ()Ldev/stashy/infers/ffi/DataType;
+	public abstract fun readBytes ()[B
+	public abstract fun shape ()Ldev/stashy/infers/ffi/TensorShape;
+}
+
+public final class dev/stashy/infers/ffi/GpuTensorInterface$Companion {
 }
 
 public class dev/stashy/infers/ffi/HardwareBufferHandle : dev/stashy/infers/ffi/Disposable, dev/stashy/infers/ffi/HardwareBufferHandleInterface {
@@ -773,6 +1082,33 @@ public abstract interface class dev/stashy/infers/ffi/HardwareBufferHandleInterf
 public final class dev/stashy/infers/ffi/HardwareBufferHandleInterface$Companion {
 }
 
+public class dev/stashy/infers/ffi/HostImage : dev/stashy/infers/ffi/Disposable, dev/stashy/infers/ffi/HostImageInterface {
+	public static final field Companion Ldev/stashy/infers/ffi/HostImage$Companion;
+	public fun <init> (Lcom/sun/jna/Pointer;)V
+	public fun <init> (Ldev/stashy/infers/ffi/NoPointer;)V
+	public fun close ()V
+	public fun destroy ()V
+	public fun format ()Ldev/stashy/infers/ffi/ImageFormat;
+	protected final fun getCleanable ()Ldev/stashy/infers/ffi/UniffiCleaner$Cleanable;
+	protected final fun getPointer ()Lcom/sun/jna/Pointer;
+	public fun height-pVg5ArA ()I
+	public final fun uniffiClonePointer ()Lcom/sun/jna/Pointer;
+	public fun width-pVg5ArA ()I
+}
+
+public final class dev/stashy/infers/ffi/HostImage$Companion {
+}
+
+public abstract interface class dev/stashy/infers/ffi/HostImageInterface {
+	public static final field Companion Ldev/stashy/infers/ffi/HostImageInterface$Companion;
+	public abstract fun format ()Ldev/stashy/infers/ffi/ImageFormat;
+	public abstract fun height-pVg5ArA ()I
+	public abstract fun width-pVg5ArA ()I
+}
+
+public final class dev/stashy/infers/ffi/HostImageInterface$Companion {
+}
+
 public final class dev/stashy/infers/ffi/ImageFormat : java/lang/Enum {
 	public static final field Companion Ldev/stashy/infers/ffi/ImageFormat$Companion;
 	public static final field I420 Ldev/stashy/infers/ffi/ImageFormat;
@@ -785,33 +1121,6 @@ public final class dev/stashy/infers/ffi/ImageFormat : java/lang/Enum {
 }
 
 public final class dev/stashy/infers/ffi/ImageFormat$Companion {
-}
-
-public class dev/stashy/infers/ffi/ImageProcessor : dev/stashy/infers/ffi/Disposable, dev/stashy/infers/ffi/ImageProcessorInterface {
-	public static final field Companion Ldev/stashy/infers/ffi/ImageProcessor$Companion;
-	public fun <init> (Lcom/sun/jna/Pointer;)V
-	public fun <init> (Ldev/stashy/infers/ffi/NoPointer;)V
-	public fun close ()V
-	public fun destroy ()V
-	public fun device ()Ldev/stashy/infers/ffi/Device;
-	protected final fun getCleanable ()Ldev/stashy/infers/ffi/UniffiCleaner$Cleanable;
-	protected final fun getPointer ()Lcom/sun/jna/Pointer;
-	public fun processBytes-qNPu7Do ([BIILdev/stashy/infers/ffi/ImageFormat;Ldev/stashy/infers/ffi/ProcessingOptions;)Ldev/stashy/infers/ffi/TensorBuffer;
-	public fun processHardwareBuffer (Ldev/stashy/infers/ffi/HardwareBufferHandle;Ldev/stashy/infers/ffi/ProcessingOptions;)Ldev/stashy/infers/ffi/TensorBuffer;
-	public final fun uniffiClonePointer ()Lcom/sun/jna/Pointer;
-}
-
-public final class dev/stashy/infers/ffi/ImageProcessor$Companion {
-}
-
-public abstract interface class dev/stashy/infers/ffi/ImageProcessorInterface {
-	public static final field Companion Ldev/stashy/infers/ffi/ImageProcessorInterface$Companion;
-	public abstract fun device ()Ldev/stashy/infers/ffi/Device;
-	public abstract fun processBytes-qNPu7Do ([BIILdev/stashy/infers/ffi/ImageFormat;Ldev/stashy/infers/ffi/ProcessingOptions;)Ldev/stashy/infers/ffi/TensorBuffer;
-	public abstract fun processHardwareBuffer (Ldev/stashy/infers/ffi/HardwareBufferHandle;Ldev/stashy/infers/ffi/ProcessingOptions;)Ldev/stashy/infers/ffi/TensorBuffer;
-}
-
-public final class dev/stashy/infers/ffi/ImageProcessorInterface$Companion {
 }
 
 public abstract class dev/stashy/infers/ffi/InfersException : java/lang/Exception {
@@ -883,50 +1192,16 @@ public final class dev/stashy/infers/ffi/Infers_bindings_commonKt {
 }
 
 public final class dev/stashy/infers/ffi/Infers_bindings_jvmKt {
-	public static final fun createCpuDevice ()Ldev/stashy/infers/ffi/Device;
-	public static final fun createCpuImageProcessor ()Ldev/stashy/infers/ffi/ImageProcessor;
-	public static final fun createGpuContext (Ldev/stashy/infers/ffi/Device;)Ldev/stashy/infers/ffi/GpuContext;
-	public static final fun createGpuDevice-VKZWuLQ (J)Ldev/stashy/infers/ffi/Device;
-	public static final fun createGpuImageProcessor (Ldev/stashy/infers/ffi/GpuContext;)Ldev/stashy/infers/ffi/ImageProcessor;
-	public static final fun createHardwareBufferFromRaw-4PLdz1A (JLdev/stashy/infers/ffi/Device;)Ldev/stashy/infers/ffi/HardwareBufferHandle;
-	public static final fun createNpuDevice-VKZWuLQ (J)Ldev/stashy/infers/ffi/Device;
-	public static final fun createTensorFromBytes (Ldev/stashy/infers/ffi/TensorShape;Ldev/stashy/infers/ffi/DataType;[B)Ldev/stashy/infers/ffi/TensorBuffer;
+	public static final fun createCpuTensorFromBytes (Ldev/stashy/infers/ffi/TensorShape;Ldev/stashy/infers/ffi/DataType;[B)Ldev/stashy/infers/ffi/CpuTensor;
+	public static final fun createGpuImageProcessor (Ldev/stashy/infers/ffi/GpuDevice;)Ldev/stashy/infers/ffi/GpuImageProcessor;
+	public static final fun createHardwareBufferFromRaw-4PLdz1A (JLdev/stashy/infers/ffi/DeviceInfo;)Ldev/stashy/infers/ffi/HardwareBufferHandle;
+	public static final fun createHostImage-SOCY_n4 (IILdev/stashy/infers/ffi/ImageFormat;[B)Ldev/stashy/infers/ffi/HostImage;
 	public static final fun setValue (Ldev/stashy/infers/ffi/RustBufferStruct;Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;)V
 	public static final fun uniffiEnsureInitialized ()V
-	public static final fun uploadToGpu (Ldev/stashy/infers/ffi/GpuContext;Ldev/stashy/infers/ffi/TensorBuffer;)Ldev/stashy/infers/ffi/TensorBuffer;
 }
 
 public final class dev/stashy/infers/ffi/InternalException : java/lang/Exception {
 	public fun <init> (Ljava/lang/String;)V
-}
-
-public class dev/stashy/infers/ffi/ModelSession : dev/stashy/infers/ffi/Disposable, dev/stashy/infers/ffi/ModelSessionInterface {
-	public static final field Companion Ldev/stashy/infers/ffi/ModelSession$Companion;
-	public fun <init> (Lcom/sun/jna/Pointer;)V
-	public fun <init> (Ldev/stashy/infers/ffi/NoPointer;)V
-	public fun close ()V
-	public fun destroy ()V
-	public fun device ()Ldev/stashy/infers/ffi/Device;
-	protected final fun getCleanable ()Ldev/stashy/infers/ffi/UniffiCleaner$Cleanable;
-	protected final fun getPointer ()Lcom/sun/jna/Pointer;
-	public fun inputShapes ()Ljava/util/List;
-	public fun outputShapes ()Ljava/util/List;
-	public fun run (Ljava/util/List;)Ljava/util/List;
-	public final fun uniffiClonePointer ()Lcom/sun/jna/Pointer;
-}
-
-public final class dev/stashy/infers/ffi/ModelSession$Companion {
-}
-
-public abstract interface class dev/stashy/infers/ffi/ModelSessionInterface {
-	public static final field Companion Ldev/stashy/infers/ffi/ModelSessionInterface$Companion;
-	public abstract fun device ()Ldev/stashy/infers/ffi/Device;
-	public abstract fun inputShapes ()Ljava/util/List;
-	public abstract fun outputShapes ()Ljava/util/List;
-	public abstract fun run (Ljava/util/List;)Ljava/util/List;
-}
-
-public final class dev/stashy/infers/ffi/ModelSessionInterface$Companion {
 }
 
 public final class dev/stashy/infers/ffi/NoPointer {
@@ -1017,39 +1292,6 @@ public final class dev/stashy/infers/ffi/RustBufferStruct$ByValue : dev/stashy/i
 	public fun <init> (JJLcom/sun/jna/Pointer;)V
 }
 
-public class dev/stashy/infers/ffi/TensorBuffer : dev/stashy/infers/ffi/Disposable, dev/stashy/infers/ffi/TensorBufferInterface {
-	public static final field Companion Ldev/stashy/infers/ffi/TensorBuffer$Companion;
-	public fun <init> (Lcom/sun/jna/Pointer;)V
-	public fun <init> (Ldev/stashy/infers/ffi/NoPointer;)V
-	public fun byteSize-s-VKNKU ()J
-	public fun close ()V
-	public fun copyToDevice (Ldev/stashy/infers/ffi/Device;Ldev/stashy/infers/ffi/GpuContext;)Ldev/stashy/infers/ffi/TensorBuffer;
-	public fun destroy ()V
-	public fun device ()Ldev/stashy/infers/ffi/Device;
-	public fun dtype ()Ldev/stashy/infers/ffi/DataType;
-	protected final fun getCleanable ()Ldev/stashy/infers/ffi/UniffiCleaner$Cleanable;
-	protected final fun getPointer ()Lcom/sun/jna/Pointer;
-	public fun readToCpuBytes ()[B
-	public fun shape ()Ldev/stashy/infers/ffi/TensorShape;
-	public final fun uniffiClonePointer ()Lcom/sun/jna/Pointer;
-}
-
-public final class dev/stashy/infers/ffi/TensorBuffer$Companion {
-}
-
-public abstract interface class dev/stashy/infers/ffi/TensorBufferInterface {
-	public static final field Companion Ldev/stashy/infers/ffi/TensorBufferInterface$Companion;
-	public abstract fun byteSize-s-VKNKU ()J
-	public abstract fun copyToDevice (Ldev/stashy/infers/ffi/Device;Ldev/stashy/infers/ffi/GpuContext;)Ldev/stashy/infers/ffi/TensorBuffer;
-	public abstract fun device ()Ldev/stashy/infers/ffi/Device;
-	public abstract fun dtype ()Ldev/stashy/infers/ffi/DataType;
-	public abstract fun readToCpuBytes ()[B
-	public abstract fun shape ()Ldev/stashy/infers/ffi/TensorShape;
-}
-
-public final class dev/stashy/infers/ffi/TensorBufferInterface$Companion {
-}
-
 public final class dev/stashy/infers/ffi/TensorLayout : java/lang/Enum {
 	public static final field Companion Ldev/stashy/infers/ffi/TensorLayout$Companion;
 	public static final field NCHW Ldev/stashy/infers/ffi/TensorLayout;
@@ -1098,5 +1340,40 @@ public final class dev/stashy/infers/ffi/UniffiNullRustCallStatusErrorHandler : 
 
 public abstract interface class dev/stashy/infers/ffi/UniffiRustCallStatusErrorHandler {
 	public abstract fun lift (Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;)Ljava/lang/Object;
+}
+
+public final class dev/stashy/infers/ffi/VulkanOptions {
+	public static final field Companion Ldev/stashy/infers/ffi/VulkanOptions$Companion;
+	public fun <init> (Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;)Ldev/stashy/infers/ffi/VulkanOptions;
+	public static synthetic fun copy$default (Ldev/stashy/infers/ffi/VulkanOptions;Ljava/lang/String;ILjava/lang/Object;)Ldev/stashy/infers/ffi/VulkanOptions;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getMethod ()Ljava/lang/String;
+	public fun hashCode ()I
+	public final fun setMethod (Ljava/lang/String;)V
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/stashy/infers/ffi/VulkanOptions$Companion {
+}
+
+public final class dev/stashy/infers/ffi/XnnpackOptions {
+	public static final field Companion Ldev/stashy/infers/ffi/XnnpackOptions$Companion;
+	public synthetic fun <init> (ILjava/lang/String;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1-pVg5ArA ()I
+	public final fun component2 ()Ljava/lang/String;
+	public final fun copy-qim9Vi0 (ILjava/lang/String;)Ldev/stashy/infers/ffi/XnnpackOptions;
+	public static synthetic fun copy-qim9Vi0$default (Ldev/stashy/infers/ffi/XnnpackOptions;ILjava/lang/String;ILjava/lang/Object;)Ldev/stashy/infers/ffi/XnnpackOptions;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getMethod ()Ljava/lang/String;
+	public final fun getNumThreads-pVg5ArA ()I
+	public fun hashCode ()I
+	public final fun setMethod (Ljava/lang/String;)V
+	public final fun setNumThreads-WZ4Q5Ns (I)V
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/stashy/infers/ffi/XnnpackOptions$Companion {
 }
 

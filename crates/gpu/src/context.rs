@@ -1,7 +1,7 @@
 use crate::error::GpuError;
 use ash::vk;
 use gpu_allocator::vulkan::{Allocator, AllocatorCreateDesc};
-use infers_core::{Device, DeviceKind};
+use infers_core::{DeviceInfo, DeviceKind};
 use parking_lot::Mutex;
 use std::ffi::{CStr, c_char};
 
@@ -44,22 +44,29 @@ pub struct VulkanContext {
     oneshot_fence: vk::Fence,
     allocator: Mutex<Option<Allocator>>,
     owns_device: bool,
-    logical: Device,
+    info: DeviceInfo,
 }
 
 impl VulkanContext {
-    /// Create a new instance and compute-capable logical device for `device`.
-    pub fn new(device: &Device) -> Result<Self, GpuError> {
-        Self::new_with_options(device, VulkanContextOptions::for_shared_inference())
+    /// Create a Vulkan context for the GPU at `gpu_id`.
+    pub fn new_for_gpu(gpu_id: usize) -> Result<Self, GpuError> {
+        let info = DeviceInfo {
+            kind: DeviceKind::Gpu,
+            id: gpu_id,
+            name: format!("GPU:{}", gpu_id),
+        };
+        Self::new_with_options(&info, VulkanContextOptions::for_shared_inference())
     }
 
     pub fn new_with_options(
-        device: &Device,
+        info: &DeviceInfo,
         options: VulkanContextOptions,
     ) -> Result<Self, GpuError> {
-        if device.kind != DeviceKind::Gpu {
-            return Err(GpuError::NotGpu(device.clone()));
+        if info.kind != DeviceKind::Gpu {
+            return Err(GpuError::NotGpu(info.clone()));
         }
+
+        let gpu_id = info.id;
 
         let entry = unsafe { ash::Entry::load() }.map_err(|err| GpuError::Loader(err.to_string()))?;
 
@@ -91,10 +98,10 @@ impl VulkanContext {
             }
         }
         let physical_device = *compute_devices
-            .get(device.id)
-            .ok_or(GpuError::NoDevice(device.id))?;
+            .get(gpu_id)
+            .ok_or(GpuError::NoDevice(gpu_id))?;
         let queue_family_index = first_compute_queue_family(&instance, physical_device)
-            .ok_or(GpuError::NoDevice(device.id))?;
+            .ok_or(GpuError::NoDevice(gpu_id))?;
 
         let created = create_logical_device(
             &instance,
@@ -140,12 +147,12 @@ impl VulkanContext {
             oneshot_fence,
             allocator: Mutex::new(Some(allocator)),
             owns_device: true,
-            logical: device.clone(),
+            info: info.clone(),
         })
     }
 
-    pub fn logical_device(&self) -> &Device {
-        &self.logical
+    pub fn device_info(&self) -> &DeviceInfo {
+        &self.info
     }
 
     pub fn instance(&self) -> &ash::Instance {

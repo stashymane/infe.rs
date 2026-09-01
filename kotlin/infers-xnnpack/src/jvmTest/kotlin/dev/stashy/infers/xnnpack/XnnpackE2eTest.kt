@@ -12,7 +12,7 @@ class XnnpackE2eTest {
         val modelPath = resolveModelPte() ?: return@runTest
 
         Backend().use { backend ->
-            backend.loadModel(modelPath, XnnpackConfig(numThreads = 1u)).use { session ->
+            backend.loadModel(modelPath, XnnpackOptions(numThreads = 1u)).use { session ->
                 assertTrue(session.inputShapes.isNotEmpty(), "expected input shapes")
                 val inputShape = session.inputShapes.first()
                 val dims = inputShape.dims.map { it.toInt() }
@@ -33,9 +33,10 @@ class XnnpackE2eTest {
 
                 CpuImageProcessor().use { processor ->
                     inferenceScope {
-                        val input = processor.process(bytes, options)
+                        val image = HostImage.fromBytes(bytes, width.toUInt(), height.toUInt(), ImageFormat.Rgb888)
+                        val input = processor.process(image, options)
                         if (input.shape != inputShape) return@inferenceScope
-                        val outputs = session.run(listOf(input))
+                        val outputs = session.infer(listOf(input))
                         assertTrue(outputs.isNotEmpty())
                         for (out in outputs) {
                             val floats = out.readFloats()

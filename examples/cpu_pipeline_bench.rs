@@ -1,21 +1,12 @@
 //! Benchmark the CPU inference pipeline (preprocess → XNNPACK).
-//!
-//! The camera frame is allocated once up front and excluded from timings, matching
-//! a host that already holds a buffer from the device camera.
-//!
-//! ```text
-//! cargo run --release --example cpu_pipeline_bench
-//! cargo run --release --example cpu_pipeline_bench -- --iters 100 --threads 4
-//! ```
 
 #[path = "common/mod.rs"]
 mod common;
 
 use common::{camera_frame, detector_options, imgsz_from_input_shape, require_model, timed, BenchArgs, StageStats};
 use infers::{
-    CpuImageProcessor, ExecuTorchBackend, ExecuTorchBackendConfig, ModelSession, TensorBuffer,
+    CpuImageProcessor, ExecuTorchBackend, Session, XnnpackOptions,
 };
-use std::time::Duration;
 
 fn main() {
     let (args, model) = BenchArgs::parse("xnnpack/model.pte");
@@ -23,9 +14,9 @@ fn main() {
 
     let backend = ExecuTorchBackend::new();
     let mut session = backend
-        .load_model(
+        .load_xnnpack(
             &model_bytes,
-            ExecuTorchBackendConfig::Xnnpack {
+            XnnpackOptions {
                 num_threads: args.threads,
                 method: None,
             },
@@ -48,18 +39,18 @@ fn main() {
     );
 
     for _ in 0..args.warmup {
-        run_once(&processor, &mut *session, &frame, &options);
+        run_once(&processor, &mut session, &frame, &options);
     }
 
     let mut stats = StageStats::default();
     for _ in 0..args.iters {
         let (preprocess_ms, infer_ms, total_ms) =
-            run_once(&processor, &mut *session, &frame, &options);
+            run_once(&processor, &mut session, &frame, &options);
         stats.record(preprocess_ms, infer_ms, total_ms);
     }
 
     stats.print("CPU (XNNPACK)");
-    let last = run_once_outputs(&processor, &mut *session, &frame, &options);
+    let last = run_once_outputs(&processor, &mut session, &frame, &options);
     println!(
         "  last run outputs: {} tensor(s), first shape {:?}",
         last.len(),
@@ -69,21 +60,18 @@ fn main() {
 
 fn run_once(
     processor: &CpuImageProcessor,
-    session: &mut dyn ModelSession,
-    frame: &infers::CpuImageBuffer,
+    session: &mut infers::ExecuTorchSession<infers::Cpu>,
+    frame: &infers::HostImage,
     options: &infers::ProcessingOptions,
-) -> (Duration, Duration, Duration) {
+) -> (std::time::Duration, std::time::Duration, std::time::Duration) {
     let total_start = std::time::Instant::now();
 
     let (preprocessed, preprocess) = timed(|| {
-        processor
-            .process(frame, options)
-            .expect("CPU preprocess")
+        processor.process(frame, options).expect("CPU preprocess")
     });
 
     let (_outputs, infer) = timed(|| {
-        let input: &dyn TensorBuffer = preprocessed.as_ref();
-        session.run(&[input]).expect("XNNPACK inference")
+        session.run(&[&preprocessed]).expect("XNNPACK inference")
     });
 
     (preprocess, infer, total_start.elapsed())
@@ -91,12 +79,10 @@ fn run_once(
 
 fn run_once_outputs(
     processor: &CpuImageProcessor,
-    session: &mut dyn ModelSession,
-    frame: &infers::CpuImageBuffer,
+    session: &mut infers::ExecuTorchSession<infers::Cpu>,
+    frame: &infers::HostImage,
     options: &infers::ProcessingOptions,
-) -> Vec<Box<dyn TensorBuffer>> {
+) -> Vec<infers::Tensor<infers::Cpu>> {
     let preprocessed = processor.process(frame, options).expect("CPU preprocess");
-    session
-        .run(&[preprocessed.as_ref()])
-        .expect("XNNPACK inference")
+    session.run(&[&preprocessed]).expect("XNNPACK inference")
 }

@@ -1,5 +1,5 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="Run GPU Benchmark" type="CargoCommandRunConfiguration" factoryName="Cargo Command">
+  <configuration default="false" name="GPU Benchmark" type="CargoCommandRunConfiguration" factoryName="Cargo Command" folderName="Rust">
     <option name="buildProfileId" value="release" />
     <option name="command" value="run --example gpu_pipeline_bench" />
     <option name="workingDirectory" value="file://$PROJECT_DIR$" />

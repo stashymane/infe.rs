@@ -11,43 +11,44 @@ uniffi_mirror! {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Record)]
-pub struct Device {
+pub struct DeviceInfo {
     pub kind: DeviceKind,
     pub id: u64,
     pub name: String,
 }
 
-impl From<infers_core::Device> for Device {
-    fn from(device: infers_core::Device) -> Self {
+impl From<infers_core::DeviceInfo> for DeviceInfo {
+    fn from(info: infers_core::DeviceInfo) -> Self {
         Self {
-            kind: device.kind.into(),
-            id: device.id as u64,
-            name: device.name,
+            kind: info.kind.into(),
+            id: info.id as u64,
+            name: info.name,
         }
     }
 }
 
-impl From<Device> for infers_core::Device {
-    fn from(device: Device) -> Self {
+impl From<DeviceInfo> for infers_core::DeviceInfo {
+    fn from(info: DeviceInfo) -> Self {
         Self {
-            kind: device.kind.into(),
-            id: device.id as usize,
-            name: device.name,
+            kind: info.kind.into(),
+            id: info.id as usize,
+            name: info.name,
         }
     }
 }
 
-#[uniffi::export]
-pub fn create_cpu_device() -> Device {
-    infers_core::Device::cpu().into()
-}
+/// CPU execution device (singleton metadata).
+#[derive(uniffi::Object)]
+pub struct CpuDevice;
 
 #[uniffi::export]
-pub fn create_gpu_device(id: u64) -> Device {
-    infers_core::Device::gpu(id as usize).into()
-}
+impl CpuDevice {
+    #[uniffi::constructor]
+    pub fn new() -> std::sync::Arc<Self> {
+        std::sync::Arc::new(Self)
+    }
 
-#[uniffi::export]
-pub fn create_npu_device(id: u64) -> Device {
-    infers_core::Device::npu(id as usize).into()
+    pub fn info(&self) -> DeviceInfo {
+        infers_core::Cpu::info().clone().into()
+    }
 }

@@ -1,19 +1,15 @@
 #![cfg(feature = "vulkan")]
 
-use std::sync::Arc;
-
-use infers_core::Device;
-use processing::{
-    FitMode, GpuImageProcessor, ImageFormat, ProcessingOptions, Rotation, VulkanContext,
-};
+use infers_gpu::Vulkan;
+use processing::{FitMode, GpuImageProcessor, ImageFormat, ProcessingOptions, Rotation};
 
 #[test]
 fn test_gpu_image_processor_loads_shaders() {
-    let Ok(ctx) = VulkanContext::new(&Device::gpu(0)) else {
+    let Ok(vulkan) = Vulkan::new(0) else {
         eprintln!("skipping: no Vulkan device");
         return;
     };
-    GpuImageProcessor::new(Arc::new(ctx)).expect("SPIR-V shaders must load into pipelines");
+    GpuImageProcessor::new(vulkan).expect("SPIR-V shaders must load into pipelines");
 }
 
 #[test]

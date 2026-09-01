@@ -9,7 +9,7 @@ import android.hardware.HardwareBuffer as AndroidHardwareBuffer
 class GpuHardwareBufferInstrumentedTest {
     @Test
     fun gpuProcessHardwareBuffer() = runTest {
-        val context = runCatching { GpuContext(Device.gpu(0u)) }.getOrNull() ?: return@runTest
+        val device = runCatching { GpuDevice(0u) }.getOrNull() ?: return@runTest
 
         val options = ProcessingOptions {
             source = 4 to 4
@@ -17,13 +17,13 @@ class GpuHardwareBufferInstrumentedTest {
             srcFormat = ImageFormat.Rgb888
             destFormat = ImageFormat.Rgbf32
         }
-        
+
         createGpuReadableRgbBuffer().use { androidBuffer ->
-            context.use {
+            device.use {
                 GpuImageProcessor(it).use { processor ->
                     inferenceScope {
-                        val buffer = androidBuffer.toHardwareBuffer(Device.gpu(0u))
-                        val tensor = processor.process(buffer, options)
+                        val buffer = androidBuffer.toHardwareBuffer(it.info)
+                        val tensor = processor.processHardwareBuffer(buffer, options)
                         assertEquals(TensorShape.of(1, 3, 2, 2), tensor.shape)
                     }
                 }

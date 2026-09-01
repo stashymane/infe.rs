@@ -1,6 +1,10 @@
-use crate::config::ExecuTorchBackendConfig;
+use crate::config::XnnpackOptions;
+#[cfg(feature = "vulkan")]
+use crate::config::VulkanOptions;
 use crate::session::ExecuTorchSession;
-use infers_core::{Backend, CoreError, Device, ModelSession, SessionConfig};
+use infers_core::{CoreError, Cpu};
+#[cfg(feature = "vulkan")]
+use infers_gpu::Vulkan;
 
 /// The ExecuTorch inference backend.
 #[derive(Clone, Debug, Default)]
@@ -12,71 +16,41 @@ impl ExecuTorchBackend {
         Self
     }
 
-    /// Load a `.pte` program with an explicit backend configuration.
-    ///
-    /// For [`ExecuTorchBackendConfig::Vulkan`], pass an existing
-    /// [`infers_gpu::VulkanContext`] created by the app (required for teardown order
-    /// and sharing with GPU preprocessing).
-    pub fn load_model(
+    pub fn load_xnnpack(
         &self,
         model_bytes: &[u8],
-        config: ExecuTorchBackendConfig,
-    ) -> Result<Box<dyn ModelSession>, CoreError> {
-        let session = ExecuTorchSession::load(model_bytes, &config).map_err(CoreError::from)?;
-        Ok(Box::new(session))
+        opts: XnnpackOptions,
+    ) -> Result<ExecuTorchSession<Cpu>, CoreError> {
+        ExecuTorchSession::load_xnnpack(model_bytes, &opts).map_err(CoreError::from)
     }
 
-    /// Load a `.pte` program from a file path with an explicit backend configuration.
-    ///
-    /// The file at `path` must remain readable for the lifetime of the returned session.
-    pub fn load_model_from_file(
+    pub fn load_xnnpack_from_file(
         &self,
         path: &str,
-        config: ExecuTorchBackendConfig,
-    ) -> Result<Box<dyn ModelSession>, CoreError> {
-        let session =
-            ExecuTorchSession::load_from_path(std::path::Path::new(path), &config)
-                .map_err(CoreError::from)?;
-        Ok(Box::new(session))
-    }
-}
-
-impl Backend for ExecuTorchBackend {
-    fn name(&self) -> &'static str {
-        "ExecuTorch"
+        opts: XnnpackOptions,
+    ) -> Result<ExecuTorchSession<Cpu>, CoreError> {
+        ExecuTorchSession::load_xnnpack_from_path(std::path::Path::new(path), &opts)
+            .map_err(CoreError::from)
     }
 
-    fn available_devices(&self) -> Vec<Device> {
-        let mut devices = vec![Device::cpu()];
-        #[cfg(feature = "vulkan")]
-        {
-            devices.push(Device::gpu(0));
-            devices.push(Device::npu(0));
-        }
-        devices
-    }
-
-    fn load_model_with_config(
+    #[cfg(feature = "vulkan")]
+    pub fn load_vulkan(
         &self,
         model_bytes: &[u8],
-        config: &SessionConfig,
-    ) -> Result<Box<dyn ModelSession>, CoreError> {
-        // Core trait path: CPU/XNNPACK only. GPU requires [`ExecuTorchBackendConfig::Vulkan`].
-        if config.device.is_gpu() {
-            return Err(CoreError::ModelLoadFailed(
-                "GPU ExecuTorch models require ExecuTorchBackend::load_model with \
-                 ExecuTorchBackendConfig::Vulkan { context, .. }"
-                    .into(),
-            ));
-        }
-        let method = config.extra_options.get("method").cloned();
-        let num_threads = config.num_threads.max(1);
-        self.load_model(
-            model_bytes,
-            ExecuTorchBackendConfig::Xnnpack {
-                num_threads,
-                method,
-            },
-        )
+        device: &Vulkan,
+        opts: VulkanOptions,
+    ) -> Result<ExecuTorchSession<Vulkan>, CoreError> {
+        ExecuTorchSession::load_vulkan(model_bytes, device, &opts).map_err(CoreError::from)
+    }
+
+    #[cfg(feature = "vulkan")]
+    pub fn load_vulkan_from_file(
+        &self,
+        path: &str,
+        device: &Vulkan,
+        opts: VulkanOptions,
+    ) -> Result<ExecuTorchSession<Vulkan>, CoreError> {
+        ExecuTorchSession::load_vulkan_from_path(std::path::Path::new(path), device, &opts)
+            .map_err(CoreError::from)
     }
 }

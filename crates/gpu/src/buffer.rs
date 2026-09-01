@@ -14,6 +14,7 @@ pub struct VulkanBufferHandle {
 }
 
 /// Buffer plus memory allocated through the shared [`VulkanContext`] allocator.
+#[derive(Debug)]
 pub struct AllocatedBuffer {
     pub buffer: vk::Buffer,
     pub allocation: Allocation,

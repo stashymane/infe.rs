@@ -1,6 +1,6 @@
 use crate::error::AndroidPlatformError;
 use crate::ffi::*;
-use infers_core::{Device, ImageFormat, ImageInputBuffer};
+use infers_core::{DeviceInfo, ImageFormat};
 use std::ffi::c_void;
 
 /// Safe wrapper around an Android `AHardwareBuffer`
@@ -8,7 +8,7 @@ pub struct AndroidHardwareBufferHandle {
     raw_ptr: *mut AHardwareBuffer,
     desc: AHardwareBuffer_Desc,
     format: ImageFormat,
-    device: Device,
+    device: DeviceInfo,
 }
 
 // SAFETY: `AHardwareBuffer` is reference-counted by the platform and its
@@ -30,7 +30,7 @@ impl AndroidHardwareBufferHandle {
     /// detected here and results in undefined behaviour.
     pub fn from_raw(
         raw_ptr: *mut AHardwareBuffer,
-        device: Device,
+        device: DeviceInfo,
     ) -> Result<Self, AndroidPlatformError> {
         if raw_ptr.is_null() {
             return Err(AndroidPlatformError::NullBufferPointer);
@@ -59,7 +59,7 @@ impl AndroidHardwareBufferHandle {
     /// caller's reference.
     pub fn from_allocated(
         raw_ptr: *mut AHardwareBuffer,
-        device: Device,
+        device: DeviceInfo,
     ) -> Result<Self, AndroidPlatformError> {
         if raw_ptr.is_null() {
             return Err(AndroidPlatformError::NullBufferPointer);
@@ -83,7 +83,7 @@ impl AndroidHardwareBufferHandle {
     /// that reference on drop; on error the caller must release it.
     unsafe fn from_acquired(
         raw_ptr: *mut AHardwareBuffer,
-        device: Device,
+        device: DeviceInfo,
     ) -> Result<Self, AndroidPlatformError> {
         // SAFETY: `AHardwareBuffer_Desc` is a plain `#[repr(C)]` struct of
         // integers, so an all-zero value is a valid initial state for the
@@ -132,7 +132,7 @@ impl AndroidHardwareBufferHandle {
     }
 
     #[inline]
-    pub fn device(&self) -> &Device {
+    pub fn device_info(&self) -> &DeviceInfo {
         &self.device
     }
 
@@ -285,32 +285,6 @@ impl Drop for AndroidHardwareBufferHandle {
         // SAFETY: the handle owns one reference to a live buffer, established at
         // construction and released exactly once here.
         unsafe { AHardwareBuffer_release(self.raw_ptr) };
-    }
-}
-
-impl ImageInputBuffer for AndroidHardwareBufferHandle {
-    fn width(&self) -> u32 {
-        self.desc.width
-    }
-
-    fn height(&self) -> u32 {
-        self.desc.height
-    }
-
-    fn format(&self) -> ImageFormat {
-        self.format
-    }
-
-    fn device(&self) -> &Device {
-        &self.device
-    }
-
-    fn as_bytes(&self) -> Option<&[u8]> {
-        None
-    }
-
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
     }
 }
 

@@ -1,6 +1,7 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="Run CPU Benchmark" type="CargoCommandRunConfiguration" factoryName="Cargo Command">
-    <option name="command" value="run --release --example cpu_pipeline_bench" />
+  <configuration default="false" name="CPU Benchmark" type="CargoCommandRunConfiguration" factoryName="Cargo Command" folderName="Rust">
+    <option name="buildProfileId" value="release" />
+    <option name="command" value="run --example cpu_pipeline_bench" />
     <option name="workingDirectory" value="file://$PROJECT_DIR$" />
     <envs />
     <option name="emulateTerminal" value="true" />

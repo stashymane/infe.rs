@@ -7,13 +7,18 @@ repository.workspace = true
 homepage.workspace = true
 description.workspace = true
 
+[features]
+vulkan = []
+
 [dependencies]
 bytemuck = { version = "1", features = ["derive"] }
 processing-core = { path = "../processing/core" }
 thiserror.workspace = true
 
 [dev-dependencies]
-infers-test-utils = { path = "../test-utils" }
+infers-test-utils = { path = "../test-utils", features = ["vulkan"] }
+infers-gpu = { path = "../gpu" }
+trybuild = "1.0"
 
 [lints]
 workspace = true

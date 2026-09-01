@@ -1,11 +1,14 @@
 use thiserror::Error;
-use crate::device::Device;
+use crate::device::DeviceInfo;
 use crate::tensor::DataType;
 
 #[derive(Error, Debug)]
 pub enum CoreError {
     #[error("Device mismatch: expected {expected:?}, got {actual:?}")]
-    DeviceMismatch { expected: Device, actual: Device },
+    DeviceMismatch {
+        expected: DeviceInfo,
+        actual: DeviceInfo,
+    },
 
     #[error("Invalid tensor shape: {0}")]
     InvalidShape(String),

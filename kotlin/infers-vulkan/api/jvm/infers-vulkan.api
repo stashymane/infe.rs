@@ -1,18 +1,63 @@
-public final class dev/stashy/infers/vulkan/GpuContext : java/lang/AutoCloseable {
-	public fun <init> (Ldev/stashy/infers/Device;)V
+public final class dev/stashy/infers/vulkan/GpuDevice : dev/stashy/infers/Device, java/lang/AutoCloseable {
+	public synthetic fun <init> (JILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (JLkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public fun close ()V
-	public final fun getDevice ()Ldev/stashy/infers/Device;
+	public fun getInfo ()Ldev/stashy/infers/DeviceInfo;
 }
 
-public final class dev/stashy/infers/vulkan/GpuImageProcessor : dev/stashy/infers/FfiBackedImageProcessor {
-	public fun <init> (Ldev/stashy/infers/vulkan/GpuContext;)V
+public final class dev/stashy/infers/vulkan/GpuImage : dev/stashy/infers/DeviceImage {
+	public fun close ()V
+	public fun getFormat ()Ldev/stashy/infers/ImageFormat;
+	public fun getHeight-pVg5ArA ()I
+	public fun getWidth-pVg5ArA ()I
 }
 
-public final class dev/stashy/infers/vulkan/VulkanConfig : dev/stashy/infers/BackendConfig, dev/stashy/infers/internal/BackendConfigFfiConvertible {
-	public fun <init> (Ldev/stashy/infers/vulkan/GpuContext;Ljava/lang/String;)V
-	public synthetic fun <init> (Ldev/stashy/infers/vulkan/GpuContext;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
-	public final fun getContext ()Ldev/stashy/infers/vulkan/GpuContext;
+public final class dev/stashy/infers/vulkan/GpuImageProcessor : dev/stashy/infers/ImageProcessor {
+	public fun <init> (Ldev/stashy/infers/vulkan/GpuDevice;)V
+	public fun close ()V
+	public fun getDeviceInfo ()Ldev/stashy/infers/DeviceInfo;
+	public fun processInternal (Ldev/stashy/infers/DeviceImage;Ldev/stashy/infers/ProcessingOptions;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class dev/stashy/infers/vulkan/GpuSession : dev/stashy/infers/ModelSession {
+	public fun <init> (Ldev/stashy/infers/ffi/GpuSession;Lkotlinx/coroutines/CoroutineDispatcher;)V
+	public synthetic fun <init> (Ldev/stashy/infers/ffi/GpuSession;Lkotlinx/coroutines/CoroutineDispatcher;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun close ()V
+	public fun getDeviceInfo ()Ldev/stashy/infers/DeviceInfo;
+	public fun getInputShapes ()Ljava/util/List;
+	public fun getOutputShapes ()Ljava/util/List;
+	public fun runInternal (Ljava/util/List;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class dev/stashy/infers/vulkan/GpuTensor : dev/stashy/infers/Tensor {
+	public fun close ()V
+	public final fun download (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun getByteSize-s-VKNKU ()J
+	public fun getDeviceInfo ()Ldev/stashy/infers/DeviceInfo;
+	public fun getDtype ()Ldev/stashy/infers/DataType;
+	public fun getShape ()Ldev/stashy/infers/TensorShape;
+	public fun readBytes (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun readFloats (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun readInts (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun readLongs (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class dev/stashy/infers/vulkan/InferenceScopeExtensionsKt {
+	public static final fun uploadImage (Ldev/stashy/infers/InferenceScope;Ldev/stashy/infers/vulkan/GpuDevice;Ldev/stashy/infers/DeviceImage;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static final fun uploadTensor (Ldev/stashy/infers/InferenceScope;Ldev/stashy/infers/vulkan/GpuDevice;Ldev/stashy/infers/CpuTensor;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static final fun uploadTo (Ldev/stashy/infers/InferenceScope;Ldev/stashy/infers/CpuTensor;Ldev/stashy/infers/vulkan/GpuDevice;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static final fun uploadTo (Ldev/stashy/infers/InferenceScope;Ldev/stashy/infers/DeviceImage;Ldev/stashy/infers/vulkan/GpuDevice;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class dev/stashy/infers/vulkan/VulkanBackendKt {
+	public static final fun loadModel (Ldev/stashy/infers/Backend;Lkotlinx/io/files/Path;Ldev/stashy/infers/vulkan/GpuDevice;Ldev/stashy/infers/vulkan/VulkanOptions;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun loadModel$default (Ldev/stashy/infers/Backend;Lkotlinx/io/files/Path;Ldev/stashy/infers/vulkan/GpuDevice;Ldev/stashy/infers/vulkan/VulkanOptions;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+}
+
+public final class dev/stashy/infers/vulkan/VulkanOptions {
+	public fun <init> ()V
+	public fun <init> (Ljava/lang/String;)V
+	public synthetic fun <init> (Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun getMethod ()Ljava/lang/String;
-	public fun toFfiConfig ()Ldev/stashy/infers/ffi/BackendConfig;
 }
 

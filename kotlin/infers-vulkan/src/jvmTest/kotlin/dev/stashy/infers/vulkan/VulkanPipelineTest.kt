@@ -14,17 +14,17 @@ import kotlin.test.assertTrue
 class VulkanPipelineTest {
     @Test
     fun gpuImageProcessorDeviceKind() = runTest {
-        val context = gpuContextOrNull() ?: return@runTest
-        context.use {
+        val device = gpuDeviceOrNull() ?: return@runTest
+        device.use {
             GpuImageProcessor(it).use { processor ->
-                assertEquals(DeviceKind.Gpu, processor.device.kind)
+                assertEquals(DeviceKind.Gpu, processor.deviceInfo.kind)
             }
         }
     }
 
     @Test
     fun gpuMatchesCpuOutputShape() = runTest {
-        val context = gpuContextOrNull() ?: return@runTest
+        val device = gpuDeviceOrNull() ?: return@runTest
         val rawBytes = ByteArray(48) { (it * 5).toByte() }
         val options =
             ProcessingOptions {
@@ -34,15 +34,18 @@ class VulkanPipelineTest {
                 destFormat = ImageFormat.Rgbf32
             }
 
-        context.use {
+        device.use {
             CpuImageProcessor().use { cpu ->
                 GpuImageProcessor(it).use { gpu ->
                     val cpuShape =
                         inferenceScope {
-                            cpu.process(rawBytes, options).shape
+                            val image = HostImage.fromBytes(rawBytes, 4u, 4u, ImageFormat.Rgb888)
+                            cpu.process(image, options).shape
                         }
                     inferenceScope {
-                        val out = gpu.process(rawBytes, options)
+                        val host = HostImage.fromBytes(rawBytes, 4u, 4u, ImageFormat.Rgb888)
+                        val gpuImage = host.uploadTo(it)
+                        val out = gpu.process(gpuImage, options)
                         assertEquals(cpuShape, out.shape)
                         assertEquals(12, out.readFloats().size)
                     }
@@ -53,8 +56,8 @@ class VulkanPipelineTest {
 
     @Test
     fun invalidModelThrowsModelLoadFailed() = runTest {
-        val context = gpuContextOrNull() ?: return@runTest
-        context.use {
+        val device = gpuDeviceOrNull() ?: return@runTest
+        device.use {
             Backend().use { backend ->
                 val path = Path(SystemTemporaryDirectory, "infers-invalid-vulkan.pte")
                 SystemFileSystem.sink(path).buffered().use { sink ->
@@ -62,7 +65,7 @@ class VulkanPipelineTest {
                 }
                 try {
                     val error = assertFailsWith<InfersException.ModelLoadFailed> {
-                        backend.loadModel(path, VulkanConfig(it))
+                        backend.loadModel(path, it, VulkanOptions())
                     }
                     assertTrue(error.reason.isNotEmpty())
                 } finally {
@@ -73,4 +76,4 @@ class VulkanPipelineTest {
     }
 }
 
-private fun gpuContextOrNull(): GpuContext? = runCatching { GpuContext(Device.gpu(0u)) }.getOrNull()
+private fun gpuDeviceOrNull(): GpuDevice? = runCatching { GpuDevice(0u) }.getOrNull()

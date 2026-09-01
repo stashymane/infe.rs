@@ -1,12 +1,11 @@
 //! GPU-direct ExecuTorch Vulkan input path (Phase 1).
 
 use crate::error::ExecuTorchError;
-pub use crate::tensor_ptr::{evalue_to_tensor_buffer, OwnedTensorPtr};
-use crate::tensor_ptr::tensor_ptr_from_host;
+pub use crate::tensor_ptr::{evalue_to_cpu_tensor, OwnedTensorPtr};
 use executorch::tensor::{TensorPtrBuilder, View};
-use infers_core::{CoreError, DataType, TensorBuffer, TensorShape};
+use infers_core::{CoreError, DataType, Tensor, TensorShape};
 use infers_gpu::{VulkanBufferHandle, VulkanContext};
-use processing::{upload_tensor_buffer, GpuTensorBuffer};
+use infers_gpu::Vulkan;
 use std::sync::Arc;
 
 #[link(name = "infers_et_vulkan_ffi")]
@@ -207,8 +206,7 @@ pub struct GpuInputPlan {
     pub tensor_ptrs: Vec<OwnedTensorPtr>,
     pub skip_staging_mask: u64,
     host_fallback: Vec<HostVisibleInput>,
-    /// Keeps caller-supplied GPU buffers alive for the duration of the call.
-    _gpu_pins: Vec<GpuTensorBuffer>,
+    _gpu_pins: Vec<Tensor<Vulkan>>,
 }
 
 impl Drop for GpuInputPlan {
@@ -221,7 +219,7 @@ impl Drop for GpuInputPlan {
 }
 
 pub fn prepare_inputs(
-    inputs: &[&dyn TensorBuffer],
+    inputs: &[&Tensor<Vulkan>],
     context: &Arc<VulkanContext>,
     vulkan_graph: Option<VulkanComputeGraph>,
 ) -> Result<GpuInputPlan, CoreError> {
@@ -231,24 +229,20 @@ pub fn prepare_inputs(
     let mut gpu_pins = Vec::new();
 
     for (index, input) in inputs.iter().enumerate() {
-        let gpu = if let Some(gpu) = input.as_any().downcast_ref::<GpuTensorBuffer>() {
-            gpu.clone()
-        } else if input.device().is_cpu() {
-            upload_tensor_buffer(context, *input)?
-        } else {
-            tensor_ptrs.push(tensor_ptr_from_host(*input)?);
-            continue;
-        };
+        if !Arc::ptr_eq(context, input.device().context()) {
+            return Err(CoreError::DeviceMismatch {
+                expected: context.device_info().clone(),
+                actual: input.device().info().clone(),
+            });
+        }
 
-        let src = gpu.vulkan_handle().ok_or_else(|| {
+        let src = input.storage().vulkan_handle().ok_or_else(|| {
             CoreError::BufferTransferFailed("GPU tensor buffer already destroyed".into())
         })?;
-        gpu_pins.push(gpu);
+        gpu_pins.push((*input).clone());
 
         let needed = input.shape().byte_size(input.dtype()) as u64;
 
-        // `skip_staging_mask` only fits one bit per input, so inputs beyond
-        // that cannot be marked and must take the host-visible path.
         let staging = if index < u64::BITS as usize {
             vulkan_graph.and_then(|graph| graph.staging_target(index).ok())
         } else {
@@ -266,7 +260,7 @@ pub fn prepare_inputs(
                 .copy_buffer(src.buffer, src.offset, dst.buffer, dst.offset, needed)
                 .map_err(|err| CoreError::BufferTransferFailed(err.to_string()))?;
             skip_staging_mask |= 1u64 << index;
-            tensor_ptrs.push(placeholder_tensor_ptr(*input)?);
+            tensor_ptrs.push(placeholder_tensor_ptr(input.shape(), input.dtype())?);
             continue;
         }
 
@@ -300,9 +294,12 @@ pub fn set_skip_staging_copy_mask(mask: u64) {
 /// reads staged GPU memory instead; ExecuTorch still requires a tensor with
 /// matching rank/dtype but does not validate the data buffer size when the
 /// skip-staging mask is set.
-fn placeholder_tensor_ptr(input: &dyn TensorBuffer) -> Result<OwnedTensorPtr, CoreError> {
-    let dims: Vec<i32> = input.shape().dims().iter().map(|&d| d as i32).collect();
-    match input.dtype() {
+fn placeholder_tensor_ptr(
+    shape: &TensorShape,
+    dtype: DataType,
+) -> Result<OwnedTensorPtr, CoreError> {
+    let dims: Vec<i32> = shape.dims().iter().map(|&d| d as i32).collect();
+    match dtype {
         DataType::F32 => {
             let ptr = unsafe {
                 TensorPtrBuilder::<View<f32>>::from_vec(vec![0.0f32])

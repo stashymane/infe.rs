@@ -25,4 +25,5 @@ include(
     ":infers-ffi",
     ":infers-xnnpack",
     ":infers-vulkan",
+    ":sample",
 )

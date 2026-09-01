@@ -1,30 +1,24 @@
 pub use processing_core::{FitMode, ImageFormat, ProcessingOptions, Rotation, TensorLayout};
 
-use crate::device::cpu_device;
-use crate::device::Device;
 use crate::error::CoreError;
-use std::any::Any;
 
-/// Trait representing an input image for preprocessing
-pub trait ImageInputBuffer: Send + Sync {
+/// Device-resident image accepted by a typed image processor.
+pub trait DeviceImage: Send + Sync {
     fn width(&self) -> u32;
     fn height(&self) -> u32;
     fn format(&self) -> ImageFormat;
-    fn device(&self) -> &Device;
-    fn as_bytes(&self) -> Option<&[u8]>;
-    fn as_any(&self) -> &dyn Any;
 }
 
-/// A CPU-resident image buffer
+/// Host-resident image bytes (camera frame, decoded file, etc.).
 #[derive(Clone, Debug, PartialEq)]
-pub struct CpuImageBuffer {
+pub struct HostImage {
     width: u32,
     height: u32,
     format: ImageFormat,
     data: Vec<u8>,
 }
 
-impl CpuImageBuffer {
+impl HostImage {
     pub fn new(
         width: u32,
         height: u32,
@@ -64,9 +58,13 @@ impl CpuImageBuffer {
         self.format
     }
 
+    #[inline]
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.data
+    }
 }
 
-impl ImageInputBuffer for CpuImageBuffer {
+impl DeviceImage for HostImage {
     fn width(&self) -> u32 {
         self.width
     }
@@ -77,17 +75,5 @@ impl ImageInputBuffer for CpuImageBuffer {
 
     fn format(&self) -> ImageFormat {
         self.format
-    }
-
-    fn device(&self) -> &Device {
-        cpu_device()
-    }
-
-    fn as_bytes(&self) -> Option<&[u8]> {
-        Some(&self.data)
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
     }
 }

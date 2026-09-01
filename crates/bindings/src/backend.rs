@@ -1,26 +1,46 @@
-use crate::device::Device;
 use crate::error::InfersError;
-#[cfg(feature = "vulkan")]
-use crate::gpu_context::GpuContext;
-use crate::session::ModelSession;
+use crate::session::CpuSession;
 use infers_backend_executorch::{
-    ExecuTorchBackend as CoreExecuTorchBackend, ExecuTorchBackendConfig,
+    config::XnnpackOptions as CoreXnnpackOptions,
+    ExecuTorchBackend as CoreExecuTorchBackend,
 };
-use infers_core::Backend;
 use std::sync::Arc;
 
-#[derive(Debug, Clone, uniffi::Enum)]
-pub enum BackendConfig {
-    #[cfg(feature = "xnnpack")]
-    Xnnpack {
-        num_threads: u32,
-        method: Option<String>,
-    },
-    #[cfg(feature = "vulkan")]
-    Vulkan {
-        context: Arc<GpuContext>,
-        method: Option<String>,
-    },
+#[cfg(feature = "vulkan")]
+use crate::gpu_device::GpuDevice;
+#[cfg(feature = "vulkan")]
+use crate::session::GpuSession;
+#[cfg(feature = "vulkan")]
+use infers_backend_executorch::config::VulkanOptions as CoreVulkanOptions;
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct XnnpackOptions {
+    pub num_threads: u32,
+    pub method: Option<String>,
+}
+
+impl From<XnnpackOptions> for CoreXnnpackOptions {
+    fn from(opts: XnnpackOptions) -> Self {
+        Self {
+            num_threads: opts.num_threads.max(1) as usize,
+            method: opts.method,
+        }
+    }
+}
+
+#[cfg(feature = "vulkan")]
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct VulkanOptions {
+    pub method: Option<String>,
+}
+
+#[cfg(feature = "vulkan")]
+impl From<VulkanOptions> for CoreVulkanOptions {
+    fn from(opts: VulkanOptions) -> Self {
+        Self {
+            method: opts.method,
+        }
+    }
 }
 
 #[derive(uniffi::Object)]
@@ -43,55 +63,57 @@ impl FfiBackend {
         })
     }
 
-    pub fn available_devices(&self) -> Vec<Device> {
-        self.inner
-            .available_devices()
-            .into_iter()
-            .map(Into::into)
-            .collect()
-    }
-
-    pub fn load_model(
+    pub fn load_xnnpack(
         &self,
         model_bytes: Vec<u8>,
-        config: BackendConfig,
-    ) -> Result<Arc<ModelSession>, InfersError> {
-        let core_config = to_core_config(config)?;
+        opts: XnnpackOptions,
+    ) -> Result<Arc<CpuSession>, InfersError> {
         let session = self
             .inner
-            .load_model(&model_bytes, core_config)
+            .load_xnnpack(&model_bytes, opts.into())
             .map_err(InfersError::from)?;
-        Ok(Arc::new(ModelSession::new(session)))
+        Ok(Arc::new(CpuSession::new(session)))
     }
 
-    pub fn load_model_from_file(
+    pub fn load_xnnpack_from_file(
         &self,
         path: String,
-        config: BackendConfig,
-    ) -> Result<Arc<ModelSession>, InfersError> {
-        let core_config = to_core_config(config)?;
+        opts: XnnpackOptions,
+    ) -> Result<Arc<CpuSession>, InfersError> {
         let session = self
             .inner
-            .load_model_from_file(&path, core_config)
+            .load_xnnpack_from_file(&path, opts.into())
             .map_err(InfersError::from)?;
-        Ok(Arc::new(ModelSession::new(session)))
+        Ok(Arc::new(CpuSession::new(session)))
     }
 }
 
-fn to_core_config(config: BackendConfig) -> Result<ExecuTorchBackendConfig, InfersError> {
-    Ok(match config {
-        #[cfg(feature = "xnnpack")]
-        BackendConfig::Xnnpack {
-            num_threads,
-            method,
-        } => ExecuTorchBackendConfig::Xnnpack {
-            num_threads: num_threads.max(1) as usize,
-            method,
-        },
-        #[cfg(feature = "vulkan")]
-        BackendConfig::Vulkan { context, method } => ExecuTorchBackendConfig::Vulkan {
-            context: Arc::clone(context.inner()),
-            method,
-        },
-    })
+#[cfg(feature = "vulkan")]
+#[uniffi::export]
+impl FfiBackend {
+    pub fn load_vulkan(
+        &self,
+        model_bytes: Vec<u8>,
+        device: Arc<GpuDevice>,
+        opts: VulkanOptions,
+    ) -> Result<Arc<GpuSession>, InfersError> {
+        let session = self
+            .inner
+            .load_vulkan(&model_bytes, device.vulkan(), opts.into())
+            .map_err(InfersError::from)?;
+        Ok(Arc::new(GpuSession::new(session)))
+    }
+
+    pub fn load_vulkan_from_file(
+        &self,
+        path: String,
+        device: Arc<GpuDevice>,
+        opts: VulkanOptions,
+    ) -> Result<Arc<GpuSession>, InfersError> {
+        let session = self
+            .inner
+            .load_vulkan_from_file(&path, device.vulkan(), opts.into())
+            .map_err(InfersError::from)?;
+        Ok(Arc::new(GpuSession::new(session)))
+    }
 }

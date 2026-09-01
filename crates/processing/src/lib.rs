@@ -1,4 +1,4 @@
-//! Vulkan image preprocessing and GPU tensor buffers built on a shared [`VulkanContext`].
+//! Vulkan image preprocessing built on a shared [`Vulkan`](infers_gpu::Vulkan) device.
 
 pub mod cpu;
 pub mod layout;
@@ -7,16 +7,14 @@ pub mod layout;
 pub mod gpu;
 
 pub use cpu::CpuImageProcessor;
-pub use layout::{
-    convert_layout, infer_rgb_layout, model_input_from_preprocess, nhwc_to_nchw_cpu,
-};
+pub use layout::{convert_layout_cpu, infer_rgb_layout, nhwc_to_nchw_cpu};
+#[cfg(feature = "vulkan")]
+pub use layout::convert_layout_vulkan;
 pub use processing_core::*;
 
 #[cfg(feature = "vulkan")]
-pub use gpu::{
-    GpuImageProcessor, GpuTensorBuffer, LayoutGpuPass, VulkanDeviceTransfer, nhwc_to_nchw_gpu,
-    upload_tensor_buffer,
-};
-
+pub use gpu::{GpuImageProcessor, LayoutGpuPass, nhwc_to_nchw_gpu};
 #[cfg(feature = "vulkan")]
-pub use infers_gpu::{GpuError, VulkanContext, VulkanSampledImage};
+pub use infers_gpu::{
+    GpuError, Vulkan, VulkanContext, VulkanImage, VulkanSampledImage, VulkanStorage,
+};

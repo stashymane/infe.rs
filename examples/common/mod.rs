@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use clap::Parser;
-use infers::{CpuImageBuffer, ImageFormat, ProcessingOptions, Rotation, TensorShape, TensorLayout};
+use infers::{HostImage, ImageFormat, ProcessingOptions, Rotation, TensorShape, TensorLayout};
 use processing::FitMode;
 
 pub const DEFAULT_FRAME_W: u32 = 1280;
@@ -78,18 +78,16 @@ pub fn require_model(path: &Path) -> Vec<u8> {
 }
 
 /// Synthetic camera frame already in memory — not part of the timed path.
-pub fn camera_frame(width: u32, height: u32) -> CpuImageBuffer {
+pub fn camera_frame(width: u32, height: u32) -> HostImage {
     let mut data = Vec::with_capacity((width * height * 3) as usize);
     for y in 0..height {
         for x in 0..width {
-            // Mild spatial gradient so resize/normalize do real work.
             data.push(((x * 255) / width.max(1)) as u8);
             data.push(((y * 255) / height.max(1)) as u8);
             data.push((((x + y) * 255) / (width + height).max(1)) as u8);
         }
     }
-    CpuImageBuffer::new(width, height, ImageFormat::Rgb888, data)
-        .expect("synthetic camera frame")
+    HostImage::new(width, height, ImageFormat::Rgb888, data).expect("synthetic camera frame")
 }
 
 pub fn detector_options(src_w: u32, src_h: u32, imgsz: u32) -> ProcessingOptions {

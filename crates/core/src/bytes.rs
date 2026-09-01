@@ -30,3 +30,8 @@ pub fn cast_bytes<T: Pod>(bytes: &[u8]) -> Result<&[T], CoreError> {
 pub fn bytes_to_vec<T: Pod>(bytes: &[u8]) -> Result<Vec<T>, CoreError> {
     cast_bytes(bytes).map(|slice| slice.to_vec())
 }
+
+#[inline]
+pub fn vec_to_bytes<T: Pod>(values: &[T]) -> Result<Vec<u8>, CoreError> {
+    Ok(bytemuck::cast_slice(values).to_vec())
+}

@@ -1,4 +1,4 @@
-use infers_core::Device;
+use infers_core::DeviceInfo;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -13,7 +13,7 @@ pub enum GpuError {
     NoDevice(usize),
 
     #[error("Cannot create Vulkan context for non-GPU device {0:?}")]
-    NotGpu(Device),
+    NotGpu(DeviceInfo),
 
     #[error("Missing required Vulkan feature or extension: {0}")]
     MissingFeature(String),

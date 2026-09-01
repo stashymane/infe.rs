@@ -1,5 +1,6 @@
 package dev.stashy.infers
 
+import dev.stashy.infers.hostImageFromBytes
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -11,7 +12,7 @@ class HardwareBufferInstrumentedTest {
     fun wrapPlatformHardwareBuffer() = runTest {
         createRgbBuffer().use { androidBuffer ->
             inferenceScope {
-                val buffer = androidBuffer.toHardwareBuffer(Device.cpu())
+                val buffer = androidBuffer.toHardwareBuffer(CpuDevice.info)
                 assertEquals(4u, buffer.width)
                 assertEquals(4u, buffer.height)
             }
@@ -26,12 +27,14 @@ class HardwareBufferInstrumentedTest {
             srcFormat = ImageFormat.Rgb888
             destFormat = ImageFormat.Rgbf32
         }
-        
+
         createRgbBuffer().use { androidBuffer ->
             CpuImageProcessor().use { processor ->
                 inferenceScope {
-                    val buffer = androidBuffer.toHardwareBuffer(Device.cpu())
-                    val tensor = processor.process(buffer, options)
+                    val buffer = androidBuffer.toHardwareBuffer(CpuDevice.info)
+                    val bytes = buffer.lockCpu()
+                    val image = hostImageFromBytes(bytes, buffer.width, buffer.height, ImageFormat.Rgb888)
+                    val tensor = processor.process(image, options)
                     assertEquals(TensorShape.of(1, 3, 2, 2), tensor.shape)
                     assertTrue(tensor.readFloats().isNotEmpty())
                 }

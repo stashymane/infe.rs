@@ -7,6 +7,9 @@ Built on ExecuTorch with custom patches. Mostly aimed at Android for now.
 
 ## Usage
 
+> [!WARNING]
+> This library is experimental, no stable API/ABI is provided yet.
+
 Currently only available via git, not yet ready for production use.
 
 ```toml

@@ -1,7 +1,6 @@
-use crate::device::cpu_device;
-use crate::device::Device;
+use crate::device::{Cpu, Device, DeviceInfo};
 use crate::error::CoreError;
-use crate::transfer::DeviceTransfer;
+use crate::image::HostImage;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum DataType {
@@ -33,7 +32,6 @@ pub struct TensorShape {
 }
 
 impl TensorShape {
-    /// Build a shape from dimensions, rejecting an empty list or any zero extent.
     pub fn new(dims: impl Into<Vec<usize>>) -> Result<Self, CoreError> {
         let dims = dims.into();
         if dims.is_empty() {
@@ -60,8 +58,6 @@ impl TensorShape {
         self.dims.len()
     }
 
-    /// Total number of elements, saturating rather than wrapping so that an
-    /// absurd shape cannot produce a small size that then under-allocates.
     #[inline]
     pub fn element_count(&self) -> usize {
         self.dims
@@ -84,35 +80,47 @@ impl TryFrom<Vec<usize>> for TensorShape {
     }
 }
 
-/// A trait for inspecting and extracting host CPU tensor data
-pub trait AnyHostTensor: Send + Sync + std::fmt::Debug {
-    fn shape(&self) -> &TensorShape;
-    fn dtype(&self) -> DataType;
-    fn as_bytes(&self) -> &[u8];
-    fn as_slice_f32(&self) -> Result<&[f32], CoreError>;
-    fn as_slice_u8(&self) -> Result<&[u8], CoreError>;
-    fn as_slice_i32(&self) -> Result<&[i32], CoreError>;
-    fn as_slice_i64(&self) -> Result<&[i64], CoreError>;
-}
-
-/// Generic CPU host tensor
+/// Owned host tensor payload (dtype-tagged bytes).
 #[derive(Clone, Debug, PartialEq)]
-pub struct CpuTensor<T> {
+pub struct HostTensor {
     shape: TensorShape,
     dtype: DataType,
-    data: Vec<T>,
+    bytes: Vec<u8>,
 }
 
-impl<T: Clone + Send + Sync + 'static> CpuTensor<T> {
-    pub fn new(shape: TensorShape, dtype: DataType, data: Vec<T>) -> Result<Self, CoreError> {
-        if data.len() != shape.element_count() {
+impl HostTensor {
+    pub fn new(shape: TensorShape, dtype: DataType, bytes: Vec<u8>) -> Result<Self, CoreError> {
+        if bytes.len() != shape.byte_size(dtype) {
             return Err(CoreError::InvalidShape(format!(
-                "Element count mismatch: shape requires {} elements, got {}",
-                shape.element_count(),
-                data.len()
+                "Byte size mismatch: shape requires {} bytes, got {}",
+                shape.byte_size(dtype),
+                bytes.len()
             )));
         }
-        Ok(Self { shape, dtype, data })
+        Ok(Self {
+            shape,
+            dtype,
+            bytes,
+        })
+    }
+
+    pub fn from_f32(shape: TensorShape, data: Vec<f32>) -> Result<Self, CoreError> {
+        let bytes = crate::bytes::vec_to_bytes(&data)?;
+        Self::new(shape, DataType::F32, bytes)
+    }
+
+    pub fn from_u8(shape: TensorShape, data: Vec<u8>) -> Result<Self, CoreError> {
+        Self::new(shape, DataType::U8, data)
+    }
+
+    pub fn from_i32(shape: TensorShape, data: Vec<i32>) -> Result<Self, CoreError> {
+        let bytes = crate::bytes::vec_to_bytes(&data)?;
+        Self::new(shape, DataType::I32, bytes)
+    }
+
+    pub fn from_i64(shape: TensorShape, data: Vec<i64>) -> Result<Self, CoreError> {
+        let bytes = crate::bytes::vec_to_bytes(&data)?;
+        Self::new(shape, DataType::I64, bytes)
     }
 
     #[inline]
@@ -126,217 +134,182 @@ impl<T: Clone + Send + Sync + 'static> CpuTensor<T> {
     }
 
     #[inline]
-    pub fn as_slice(&self) -> &[T] {
-        &self.data
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.bytes
     }
 
+    pub fn as_slice_f32(&self) -> Result<&[f32], CoreError> {
+        if self.dtype != DataType::F32 {
+            return Err(CoreError::InvalidDataType {
+                expected: DataType::F32,
+                actual: self.dtype,
+            });
+        }
+        crate::bytes::cast_bytes(&self.bytes)
+    }
+
+    pub fn as_slice_u8(&self) -> Result<&[u8], CoreError> {
+        if self.dtype != DataType::U8 {
+            return Err(CoreError::InvalidDataType {
+                expected: DataType::U8,
+                actual: self.dtype,
+            });
+        }
+        Ok(&self.bytes)
+    }
+
+    pub fn as_slice_i32(&self) -> Result<&[i32], CoreError> {
+        if self.dtype != DataType::I32 {
+            return Err(CoreError::InvalidDataType {
+                expected: DataType::I32,
+                actual: self.dtype,
+            });
+        }
+        crate::bytes::cast_bytes(&self.bytes)
+    }
+
+    pub fn as_slice_i64(&self) -> Result<&[i64], CoreError> {
+        if self.dtype != DataType::I64 {
+            return Err(CoreError::InvalidDataType {
+                expected: DataType::I64,
+                actual: self.dtype,
+            });
+        }
+        crate::bytes::cast_bytes(&self.bytes)
+    }
 }
 
-impl CpuTensor<f32> {
-    pub fn from_f32(shape: TensorShape, data: Vec<f32>) -> Result<Self, CoreError> {
-        Self::new(shape, DataType::F32, data)
+/// Device-resident tensor. The device type parameter prevents cross-device misuse at compile time.
+#[derive(Clone, Debug)]
+pub struct Tensor<D: Device> {
+    device: D,
+    shape: TensorShape,
+    dtype: DataType,
+    storage: D::Storage,
+}
+
+impl<D: Device> Tensor<D> {
+    pub fn from_storage(
+        device: D,
+        shape: TensorShape,
+        dtype: DataType,
+        storage: D::Storage,
+    ) -> Self {
+        Self {
+            device,
+            shape,
+            dtype,
+            storage,
+        }
+    }
+
+    pub fn from_host(device: &D, host: &HostTensor) -> Result<Self, CoreError> {
+        let storage = device.store(host.shape(), host.dtype(), host.as_bytes())?;
+        Ok(Self {
+            device: device.clone(),
+            shape: host.shape().clone(),
+            dtype: host.dtype(),
+            storage,
+        })
+    }
+
+    #[inline]
+    pub fn device(&self) -> &D {
+        &self.device
+    }
+
+    #[inline]
+    pub fn shape(&self) -> &TensorShape {
+        &self.shape
+    }
+
+    #[inline]
+    pub fn dtype(&self) -> DataType {
+        self.dtype
+    }
+
+    #[inline]
+    pub fn byte_size(&self) -> usize {
+        self.shape.byte_size(self.dtype)
+    }
+
+    #[inline]
+    pub fn storage(&self) -> &D::Storage {
+        &self.storage
+    }
+
+    pub fn read_to_host(&self) -> Result<HostTensor, CoreError> {
+        self.device.load(&self.storage, &self.shape, self.dtype)
+    }
+
+    /// Transfer to another device. The target handle carries any upload context.
+    pub fn to_device<T: TensorAdopt>(&self, target: &T) -> Result<Tensor<T>, CoreError> {
+        if let Some(adopted) = target.try_adopt_tensor(self) {
+            return Ok(adopted);
+        }
+        Tensor::from_host(target, &self.read_to_host()?)
     }
 }
 
-impl CpuTensor<u8> {
-    pub fn from_u8(shape: TensorShape, data: Vec<u8>) -> Result<Self, CoreError> {
-        Self::new(shape, DataType::U8, data)
+/// Optional fast-path adoption of a tensor already on an equivalent device handle.
+pub trait TensorAdopt: Device {
+    fn try_adopt_tensor<S: Device>(&self, tensor: &Tensor<S>) -> Option<Tensor<Self>>;
+}
+
+impl TensorAdopt for Cpu {
+    fn try_adopt_tensor<S: Device>(&self, tensor: &Tensor<S>) -> Option<Tensor<Self>> {
+        if std::any::TypeId::of::<S>() != std::any::TypeId::of::<Cpu>() {
+            return None;
+        }
+        // SAFETY: S is Cpu when the TypeIds match.
+        let cpu_tensor = unsafe { &*(tensor as *const Tensor<S> as *const Tensor<Cpu>) };
+        Some(Tensor {
+            device: Cpu,
+            shape: cpu_tensor.shape.clone(),
+            dtype: cpu_tensor.dtype,
+            storage: cpu_tensor.storage.clone(),
+        })
     }
 }
 
-impl CpuTensor<i32> {
-    pub fn from_i32(shape: TensorShape, data: Vec<i32>) -> Result<Self, CoreError> {
-        Self::new(shape, DataType::I32, data)
-    }
-}
+/// CPU tensor storage is host bytes.
+#[derive(Clone, Debug, PartialEq)]
+pub struct HostBytes(pub Vec<u8>);
 
-impl CpuTensor<i64> {
-    pub fn from_i64(shape: TensorShape, data: Vec<i64>) -> Result<Self, CoreError> {
-        Self::new(shape, DataType::I64, data)
-    }
-}
+impl Device for Cpu {
+    type Storage = HostBytes;
+    type Image = HostImage;
 
-/// Opaque device-resident tensor buffer
-pub trait TensorBuffer: Send + Sync + std::fmt::Debug {
-    fn shape(&self) -> &TensorShape;
-    fn dtype(&self) -> DataType;
-    fn device(&self) -> &Device;
-    fn byte_size(&self) -> usize {
-        self.shape().byte_size(self.dtype())
+    fn info(&self) -> &DeviceInfo {
+        Cpu::info()
     }
 
-    /// Downcast support for device-specific buffer types.
-    fn as_any(&self) -> &dyn std::any::Any;
-
-    /// Explicit readback into CPU host memory
-    fn read_to_cpu(&self) -> Result<Box<dyn AnyHostTensor>, CoreError>;
-
-    /// Explicit transfer to another execution device.
-    ///
-    /// Same-device copies succeed without `transfer`. Cross-device copies require a
-    /// [`DeviceTransfer`] implementor (typically the shared [`VulkanContext`](infers_gpu::VulkanContext)
-    /// behind [`GpuContext`](crate::GpuContext)).
-    fn copy_to_device(
+    fn store(
         &self,
-        target: &Device,
-        transfer: Option<&dyn DeviceTransfer>,
-    ) -> Result<Box<dyn TensorBuffer>, CoreError>;
-}
-
-macro_rules! impl_any_host_tensor_slice {
-    ($self:ident, f32, f32) => {
-        Ok(&$self.data)
-    };
-    ($self:ident, f32, $other:ident) => {
-        Err(CoreError::InvalidDataType {
-            expected: DataType::F32,
-            actual: $self.dtype,
-        })
-    };
-    ($self:ident, u8, u8) => {
-        Ok(&$self.data)
-    };
-    ($self:ident, u8, $other:ident) => {
-        Err(CoreError::InvalidDataType {
-            expected: DataType::U8,
-            actual: $self.dtype,
-        })
-    };
-    ($self:ident, i32, i32) => {
-        Ok(&$self.data)
-    };
-    ($self:ident, i32, $other:ident) => {
-        Err(CoreError::InvalidDataType {
-            expected: DataType::I32,
-            actual: $self.dtype,
-        })
-    };
-    ($self:ident, i64, i64) => {
-        Ok(&$self.data)
-    };
-    ($self:ident, i64, $other:ident) => {
-        Err(CoreError::InvalidDataType {
-            expected: DataType::I64,
-            actual: $self.dtype,
-        })
-    };
-}
-
-macro_rules! impl_any_host_tensor {
-    (u8) => {
-        impl AnyHostTensor for CpuTensor<u8> {
-            fn shape(&self) -> &TensorShape {
-                &self.shape
-            }
-            fn dtype(&self) -> DataType {
-                self.dtype
-            }
-            fn as_bytes(&self) -> &[u8] {
-                &self.data
-            }
-            fn as_slice_f32(&self) -> Result<&[f32], CoreError> {
-                impl_any_host_tensor_slice!(self, f32, u8)
-            }
-            fn as_slice_u8(&self) -> Result<&[u8], CoreError> {
-                impl_any_host_tensor_slice!(self, u8, u8)
-            }
-            fn as_slice_i32(&self) -> Result<&[i32], CoreError> {
-                impl_any_host_tensor_slice!(self, i32, u8)
-            }
-            fn as_slice_i64(&self) -> Result<&[i64], CoreError> {
-                impl_any_host_tensor_slice!(self, i64, u8)
-            }
+        shape: &TensorShape,
+        dtype: DataType,
+        bytes: &[u8],
+    ) -> Result<Self::Storage, CoreError> {
+        if bytes.len() != shape.byte_size(dtype) {
+            return Err(CoreError::InvalidShape(format!(
+                "Byte size mismatch: expected {}, got {}",
+                shape.byte_size(dtype),
+                bytes.len()
+            )));
         }
-    };
-    ($ty:ty, $native:ident, $safety:literal) => {
-        impl AnyHostTensor for CpuTensor<$ty> {
-            fn shape(&self) -> &TensorShape {
-                &self.shape
-            }
-            fn dtype(&self) -> DataType {
-                self.dtype
-            }
-            fn as_bytes(&self) -> &[u8] {
-                // SAFETY: $safety
-                unsafe {
-                    std::slice::from_raw_parts(
-                        self.data.as_ptr() as *const u8,
-                        std::mem::size_of_val(self.data.as_slice()),
-                    )
-                }
-            }
-            fn as_slice_f32(&self) -> Result<&[f32], CoreError> {
-                impl_any_host_tensor_slice!(self, f32, $native)
-            }
-            fn as_slice_u8(&self) -> Result<&[u8], CoreError> {
-                impl_any_host_tensor_slice!(self, u8, $native)
-            }
-            fn as_slice_i32(&self) -> Result<&[i32], CoreError> {
-                impl_any_host_tensor_slice!(self, i32, $native)
-            }
-            fn as_slice_i64(&self) -> Result<&[i64], CoreError> {
-                impl_any_host_tensor_slice!(self, i64, $native)
-            }
-        }
-    };
+        Ok(HostBytes(bytes.to_vec()))
+    }
+
+    fn load(
+        &self,
+        storage: &Self::Storage,
+        shape: &TensorShape,
+        dtype: DataType,
+    ) -> Result<HostTensor, CoreError> {
+        HostTensor::new(shape.clone(), dtype, storage.0.clone())
+    }
+
+    fn upload_image(&self, host: &HostImage) -> Result<Self::Image, CoreError> {
+        Ok(host.clone())
+    }
 }
-
-macro_rules! impl_cpu_tensor_buffer {
-    ($ty:ty) => {
-        impl TensorBuffer for CpuTensor<$ty> {
-            fn shape(&self) -> &TensorShape {
-                &self.shape
-            }
-            fn dtype(&self) -> DataType {
-                self.dtype
-            }
-            fn device(&self) -> &Device {
-                cpu_device()
-            }
-            fn as_any(&self) -> &dyn std::any::Any {
-                self
-            }
-            fn read_to_cpu(&self) -> Result<Box<dyn AnyHostTensor>, CoreError> {
-                Ok(Box::new(self.clone()))
-            }
-            fn copy_to_device(
-                &self,
-                target: &Device,
-                transfer: Option<&dyn DeviceTransfer>,
-            ) -> Result<Box<dyn TensorBuffer>, CoreError> {
-                if target.is_cpu() {
-                    Ok(Box::new(self.clone()))
-                } else if let Some(transfer) = transfer {
-                    transfer.upload_tensor(self)
-                } else {
-                    Err(CoreError::BufferTransferFailed(format!(
-                        "Transfer from CPU to {} requires a DeviceTransfer context (e.g. GpuContext)",
-                        target
-                    )))
-                }
-            }
-        }
-    };
-}
-
-impl_any_host_tensor!(
-    f32,
-    f32,
-    "`f32` has no padding or invalid bit patterns, so its bytes are always initialised and readable as `u8`. The length is exactly the vector's byte length and `u8` alignment (1) is weaker than `f32`'s, so the resulting slice stays inside the same allocation and borrows it for `&self`."
-);
-impl_any_host_tensor!(
-    i32,
-    i32,
-    "as for the `f32` impl above; `i32` is likewise plain data with stronger alignment than `u8`."
-);
-impl_any_host_tensor!(
-    i64,
-    i64,
-    "as for the `f32` impl above; `i64` is likewise plain data with stronger alignment than `u8`."
-);
-impl_any_host_tensor!(u8);
-
-impl_cpu_tensor_buffer!(f32);
-impl_cpu_tensor_buffer!(u8);
-impl_cpu_tensor_buffer!(i32);
-impl_cpu_tensor_buffer!(i64);

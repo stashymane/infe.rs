@@ -6,16 +6,23 @@ public enum class DeviceKind {
     Npu,
 }
 
-public data class Device(
+/** Device identity metadata (kind, index, name). */
+public data class DeviceInfo(
     public val kind: DeviceKind,
     public val id: ULong,
     public val name: String,
-) {
-    public companion object {
-        public fun cpu(): Device = Device(DeviceKind.Cpu, 0u, "CPU")
+)
 
-        public fun gpu(id: ULong = 0u): Device = Device(DeviceKind.Gpu, id, "GPU:$id")
+/**
+ * Live execution device handle. [CpuDevice] and [dev.stashy.infers.vulkan.GpuDevice] are the
+ * concrete types. Out-of-tree implementors require [InfersInternalApi] opt-in.
+ */
+@SubclassOptInRequired(InfersInternalApi::class)
+public interface Device {
+    public val info: DeviceInfo
+}
 
-        public fun npu(id: ULong = 0u): Device = Device(DeviceKind.Npu, id, "NPU:$id")
-    }
+/** Singleton CPU execution device. */
+public object CpuDevice : Device {
+    override val info: DeviceInfo = DeviceInfo(DeviceKind.Cpu, 0u, "CPU")
 }

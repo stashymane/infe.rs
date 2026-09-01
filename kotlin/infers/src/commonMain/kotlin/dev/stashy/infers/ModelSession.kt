@@ -7,54 +7,51 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.withContext
-import dev.stashy.infers.ffi.ModelSession as FfiModelSession
+import dev.stashy.infers.ffi.CpuSession as FfiCpuSession
+
+/** Loaded model ready for inference on device [D]. */
+public interface ModelSession<D : Device> : AutoCloseable {
+    public val deviceInfo: DeviceInfo
+    public val inputShapes: List<TensorShape>
+    public val outputShapes: List<TensorShape>
+
+    @InfersInternalApi
+    public suspend fun runInternal(inputs: List<Tensor<D>>): List<CpuTensor>
+}
 
 /**
- * Loaded model ready for inference. Own this for the lifetime of a feature;
- * use [inferenceScope] for per-frame tensors.
+ * ExecuTorch session running on CPU (XNNPACK).
  *
  * Each session owns a single-threaded dispatcher matching the native mutex.
- * Concurrent [runInternal] calls on the same session serialize; different
- * sessions run in parallel.
- *
- * Native calls are not interruptible — cancellation is observed between stages.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
-public class ModelSession internal constructor(
-    private val handle: FfiModelSession,
+public class CpuSession @InfersInternalApi constructor(
+    private val handle: FfiCpuSession,
     private val dispatcher: CoroutineDispatcher = Dispatchers.Default.limitedParallelism(1),
-) : AutoCloseable {
-    private val gate = CloseGate("ModelSession")
+) : ModelSession<CpuDevice> {
+    private val gate = CloseGate("CpuSession")
 
-    public val device: Device
-        get() {
-            gate.ensureOpen()
-            return handle.device().fromFfi()
-        }
+    override val deviceInfo: DeviceInfo = CpuDevice.info
 
-    public val inputShapes: List<TensorShape>
+    override val inputShapes: List<TensorShape>
         get() {
             gate.ensureOpen()
             return handle.inputShapes().map { it.fromFfi() }
         }
 
-    public val outputShapes: List<TensorShape>
+    override val outputShapes: List<TensorShape>
         get() {
             gate.ensureOpen()
             return handle.outputShapes().map { it.fromFfi() }
         }
 
-    /**
-     * Runs inference. Prefer calling via [InferenceScope.run] so outputs are
-     * registered for automatic cleanup.
-     *
-     * Native calls are not interruptible; cancellation is checked around the call.
-     */
     @InfersInternalApi
-    public suspend fun runInternal(inputs: List<Tensor>): List<Tensor> = withContext(dispatcher) {
+    override suspend fun runInternal(inputs: List<Tensor<CpuDevice>>): List<CpuTensor> = withContext(dispatcher) {
         withFfiErrors {
             gate.ensureOpen()
-            handle.run(inputs.map { it.handle }).map { Tensor.fromFfi(it) }
+            handle
+                .run(inputs.map { (it as CpuTensor).handle })
+                .map { CpuTensor.fromFfi(it) }
         }
     }
 

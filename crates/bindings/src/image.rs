@@ -1,18 +1,24 @@
-use crate::device::Device;
+use crate::device::DeviceInfo;
 use crate::error::InfersError;
-use crate::tensor::TensorBuffer;
-use infers_core::CpuImageBuffer;
-#[cfg(target_os = "android")]
-use platform_android::AndroidHardwareBufferHandle as CoreHardwareBuffer;
-use processing::CpuImageProcessor;
-#[cfg(feature = "vulkan")]
-use processing::GpuImageProcessor;
+use crate::tensor::CpuTensor;
+use infers_core::HostImage as CoreHostImage;
+use processing::CpuImageProcessor as CoreCpuImageProcessor;
 use processing_core::{
     FitMode as CoreFitMode, ImageFormat as CoreImageFormat,
     ProcessingOptions as CoreProcessingOptions, Rotation as CoreRotation,
     TensorLayout as CoreTensorLayout,
 };
 use std::sync::Arc;
+
+#[cfg(feature = "vulkan")]
+use crate::tensor::GpuTensor;
+#[cfg(feature = "vulkan")]
+use infers_gpu::VulkanImage;
+#[cfg(feature = "vulkan")]
+use processing::GpuImageProcessor as CoreGpuImageProcessor;
+
+#[cfg(target_os = "android")]
+use platform_android::AndroidHardwareBufferHandle as CoreHardwareBuffer;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, uniffi::Enum)]
 pub enum ImageFormat {
@@ -98,6 +104,48 @@ impl From<ProcessingOptions> for CoreProcessingOptions {
             dest_layout: opts.dest_layout.into(),
         }
     }
+}
+
+/// Host-resident image bytes (camera frame, decoded file, etc.).
+#[derive(uniffi::Object)]
+pub struct HostImage {
+    inner: CoreHostImage,
+}
+
+impl HostImage {
+    pub(crate) fn inner(&self) -> &CoreHostImage {
+        &self.inner
+    }
+
+    pub(crate) fn from_inner(inner: CoreHostImage) -> Self {
+        Self { inner }
+    }
+}
+
+#[uniffi::export]
+impl HostImage {
+    pub fn width(&self) -> u32 {
+        self.inner.width()
+    }
+
+    pub fn height(&self) -> u32 {
+        self.inner.height()
+    }
+
+    pub fn format(&self) -> ImageFormat {
+        self.inner.format().into()
+    }
+}
+
+#[uniffi::export]
+pub fn create_host_image(
+    width: u32,
+    height: u32,
+    format: ImageFormat,
+    data: Vec<u8>,
+) -> Result<Arc<HostImage>, InfersError> {
+    let image = CoreHostImage::new(width, height, format.into(), data).map_err(InfersError::from)?;
+    Ok(Arc::new(HostImage::from_inner(image)))
 }
 
 /// UniFFI-exported handle. Instantiable only on Android; off-Android the
@@ -200,16 +248,14 @@ impl HardwareBufferHandle {
 #[uniffi::export]
 pub fn create_hardware_buffer_from_raw(
     ptr: u64,
-    device: Device,
+    device: DeviceInfo,
 ) -> Result<Arc<HardwareBufferHandle>, InfersError> {
     #[cfg(target_os = "android")]
     {
         let raw_ptr = ptr as *mut platform_android::ffi::AHardwareBuffer;
-        // Acquire our own +1. Do not consume the caller's/Java object's ref —
-        // `AHardwareBuffer_fromHardwareBuffer` is not reliable as a transferable
-        // ownership handoff against `HardwareBuffer.close()` on MTE devices.
+        let info: infers_core::DeviceInfo = device.into();
         let handle =
-            CoreHardwareBuffer::from_raw(raw_ptr, device.into()).map_err(InfersError::from)?;
+            CoreHardwareBuffer::from_raw(raw_ptr, info).map_err(InfersError::from)?;
         Ok(Arc::new(HardwareBufferHandle::new(Arc::new(handle))))
     }
     #[cfg(not(target_os = "android"))]
@@ -222,85 +268,115 @@ pub fn create_hardware_buffer_from_raw(
 }
 
 #[derive(uniffi::Object)]
-pub struct ImageProcessor {
-    pub(crate) cpu_proc: Option<CpuImageProcessor>,
-    #[cfg(feature = "vulkan")]
-    pub(crate) gpu_proc: Option<GpuImageProcessor>,
-    pub(crate) device: Device,
-}
-
-impl std::fmt::Debug for ImageProcessor {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("ImageProcessor")
-            .field("device", &self.device)
-            .finish()
-    }
+pub struct CpuImageProcessor {
+    inner: CoreCpuImageProcessor,
 }
 
 #[uniffi::export]
-impl ImageProcessor {
-    pub fn device(&self) -> Device {
-        self.device.clone()
+impl CpuImageProcessor {
+    #[uniffi::constructor]
+    pub fn new() -> Arc<Self> {
+        Arc::new(Self {
+            inner: CoreCpuImageProcessor::new(),
+        })
     }
 
-    pub fn process_bytes(
+    pub fn device_info(&self) -> DeviceInfo {
+        infers_core::Cpu::info().clone().into()
+    }
+
+    pub fn process(
         &self,
-        data: Vec<u8>,
-        width: u32,
-        height: u32,
-        format: ImageFormat,
+        image: Arc<HostImage>,
         options: ProcessingOptions,
-    ) -> Result<Arc<TensorBuffer>, InfersError> {
-        let cpu_img = CpuImageBuffer::new(width, height, format.into(), data)
-            .map_err(InfersError::from)?;
+    ) -> Result<Arc<CpuTensor>, InfersError> {
         let core_opts: CoreProcessingOptions = options.into();
+        let out = self
+            .inner
+            .process(image.inner(), &core_opts)
+            .map_err(InfersError::from)?;
+        Ok(Arc::new(CpuTensor::from_inner(out)))
+    }
+}
 
-        #[cfg(feature = "vulkan")]
-        if let Some(gpu) = &self.gpu_proc {
-            let out_tensor = gpu.process(&cpu_img, &core_opts).map_err(InfersError::from)?;
-            return Ok(Arc::new(TensorBuffer::from_boxed(out_tensor)));
-        }
+#[cfg(feature = "vulkan")]
+#[derive(uniffi::Object)]
+pub struct GpuImage {
+    inner: VulkanImage,
+}
 
-        if let Some(cpu) = &self.cpu_proc {
-            let out_tensor = cpu.process(&cpu_img, &core_opts).map_err(InfersError::from)?;
-            Ok(Arc::new(TensorBuffer::from_boxed(out_tensor)))
-        } else {
-            Err(InfersError::InternalError {
-                reason: "No processor available".into(),
-            })
-        }
+#[cfg(feature = "vulkan")]
+impl GpuImage {
+    pub(crate) fn from_vulkan(inner: VulkanImage) -> Self {
+        Self { inner }
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn inner(&self) -> &VulkanImage {
+        &self.inner
+    }
+}
+
+#[cfg(feature = "vulkan")]
+#[uniffi::export]
+impl GpuImage {
+    pub fn width(&self) -> u32 {
+        self.inner.width()
+    }
+
+    pub fn height(&self) -> u32 {
+        self.inner.height()
+    }
+
+    pub fn format(&self) -> ImageFormat {
+        self.inner.format().into()
+    }
+}
+
+#[cfg(feature = "vulkan")]
+#[derive(uniffi::Object)]
+pub struct GpuImageProcessor {
+    pub(crate) inner: CoreGpuImageProcessor,
+}
+
+#[cfg(feature = "vulkan")]
+#[uniffi::export]
+impl GpuImageProcessor {
+    pub fn device_info(&self) -> DeviceInfo {
+        self.inner.vulkan().info().clone().into()
+    }
+
+    pub fn process(
+        &self,
+        image: Arc<GpuImage>,
+        options: ProcessingOptions,
+    ) -> Result<Arc<GpuTensor>, InfersError> {
+        let core_opts: CoreProcessingOptions = options.into();
+        let out = self
+            .inner
+            .process(&image.inner, &core_opts)
+            .map_err(InfersError::from)?;
+        Ok(Arc::new(GpuTensor::from_inner(out)))
     }
 
     pub fn process_hardware_buffer(
         &self,
         buffer: Arc<HardwareBufferHandle>,
         options: ProcessingOptions,
-    ) -> Result<Arc<TensorBuffer>, InfersError> {
+    ) -> Result<Arc<GpuTensor>, InfersError> {
         #[cfg(target_os = "android")]
         {
+            let sampled = buffer
+                .inner()
+                .to_vulkan(Arc::clone(self.inner.vulkan().context()))
+                .map_err(InfersError::from)?;
+            let vulkan_image = VulkanImage::from_sampled(sampled);
             let core_opts: CoreProcessingOptions = options.into();
-            let hb = buffer.inner();
-
-            #[cfg(feature = "vulkan")]
-            if let Some(gpu) = &self.gpu_proc {
-                let sampled = hb
-                    .to_vulkan(Arc::clone(gpu.context()))
-                    .map_err(InfersError::from)?;
-                let out_tensor = gpu.process(&sampled, &core_opts).map_err(InfersError::from)?;
-                return Ok(Arc::new(TensorBuffer::from_boxed(out_tensor)));
-            }
-
-            if let Some(cpu) = &self.cpu_proc {
-                let data = hb.copy_cpu_packed().map_err(InfersError::from)?;
-                let cpu_img = CpuImageBuffer::new(hb.width(), hb.height(), hb.format(), data)
-                    .map_err(InfersError::from)?;
-                let out_tensor = cpu.process(&cpu_img, &core_opts).map_err(InfersError::from)?;
-                Ok(Arc::new(TensorBuffer::from_boxed(out_tensor)))
-            } else {
-                Err(InfersError::InternalError {
-                    reason: "No processor available".into(),
-                })
-            }
+            let out = self
+                .inner
+                .process(&vulkan_image, &core_opts)
+                .map_err(InfersError::from)?;
+            Ok(Arc::new(GpuTensor::from_inner(out)))
         }
         #[cfg(not(target_os = "android"))]
         {
@@ -310,14 +386,4 @@ impl ImageProcessor {
             })
         }
     }
-}
-
-#[uniffi::export]
-pub fn create_cpu_image_processor() -> Arc<ImageProcessor> {
-    Arc::new(ImageProcessor {
-        cpu_proc: Some(CpuImageProcessor::new()),
-        #[cfg(feature = "vulkan")]
-        gpu_proc: None,
-        device: infers_core::Device::cpu().into(),
-    })
 }

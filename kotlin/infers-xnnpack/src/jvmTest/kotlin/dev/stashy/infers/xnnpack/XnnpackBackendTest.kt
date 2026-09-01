@@ -13,13 +13,6 @@ import kotlin.test.assertTrue
 
 class XnnpackBackendTest {
     @Test
-    fun availableDevicesIsNonEmpty() = runTest {
-        Backend().use { backend ->
-            assertTrue(backend.availableDevices().isNotEmpty())
-        }
-    }
-
-    @Test
     fun invalidModelThrowsModelLoadFailed() = runTest {
         Backend().use { backend ->
             val path = Path(SystemTemporaryDirectory, "infers-invalid-xnnpack.pte")
@@ -29,7 +22,7 @@ class XnnpackBackendTest {
             try {
                 val error =
                     assertFailsWith<InfersException.ModelLoadFailed> {
-                        backend.loadModel(path, XnnpackConfig(numThreads = 1u))
+                        backend.loadModel(path, XnnpackOptions(numThreads = 1u))
                     }
                 assertTrue(error.reason.isNotEmpty())
             } finally {

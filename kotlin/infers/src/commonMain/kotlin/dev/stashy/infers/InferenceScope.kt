@@ -7,21 +7,19 @@ package dev.stashy.infers
 public annotation class InfersDsl
 
 /**
- * Frame-scoped resource arena. Every [Tensor] (and on Android, [HardwareBuffer])
- * created through this scope is closed automatically when the scope exits, in
- * reverse creation order.
+ * Frame-scoped resource arena. Every [Tensor], [HostImage], and on Android
+ * [HardwareBuffer] created through this scope is closed automatically when the
+ * scope exits, in reverse creation order.
  *
- * Prefer reading terminal results ([Tensor.readFloats], etc.) before the scope
- * returns — a [Tensor] that escapes has already been closed.
- *
- * Native FFI calls inside the scope are not interruptible; cancellation stops
- * between stages only.
+ * Preprocess, upload, and inference ([infer], [ImageProcessor.process]) require this
+ * scope via context parameters and cannot be called outside [inferenceScope].
  */
 @InfersDsl
 public class InferenceScope internal constructor() {
     private val resources = ArrayDeque<AutoCloseable>()
 
-    internal fun <T : AutoCloseable> register(resource: T): T {
+    @InfersInternalApi
+    public fun <T : AutoCloseable> register(resource: T): T {
         resources.addLast(resource)
         return resource
     }
@@ -45,39 +43,17 @@ public class InferenceScope internal constructor() {
         }
     }
 
-    /**
-     * Preprocesses [bytes] with [this] processor. The returned [Tensor] is owned
-     * by the scope.
-     */
-    public suspend fun ImageProcessor.process(bytes: ByteArray, options: ProcessingOptions): Tensor {
-        val processor =
-            this as? FfiBackedImageProcessor
-                ?: error("ImageProcessor must be an Infers FFI-backed processor")
-        return register(processor.processBytes(bytes, options))
-    }
+    /** Creates a float CPU tensor owned by the scope. */
+    public fun cpuTensorOf(shape: TensorShape, data: FloatArray): CpuTensor = register(CpuTensor.of(shape, data))
 
-    /**
-     * Runs inference with a single input. Outputs are owned by the scope.
-     */
-    public suspend fun ModelSession.run(input: Tensor): List<Tensor> = run(listOf(input))
+    /** Creates a U8 CPU tensor owned by the scope. */
+    public fun cpuTensorOf(shape: TensorShape, data: ByteArray): CpuTensor = register(CpuTensor.of(shape, data))
 
-    /**
-     * Runs inference. Outputs are owned by the scope.
-     */
-    @OptIn(InfersInternalApi::class)
-    public suspend fun ModelSession.run(inputs: List<Tensor>): List<Tensor> = runInternal(inputs).map { register(it) }
+    /** Creates an I32 CPU tensor owned by the scope. */
+    public fun cpuTensorOf(shape: TensorShape, data: IntArray): CpuTensor = register(CpuTensor.of(shape, data))
 
-    /** Creates a float tensor owned by the scope. */
-    public fun tensorOf(shape: TensorShape, data: FloatArray): Tensor = register(Tensor.of(shape, data))
-
-    /** Creates a U8 tensor owned by the scope. */
-    public fun tensorOf(shape: TensorShape, data: ByteArray): Tensor = register(Tensor.of(shape, data))
-
-    /** Creates an I32 tensor owned by the scope. */
-    public fun tensorOf(shape: TensorShape, data: IntArray): Tensor = register(Tensor.of(shape, data))
-
-    /** Creates an I64 tensor owned by the scope. */
-    public fun tensorOf(shape: TensorShape, data: LongArray): Tensor = register(Tensor.of(shape, data))
+    /** Creates an I64 CPU tensor owned by the scope. */
+    public fun cpuTensorOf(shape: TensorShape, data: LongArray): CpuTensor = register(CpuTensor.of(shape, data))
 }
 
 /**

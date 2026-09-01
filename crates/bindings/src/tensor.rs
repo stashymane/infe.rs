@@ -1,11 +1,9 @@
-use crate::device::Device;
+use crate::device::DeviceInfo;
 use crate::error::InfersError;
-use crate::gpu_context::GpuContext;
 use infers_core::{
-    bytes_to_vec, CpuTensor, DataType as CoreDataType, DeviceTransfer, TensorBuffer as CoreTensorBuffer,
+    bytes_to_vec, Cpu, DataType as CoreDataType, HostTensor, Tensor,
     TensorShape as CoreTensorShape,
 };
-use processing::VulkanDeviceTransfer;
 use std::sync::Arc;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, uniffi::Enum)]
@@ -47,25 +45,24 @@ impl TryFrom<TensorShape> for CoreTensorShape {
     }
 }
 
-#[derive(Debug, uniffi::Object)]
-pub struct TensorBuffer {
-    inner: Arc<dyn CoreTensorBuffer>,
+/// Host-resident CPU tensor.
+#[derive(uniffi::Object)]
+pub struct CpuTensor {
+    inner: Tensor<Cpu>,
 }
 
-impl TensorBuffer {
-    pub fn from_boxed(boxed: Box<dyn CoreTensorBuffer>) -> Self {
-        Self {
-            inner: Arc::from(boxed),
-        }
+impl CpuTensor {
+    pub(crate) fn inner(&self) -> &Tensor<Cpu> {
+        &self.inner
     }
 
-    pub fn as_core(&self) -> &dyn CoreTensorBuffer {
-        self.inner.as_ref()
+    pub(crate) fn from_inner(inner: Tensor<Cpu>) -> Self {
+        Self { inner }
     }
 }
 
 #[uniffi::export]
-impl TensorBuffer {
+impl CpuTensor {
     pub fn shape(&self) -> TensorShape {
         self.inner.shape().clone().into()
     }
@@ -74,82 +71,101 @@ impl TensorBuffer {
         self.inner.dtype().into()
     }
 
-    pub fn device(&self) -> Device {
-        self.inner.device().clone().into()
+    pub fn device_info(&self) -> DeviceInfo {
+        infers_core::Cpu::info().clone().into()
     }
 
     pub fn byte_size(&self) -> u64 {
         self.inner.byte_size() as u64
     }
 
-    /// Raw little-endian bytes of the tensor contents after CPU readback.
-    pub fn read_to_cpu_bytes(&self) -> Result<Vec<u8>, InfersError> {
-        let host = self.inner.read_to_cpu().map_err(InfersError::from)?;
-        Ok(host.as_bytes().to_vec())
+    pub fn read_bytes(&self) -> Result<Vec<u8>, InfersError> {
+        Ok(self.inner.read_to_host()?.as_bytes().to_vec())
     }
-
-    pub fn copy_to_device(
-        &self,
-        target: Device,
-        gpu_context: Option<Arc<GpuContext>>,
-    ) -> Result<Arc<TensorBuffer>, InfersError> {
-        let target_device: infers_core::Device = target.into();
-        let transfer: Option<VulkanDeviceTransfer> = gpu_context
-            .as_ref()
-            .map(|ctx| VulkanDeviceTransfer::new(Arc::clone(ctx.inner())));
-        let transferred = self.inner.copy_to_device(
-            &target_device,
-            transfer.as_ref().map(|t| t as &dyn DeviceTransfer),
-        )?;
-        Ok(Arc::new(TensorBuffer::from_boxed(transferred)))
-    }
-}
-
-/// Upload a host-resident tensor to GPU memory using `gpu_context`.
-#[uniffi::export]
-pub fn upload_to_gpu(
-    gpu_context: Arc<GpuContext>,
-    tensor: Arc<TensorBuffer>,
-) -> Result<Arc<TensorBuffer>, InfersError> {
-    let transfer = VulkanDeviceTransfer::new(Arc::clone(gpu_context.inner()));
-    let device = gpu_context.device();
-    let target: infers_core::Device = device.into();
-    let uploaded = tensor
-        .inner
-        .copy_to_device(&target, Some(&transfer))?;
-    Ok(Arc::new(TensorBuffer::from_boxed(uploaded)))
 }
 
 /// Construct a CPU tensor from little-endian raw bytes matching [dtype].
 #[uniffi::export]
-pub fn create_tensor_from_bytes(
+pub fn create_cpu_tensor_from_bytes(
     shape: TensorShape,
     dtype: DataType,
     data: Vec<u8>,
-) -> Result<Arc<TensorBuffer>, InfersError> {
+) -> Result<Arc<CpuTensor>, InfersError> {
     let core_shape: CoreTensorShape = shape.try_into()?;
     let core_dtype: CoreDataType = dtype.into();
-    let tensor: Box<dyn CoreTensorBuffer> = match core_dtype {
-        CoreDataType::U8 => {
-            Box::new(CpuTensor::new(core_shape, core_dtype, data).map_err(InfersError::from)?)
-        }
+    let host = match core_dtype {
+        CoreDataType::U8 => HostTensor::from_u8(core_shape, data).map_err(InfersError::from)?,
         CoreDataType::F32 => {
             let values = bytes_to_vec::<f32>(&data).map_err(InfersError::from)?;
-            Box::new(CpuTensor::new(core_shape, core_dtype, values).map_err(InfersError::from)?)
+            HostTensor::from_f32(core_shape, values).map_err(InfersError::from)?
         }
         CoreDataType::I32 => {
             let values = bytes_to_vec::<i32>(&data).map_err(InfersError::from)?;
-            Box::new(CpuTensor::new(core_shape, core_dtype, values).map_err(InfersError::from)?)
+            HostTensor::from_i32(core_shape, values).map_err(InfersError::from)?
         }
         CoreDataType::I64 => {
             let values = bytes_to_vec::<i64>(&data).map_err(InfersError::from)?;
-            Box::new(CpuTensor::new(core_shape, core_dtype, values).map_err(InfersError::from)?)
+            HostTensor::from_i64(core_shape, values).map_err(InfersError::from)?
         }
         other => {
             return Err(InfersError::UnsupportedType {
-                reason: format!("create_tensor_from_bytes does not support {other:?}"),
+                reason: format!("create_cpu_tensor_from_bytes does not support {other:?}"),
             });
         }
     };
-    Ok(Arc::new(TensorBuffer::from_boxed(tensor)))
+    let tensor = Tensor::from_host(&Cpu, &host).map_err(InfersError::from)?;
+    Ok(Arc::new(CpuTensor::from_inner(tensor)))
+}
+
+#[cfg(feature = "vulkan")]
+use infers_gpu::Vulkan;
+
+#[cfg(feature = "vulkan")]
+/// GPU-resident tensor.
+#[derive(uniffi::Object)]
+pub struct GpuTensor {
+    inner: Tensor<Vulkan>,
+}
+
+#[cfg(feature = "vulkan")]
+impl GpuTensor {
+    pub(crate) fn inner(&self) -> &Tensor<Vulkan> {
+        &self.inner
+    }
+
+    pub(crate) fn from_inner(inner: Tensor<Vulkan>) -> Self {
+        Self { inner }
+    }
+}
+
+#[cfg(feature = "vulkan")]
+#[uniffi::export]
+impl GpuTensor {
+    pub fn shape(&self) -> TensorShape {
+        self.inner.shape().clone().into()
+    }
+
+    pub fn dtype(&self) -> DataType {
+        self.inner.dtype().into()
+    }
+
+    pub fn device_info(&self) -> DeviceInfo {
+        self.inner.device().info().clone().into()
+    }
+
+    pub fn byte_size(&self) -> u64 {
+        self.inner.byte_size() as u64
+    }
+
+    pub fn read_bytes(&self) -> Result<Vec<u8>, InfersError> {
+        Ok(self.inner.read_to_host()?.as_bytes().to_vec())
+    }
+
+    pub fn download(&self) -> Result<Arc<CpuTensor>, InfersError> {
+        let cpu = self
+            .inner
+            .to_device(&Cpu)
+            .map_err(InfersError::from)?;
+        Ok(Arc::new(CpuTensor::from_inner(cpu)))
+    }
 }
