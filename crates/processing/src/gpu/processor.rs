@@ -2,56 +2,166 @@ use super::SHADERS;
 use infers_core::CoreError;
 use infers_gpu::GpuError;
 use infers_core::{
-    DataType, ImageFormat, ProcessingOptions, Tensor, TensorShape,
+    DataType, HardwareImage, ImageFormat, MaterializeTarget, Pending, ProcessingOptions, Tensor,
+    TensorShape,
 };
 use infers_gpu::{
     ash::vk,
     ash::vk::Handle,
     gpu_allocator::MemoryLocation,
-    tensor_from_allocated, AllocatedBuffer, buffer_barrier, Vulkan, VulkanContext,
-    VulkanImage, VulkanSampledImage,
+    tensor_from_allocated, tensor_from_external, AllocatedBuffer, buffer_barrier, Vulkan,
+    VulkanBufferHandle, VulkanContext, VulkanImage, VulkanSampledImage,
 };
 use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-struct YcbcrPipeline {
-    set_layout: vk::DescriptorSetLayout,
-    layout: vk::PipelineLayout,
-    pipeline: vk::Pipeline,
+/// Configuration for [`GpuImageProcessor`].
+#[derive(Clone, Copy, Debug)]
+pub struct GpuImageProcessorOptions {
+    /// Number of in-flight frame slots to pool. Default `1` (sync path).
+    /// Reserved for a future async API; slots are still waited on synchronously.
+    pub in_flight_slots: u32,
 }
 
-struct FramePool {
-    staging_src: Option<AllocatedBuffer>,
-    src: Option<AllocatedBuffer>,
-    ubo: Option<AllocatedBuffer>,
-    fence: vk::Fence,
+impl Default for GpuImageProcessorOptions {
+    fn default() -> Self {
+        Self {
+            in_flight_slots: 1,
+        }
+    }
 }
 
-impl FramePool {
-    fn new(vkd: &ash::Device) -> Result<Self, GpuError> {
-        // SAFETY: default fence create info borrows nothing.
-        let fence = unsafe { vkd.create_fence(&vk::FenceCreateInfo::default(), None) }?;
-        Ok(Self {
-            staging_src: None,
-            src: None,
-            ubo: None,
-            fence,
+/// Query ExecuTorch Vulkan input staging buffers by session input slot.
+pub type SessionStagingQuery =
+    Arc<dyn Fn(usize) -> Result<VulkanBufferHandle, CoreError> + Send + Sync>;
+
+thread_local! {
+    static SESSION_STAGING: std::cell::RefCell<Option<SessionStagingQuery>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// Install a thread-local staging query for [`MaterializeTarget::SessionInput`] commits.
+pub fn set_session_staging_query(query: Option<SessionStagingQuery>) {
+    SESSION_STAGING.with(|slot| *slot.borrow_mut() = query);
+}
+
+fn staging_for_materialize(explicit: Option<&SessionStagingQuery>) -> Option<SessionStagingQuery> {
+    explicit
+        .cloned()
+        .or_else(|| SESSION_STAGING.with(|slot| slot.borrow().clone()))
+}
+
+#[derive(Clone)]
+enum GpuProcessInput {
+    LinearUploaded {
+        src: vk::Buffer,
+        size: u64,
+    },
+    LinearUnstaged {
+        staging: vk::Buffer,
+        gpu: vk::Buffer,
+        size: u64,
+    },
+    Sampled(Arc<VulkanSampledImage>),
+}
+
+#[derive(Clone, Copy, Debug)]
+struct SampledDispatchInfo {
+    image: vk::Image,
+    view: vk::ImageView,
+    sampler: vk::Sampler,
+    is_ycbcr: bool,
+    acquire_from_external: bool,
+    current_layout: vk::ImageLayout,
+}
+
+impl GpuProcessInput {
+    fn from_image(input: &VulkanImage) -> Result<Self, CoreError> {
+        match input {
+            VulkanImage::Linear(buf) => {
+                if buf.staging_dirty() {
+                    Self::linear_unstaged(buf)
+                } else {
+                    let gpu = buf.gpu_buffer().ok_or_else(|| {
+                        CoreError::InvalidImageBuffer("linear GPU image buffer destroyed".into())
+                    })?;
+                    Ok(Self::LinearUploaded {
+                        src: gpu.buffer,
+                        size: gpu.size,
+                    })
+                }
+            }
+            VulkanImage::Sampled(sampled) => Ok(Self::Sampled(Arc::clone(sampled))),
+        }
+    }
+
+    fn linear_unstaged(buf: &infers_gpu::VulkanImageBuffer) -> Result<Self, CoreError> {
+        let staging = buf.staging_buffer().ok_or_else(|| {
+            CoreError::InvalidImageBuffer("image staging buffer destroyed".into())
+        })?;
+        let gpu = buf.gpu_buffer().ok_or_else(|| {
+            CoreError::InvalidImageBuffer("image gpu buffer destroyed".into())
+        })?;
+        Ok(Self::LinearUnstaged {
+            staging: staging.buffer,
+            gpu: gpu.buffer,
+            size: gpu.size,
         })
     }
 }
 
+impl From<&Arc<VulkanSampledImage>> for SampledDispatchInfo {
+    fn from(sampled: &Arc<VulkanSampledImage>) -> Self {
+        Self {
+            image: sampled.image(),
+            view: sampled.view(),
+            sampler: sampled.sampler(),
+            is_ycbcr: sampled.is_ycbcr(),
+            acquire_from_external: sampled.acquire_from_external(),
+            current_layout: sampled.current_layout(),
+        }
+    }
+}
+
+enum OutputDestination {
+    Pooled,
+    External(VulkanBufferHandle),
+}
+
+struct YcbcrPipeline {
+    set_layout: vk::DescriptorSetLayout,
+    layout: vk::PipelineLayout,
+    pipeline: vk::Pipeline,
+    /// One pre-allocated descriptor set per frame slot.
+    desc_sets: Vec<vk::DescriptorSet>,
+}
+
+struct SampledPipelineBinding {
+    pipeline_layout: vk::PipelineLayout,
+    pipeline: vk::Pipeline,
+    desc_set: vk::DescriptorSet,
+}
+
+struct GpuFrameSlot {
+    dst: Option<AllocatedBuffer>,
+    cmd: vk::CommandBuffer,
+    desc_ssbo: vk::DescriptorSet,
+    desc_image: vk::DescriptorSet,
+    fence: vk::Fence,
+}
+
 struct DispatchResources {
-    frame: FramePool,
-    // YCbCr set layouts bind an immutable sampler; cache one pipeline per sampler handle.
+    slots: Vec<GpuFrameSlot>,
+    slot_index: usize,
     ycbcr_pipelines: HashMap<u64, YcbcrPipeline>,
 }
 
-/// GPU image processor that dispatches SPIR-V `convert_main` / `convert_image` on a shared context.
-pub struct GpuImageProcessor {
+struct GpuImageProcessorInner {
     vulkan: Vulkan,
     context: Arc<VulkanContext>,
     shader_module: vk::ShaderModule,
+    pipeline_cache: vk::PipelineCache,
     set_layout_ssbo: vk::DescriptorSetLayout,
     set_layout_image: vk::DescriptorSetLayout,
     layout_ssbo: vk::PipelineLayout,
@@ -60,16 +170,37 @@ pub struct GpuImageProcessor {
     pipeline_image: vk::Pipeline,
     sampler: vk::Sampler,
     cmd_pool: vk::CommandPool,
-    desc_pool: Mutex<vk::DescriptorPool>,
+    desc_pool: vk::DescriptorPool,
     record_lock: Mutex<DispatchResources>,
+    /// Reused SSBO upload buffer for hardware-sourced frames (width, height, format, buffer).
+    upload_buffer: Mutex<Option<(u32, u32, ImageFormat, infers_gpu::VulkanImageBuffer)>>,
+}
+
+/// GPU image processor that dispatches SPIR-V `convert_main` / `convert_image` on a shared context.
+#[derive(Clone)]
+pub struct GpuImageProcessor {
+    inner: Arc<GpuImageProcessorInner>,
 }
 
 impl GpuImageProcessor {
     pub fn new(vulkan: Vulkan) -> Result<Self, CoreError> {
-        Self::try_new(vulkan).map_err(CoreError::from)
+        Self::new_with_options(vulkan, GpuImageProcessorOptions::default())
     }
 
-    fn try_new(vulkan: Vulkan) -> Result<Self, GpuError> {
+    pub fn new_with_options(
+        vulkan: Vulkan,
+        options: GpuImageProcessorOptions,
+    ) -> Result<Self, CoreError> {
+        Self::try_new_with_options(vulkan, options)
+            .map(|inner| Self { inner: Arc::new(inner) })
+            .map_err(CoreError::from)
+    }
+
+    fn try_new_with_options(
+        vulkan: Vulkan,
+        options: GpuImageProcessorOptions,
+    ) -> Result<GpuImageProcessorInner, GpuError> {
+        let slot_count = options.in_flight_slots.max(1) as usize;
         let context = Arc::clone(vulkan.context());
         let vkd = context.device();
 
@@ -78,12 +209,15 @@ impl GpuImageProcessor {
             vkd.create_shader_module(&vk::ShaderModuleCreateInfo::default().code(&words), None)?
         };
 
+        let pipeline_cache = unsafe {
+            vkd.create_pipeline_cache(&vk::PipelineCacheCreateInfo::default(), None)
+        }?;
+
         let set_layout_ssbo = unsafe {
             vkd.create_descriptor_set_layout(
                 &vk::DescriptorSetLayoutCreateInfo::default().bindings(&[
-                    storage_binding(0, vk::DescriptorType::UNIFORM_BUFFER),
+                    storage_binding(0, vk::DescriptorType::STORAGE_BUFFER),
                     storage_binding(1, vk::DescriptorType::STORAGE_BUFFER),
-                    storage_binding(2, vk::DescriptorType::STORAGE_BUFFER),
                 ]),
                 None,
             )?
@@ -91,28 +225,38 @@ impl GpuImageProcessor {
         let set_layout_image = unsafe {
             vkd.create_descriptor_set_layout(
                 &vk::DescriptorSetLayoutCreateInfo::default().bindings(&[
-                    storage_binding(0, vk::DescriptorType::UNIFORM_BUFFER),
-                    storage_binding(1, vk::DescriptorType::COMBINED_IMAGE_SAMPLER),
-                    storage_binding(2, vk::DescriptorType::STORAGE_BUFFER),
+                    vk::DescriptorSetLayoutBinding::default()
+                        .binding(0)
+                        .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                        .descriptor_count(1)
+                        .stage_flags(vk::ShaderStageFlags::COMPUTE),
+                    storage_binding(1, vk::DescriptorType::STORAGE_BUFFER),
                 ]),
                 None,
             )?
         };
 
+        let push_constant_range = vk::PushConstantRange::default()
+            .stage_flags(vk::ShaderStageFlags::COMPUTE)
+            .offset(0)
+            .size(PUSH_CONSTANT_BYTES as u32);
         let layout_ssbo = unsafe {
             vkd.create_pipeline_layout(
-                &vk::PipelineLayoutCreateInfo::default().set_layouts(&[set_layout_ssbo]),
+                &vk::PipelineLayoutCreateInfo::default()
+                    .set_layouts(&[set_layout_ssbo])
+                    .push_constant_ranges(&[push_constant_range]),
                 None,
             )?
         };
         let layout_image = unsafe {
             vkd.create_pipeline_layout(
-                &vk::PipelineLayoutCreateInfo::default().set_layouts(&[set_layout_image]),
+                &vk::PipelineLayoutCreateInfo::default()
+                    .set_layouts(&[set_layout_image])
+                    .push_constant_ranges(&[push_constant_range]),
                 None,
             )?
         };
 
-        // C-string literals: no allocation and no fallible NUL check.
         let stage_main = vk::PipelineShaderStageCreateInfo::default()
             .stage(vk::ShaderStageFlags::COMPUTE)
             .module(shader_module)
@@ -130,7 +274,7 @@ impl GpuImageProcessor {
                 .layout(layout_image),
         ];
         let pipelines = unsafe {
-            vkd.create_compute_pipelines(vk::PipelineCache::null(), &infos, None)
+            vkd.create_compute_pipelines(pipeline_cache, &infos, None)
                 .map_err(|(_, err)| err)?
         };
         let pipeline_ssbo = pipelines[0];
@@ -164,32 +308,38 @@ impl GpuImageProcessor {
         let desc_pool = unsafe {
             vkd.create_descriptor_pool(
                 &vk::DescriptorPoolCreateInfo::default()
-                    .max_sets(8)
+                    .max_sets((slot_count * 2 + 8) as u32)
                     .flags(vk::DescriptorPoolCreateFlags::FREE_DESCRIPTOR_SET)
                     .pool_sizes(&[
                         vk::DescriptorPoolSize {
-                            ty: vk::DescriptorType::UNIFORM_BUFFER,
-                            descriptor_count: 8,
-                        },
-                        vk::DescriptorPoolSize {
                             ty: vk::DescriptorType::STORAGE_BUFFER,
-                            descriptor_count: 16,
+                            descriptor_count: (slot_count * 4 + 16) as u32,
                         },
                         vk::DescriptorPoolSize {
                             ty: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
-                            descriptor_count: 8,
+                            descriptor_count: (slot_count * 2 + 8) as u32,
                         },
                     ]),
                 None,
             )?
         };
 
-        let frame_pool = FramePool::new(vkd)?;
+        let mut slots = Vec::with_capacity(slot_count);
+        for _ in 0..slot_count {
+            slots.push(create_frame_slot(
+                vkd,
+                cmd_pool,
+                desc_pool,
+                set_layout_ssbo,
+                set_layout_image,
+            )?);
+        }
 
-        Ok(Self {
+        Ok(GpuImageProcessorInner {
             vulkan,
             context,
             shader_module,
+            pipeline_cache,
             set_layout_ssbo,
             set_layout_image,
             layout_ssbo,
@@ -198,475 +348,917 @@ impl GpuImageProcessor {
             pipeline_image,
             sampler,
             cmd_pool,
-            desc_pool: Mutex::new(desc_pool),
+            desc_pool,
             record_lock: Mutex::new(DispatchResources {
-                frame: frame_pool,
+                slots,
+                slot_index: 0,
                 ycbcr_pipelines: HashMap::new(),
             }),
+            upload_buffer: Mutex::new(None),
         })
     }
 
     pub fn vulkan(&self) -> &Vulkan {
-        &self.vulkan
+        &self.inner.vulkan
     }
 
     pub fn context(&self) -> &Arc<VulkanContext> {
-        &self.context
+        &self.inner.context
     }
 
     pub fn process(
         &self,
         input: &VulkanImage,
         options: &ProcessingOptions,
-    ) -> Result<Tensor<Vulkan>, CoreError> {
-        if !Arc::ptr_eq(&self.context, input.context()) {
-            return Err(CoreError::DeviceMismatch {
-                expected: self.vulkan.info().clone(),
-                actual: input.context().device_info().clone(),
-            });
-        }
+    ) -> Result<Pending<Vulkan>, CoreError> {
+        self.process_with_staging(input, options, None)
+    }
 
-        let (dest_w, dest_h) = (options.dest_w, options.dest_h);
-        if dest_w == 0 || dest_h == 0 {
-            return Err(CoreError::InvalidImageBuffer(
-                "Destination dimensions must be non-zero".into(),
-            ));
-        }
-        if options.dest_format.is_yuv() {
-            return Err(CoreError::InvalidImageBuffer(
-                "GPU convert kernels emit RGB888 or RGBF32, not YUV".into(),
-            ));
-        }
-
-        let src_format = input.format();
-        if src_format.is_yuv()
-            && (!input.width().is_multiple_of(2) || !input.height().is_multiple_of(2))
-        {
-            return Err(CoreError::InvalidImageBuffer(
-                "YUV 4:2:0 input width and height must be even".into(),
-            ));
-        }
-
-        let (_crop_x, _crop_y, crop_w, crop_h) = options.effective_crop();
-        if crop_w == 0 || crop_h == 0 {
-            return Err(CoreError::InvalidImageBuffer(
-                "Effective crop width and height must be greater than zero".into(),
-            ));
-        }
-
-        let shape = match options.dest_layout {
-            processing_core::TensorLayout::Nhwc => {
-                TensorShape::new(vec![1, dest_h as usize, dest_w as usize, 3])?
-            }
-            processing_core::TensorLayout::Nchw => {
-                TensorShape::new(vec![1, 3, dest_h as usize, dest_w as usize])?
-            }
-        };
-        let dtype = match options.dest_format {
-            ImageFormat::Rgb888 => DataType::U8,
-            ImageFormat::Rgbf32 => DataType::F32,
-            ImageFormat::Nv12 | ImageFormat::I420 => {
-                return Err(CoreError::InvalidImageBuffer(
-                    "GPU convert kernels emit RGB888 or RGBF32, not YUV".into(),
-                ));
-            }
-        };
-
+    pub(crate) fn process_with_staging(
+        &self,
+        input: &VulkanImage,
+        options: &ProcessingOptions,
+        session_staging: Option<SessionStagingQuery>,
+    ) -> Result<Pending<Vulkan>, CoreError> {
+        validate_process(&self.inner, input, options)?;
+        let (shape, dtype) = output_shape_dtype(options)?;
+        let process_input = GpuProcessInput::from_image(input)?;
         let mut kernel_opts = *options;
         kernel_opts.src_w = input.width();
         kernel_opts.src_h = input.height();
-        kernel_opts.src_format = src_format;
+        kernel_opts.src_format = input.format();
 
-        match input {
-            VulkanImage::Linear(buf) => {
-                let gpu = buf.gpu_buffer().ok_or_else(|| {
-                    CoreError::InvalidImageBuffer("linear GPU image buffer destroyed".into())
-                })?;
-                self.dispatch_from_linear(gpu, &kernel_opts, shape, dtype)
-                    .map_err(CoreError::from)
-            }
-            VulkanImage::Sampled(sampled) => self
-                .dispatch_sampled(sampled, &kernel_opts, shape, dtype)
-                .map_err(CoreError::from),
-        }
+        let inner = Arc::clone(&self.inner);
+        let vulkan = inner.vulkan.clone();
+        Ok(Pending::schedule(
+            vulkan,
+            shape,
+            dtype,
+            Box::new(move |target| {
+                inner.materialize(
+                    &kernel_opts,
+                    process_input,
+                    target,
+                    session_staging.as_ref(),
+                )
+            }),
+        ))
     }
 
-    fn dispatch_from_linear(
+    pub(crate) fn materialize_from_hardware(
         &self,
-        src_gpu: &AllocatedBuffer,
+        device: &Vulkan,
+        hardware: Arc<HardwareImage>,
         options: &ProcessingOptions,
-        shape: TensorShape,
-        dtype: DataType,
-    ) -> Result<Tensor<Vulkan>, GpuError> {
-        let dst_size = shape.byte_size(dtype) as u64;
-        let ctx = self.context.as_ref();
+        target: MaterializeTarget,
+        session_staging: Option<&SessionStagingQuery>,
+    ) -> Result<Tensor<Vulkan>, CoreError> {
+        let width = hardware.width();
+        let height = hardware.height();
+        let format = hardware.format();
+        let mut buffer = self
+            .inner
+            .take_upload_buffer(device, width, height, format)?;
+        let result = (|| {
+            buffer.write_staging(hardware.as_bytes())?;
+            let process_input = GpuProcessInput::linear_unstaged(&buffer)?;
 
-        let mut dispatch = self.record_lock.lock();
-        pool_buffer(
-            ctx,
-            &mut dispatch.frame.ubo,
-            options_bytes(options).len() as u64,
-            vk::BufferUsageFlags::UNIFORM_BUFFER,
-            MemoryLocation::CpuToGpu,
-            "convert-ubo",
-        )?;
-        let ubo_bytes = options_bytes(options);
-        VulkanContext::write_allocation(
-            &mut dispatch.frame.ubo.as_mut().unwrap().allocation,
-            &ubo_bytes,
-        )?;
+            let mut kernel_opts = *options;
+            kernel_opts.src_w = width;
+            kernel_opts.src_h = height;
+            kernel_opts.src_format = format;
 
-        let dst = ctx.create_buffer(
-            dst_size,
-            vk::BufferUsageFlags::STORAGE_BUFFER | vk::BufferUsageFlags::TRANSFER_SRC,
-            MemoryLocation::GpuOnly,
-            "dst-ssbo",
-        )?;
-
-        let vkd = ctx.device();
-        let ubo_buf = dispatch.frame.ubo.as_ref().unwrap().buffer;
-        let desc_pool = *self.desc_pool.lock();
-        unsafe { vkd.reset_descriptor_pool(desc_pool, vk::DescriptorPoolResetFlags::empty())? };
-        let set = unsafe {
-            vkd.allocate_descriptor_sets(
-                &vk::DescriptorSetAllocateInfo::default()
-                    .descriptor_pool(desc_pool)
-                    .set_layouts(&[self.set_layout_ssbo]),
-            )?
-        }[0];
-
-        let ubo_info = vk::DescriptorBufferInfo::default()
-            .buffer(ubo_buf)
-            .offset(0)
-            .range(ubo_bytes.len() as u64);
-        let src_info = vk::DescriptorBufferInfo::default()
-            .buffer(src_gpu.buffer)
-            .offset(0)
-            .range(src_gpu.size);
-        let dst_info = vk::DescriptorBufferInfo::default()
-            .buffer(dst.buffer)
-            .offset(0)
-            .range(dst.size);
-        let writes = [
-            buffer_write(set, 0, vk::DescriptorType::UNIFORM_BUFFER, &ubo_info),
-            buffer_write(set, 1, vk::DescriptorType::STORAGE_BUFFER, &src_info),
-            buffer_write(set, 2, vk::DescriptorType::STORAGE_BUFFER, &dst_info),
-        ];
-        unsafe { vkd.update_descriptor_sets(&writes, &[]) };
-
-        let cmd = self.alloc_cmd()?;
-        let begin = vk::CommandBufferBeginInfo::default()
-            .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
-        unsafe { vkd.begin_command_buffer(cmd, &begin)? };
-        unsafe {
-            buffer_barrier(
-                vkd,
-                cmd,
-                src_gpu.buffer,
-                vk::PipelineStageFlags::TRANSFER,
-                vk::PipelineStageFlags::COMPUTE_SHADER,
-                vk::AccessFlags::TRANSFER_WRITE,
-                vk::AccessFlags::SHADER_READ,
-            );
-            vkd.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::COMPUTE, self.pipeline_ssbo);
-            vkd.cmd_bind_descriptor_sets(
-                cmd,
-                vk::PipelineBindPoint::COMPUTE,
-                self.layout_ssbo,
-                0,
-                &[set],
-                &[],
-            );
-            let gx = options.dest_w.div_ceil(16);
-            let gy = options.dest_h.div_ceil(16);
-            vkd.cmd_dispatch(cmd, gx, gy, 1);
-            buffer_barrier(
-                vkd,
-                cmd,
-                dst.buffer,
-                vk::PipelineStageFlags::COMPUTE_SHADER,
-                vk::PipelineStageFlags::TRANSFER,
-                vk::AccessFlags::SHADER_WRITE,
-                vk::AccessFlags::TRANSFER_READ,
-            );
-            vkd.end_command_buffer(cmd)?;
-        }
-        self.submit_and_wait(cmd, &mut dispatch.frame)?;
-
-        Ok(tensor_from_allocated(&self.vulkan, shape, dtype, dst))
-    }
-
-    fn dispatch_sampled(
-        &self,
-        sampled: &VulkanSampledImage,
-        options: &ProcessingOptions,
-        shape: TensorShape,
-        dtype: DataType,
-    ) -> Result<Tensor<Vulkan>, GpuError> {
-        let dst_size = shape.byte_size(dtype) as u64;
-        let ctx = self.context.as_ref();
-
-        let mut dispatch = self.record_lock.lock();
-
-        let (set_layout, pipeline_layout, pipeline) = if sampled.is_ycbcr() {
-            let sampler = sampled.sampler();
-            let key = sampler.as_raw();
-            if let Some(cached) = dispatch.ycbcr_pipelines.get(&key) {
-                (cached.set_layout, cached.layout, cached.pipeline)
-            } else {
-                let immutable = [sampler];
-                let bindings = [
-                    storage_binding(0, vk::DescriptorType::UNIFORM_BUFFER),
-                    vk::DescriptorSetLayoutBinding::default()
-                        .binding(1)
-                        .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                        .descriptor_count(1)
-                        .stage_flags(vk::ShaderStageFlags::COMPUTE)
-                        .immutable_samplers(&immutable),
-                    storage_binding(2, vk::DescriptorType::STORAGE_BUFFER),
-                ];
-                let vkd = ctx.device();
-                let set_layout = unsafe {
-                    vkd.create_descriptor_set_layout(
-                        &vk::DescriptorSetLayoutCreateInfo::default().bindings(&bindings),
-                        None,
-                    )?
-                };
-                let pipeline_layout = unsafe {
-                    vkd.create_pipeline_layout(
-                        &vk::PipelineLayoutCreateInfo::default().set_layouts(&[set_layout]),
-                        None,
-                    )?
-                };
-                let stage = vk::PipelineShaderStageCreateInfo::default()
-                    .stage(vk::ShaderStageFlags::COMPUTE)
-                    .module(self.shader_module)
-                    .name(c"convert_image");
-                let pipeline = unsafe {
-                    vkd.create_compute_pipelines(
-                        vk::PipelineCache::null(),
-                        &[vk::ComputePipelineCreateInfo::default()
-                            .stage(stage)
-                            .layout(pipeline_layout)],
-                        None,
-                    )
-                        .map_err(|(_, err)| err)?[0]
-                };
-                dispatch.ycbcr_pipelines.insert(
-                    key,
-                    YcbcrPipeline {
-                        set_layout,
-                        layout: pipeline_layout,
-                        pipeline,
-                    },
-                );
-                (set_layout, pipeline_layout, pipeline)
-            }
-        } else {
-            (
-                self.set_layout_image,
-                self.layout_image,
-                self.pipeline_image,
+            self.inner.materialize(
+                &kernel_opts,
+                process_input,
+                target,
+                session_staging,
             )
-        };
-
-        let ubo_bytes = options_bytes(options);
-        pool_buffer(
-            ctx,
-            &mut dispatch.frame.ubo,
-            ubo_bytes.len() as u64,
-            vk::BufferUsageFlags::UNIFORM_BUFFER,
-            MemoryLocation::CpuToGpu,
-            "convert-ubo",
-        )?;
-        VulkanContext::write_allocation(
-            &mut dispatch.frame.ubo.as_mut().unwrap().allocation,
-            &ubo_bytes,
-        )?;
-        let ubo_buf = dispatch.frame.ubo.as_ref().unwrap().buffer;
-
-        let dst = ctx.create_buffer(
-            dst_size,
-            vk::BufferUsageFlags::TRANSFER_SRC | vk::BufferUsageFlags::STORAGE_BUFFER,
-            MemoryLocation::GpuOnly,
-            "dst-ssbo",
-        )?;
-
-        let vkd = ctx.device();
-        let desc_pool = *self.desc_pool.lock();
-        // SAFETY: as in `dispatch_ssbo`; `record_lock` is held for this dispatch.
-        unsafe { vkd.reset_descriptor_pool(desc_pool, vk::DescriptorPoolResetFlags::empty())? };
-        let set = unsafe {
-            vkd.allocate_descriptor_sets(
-                &vk::DescriptorSetAllocateInfo::default()
-                    .descriptor_pool(desc_pool)
-                    .set_layouts(&[set_layout]),
-            )?
-        }[0];
-
-        let ubo_info = vk::DescriptorBufferInfo::default()
-            .buffer(ubo_buf)
-            .offset(0)
-            .range(ubo_bytes.len() as u64);
-        let image_info = vk::DescriptorImageInfo::default()
-            .sampler(if sampled.is_ycbcr() {
-                vk::Sampler::null()
-            } else {
-                self.sampler
-            })
-            .image_view(sampled.view())
-            .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL);
-        let dst_info = vk::DescriptorBufferInfo::default()
-            .buffer(dst.buffer)
-            .offset(0)
-            .range(dst.size);
-        let writes = [
-            buffer_write(set, 0, vk::DescriptorType::UNIFORM_BUFFER, &ubo_info),
-            vk::WriteDescriptorSet::default()
-                .dst_set(set)
-                .dst_binding(1)
-                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                .image_info(std::slice::from_ref(&image_info)),
-            buffer_write(set, 2, vk::DescriptorType::STORAGE_BUFFER, &dst_info),
-        ];
-        unsafe { vkd.update_descriptor_sets(&writes, &[]) };
-
-        let cmd = self.alloc_cmd()?;
-        let begin = vk::CommandBufferBeginInfo::default()
-            .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
-        unsafe { vkd.begin_command_buffer(cmd, &begin)? };
-        let src_queue = if sampled.acquire_from_external() {
-            vk::QUEUE_FAMILY_EXTERNAL
-        } else {
-            vk::QUEUE_FAMILY_IGNORED
-        };
-        let barrier = vk::ImageMemoryBarrier::default()
-            .src_access_mask(vk::AccessFlags::empty())
-            .dst_access_mask(vk::AccessFlags::SHADER_READ)
-            .old_layout(vk::ImageLayout::UNDEFINED)
-            .new_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-            .src_queue_family_index(src_queue)
-            .dst_queue_family_index(if sampled.acquire_from_external() {
-                ctx.queue_family_index()
-            } else {
-                vk::QUEUE_FAMILY_IGNORED
-            })
-            .image(sampled.image())
-            .subresource_range(vk::ImageSubresourceRange {
-                aspect_mask: vk::ImageAspectFlags::COLOR,
-                base_mip_level: 0,
-                level_count: 1,
-                base_array_layer: 0,
-                layer_count: 1,
-            });
-        unsafe {
-            vkd.cmd_pipeline_barrier(
-                cmd,
-                vk::PipelineStageFlags::TOP_OF_PIPE,
-                vk::PipelineStageFlags::COMPUTE_SHADER,
-                vk::DependencyFlags::empty(),
-                &[],
-                &[],
-                &[barrier],
-            );
-            vkd.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::COMPUTE, pipeline);
-            vkd.cmd_bind_descriptor_sets(
-                cmd,
-                vk::PipelineBindPoint::COMPUTE,
-                pipeline_layout,
-                0,
-                &[set],
-                &[],
-            );
-            vkd.cmd_dispatch(cmd, options.dest_w.div_ceil(16), options.dest_h.div_ceil(16), 1);
-            buffer_barrier(
-                vkd,
-                cmd,
-                dst.buffer,
-                vk::PipelineStageFlags::COMPUTE_SHADER,
-                vk::PipelineStageFlags::TRANSFER,
-                vk::AccessFlags::SHADER_WRITE,
-                vk::AccessFlags::TRANSFER_READ,
-            );
-            vkd.end_command_buffer(cmd)?;
-        }
-        self.submit_and_wait(cmd, &mut dispatch.frame)?;
-
-        Ok(tensor_from_allocated(&self.vulkan, shape, dtype, dst))
-    }
-
-    fn alloc_cmd(&self) -> Result<vk::CommandBuffer, GpuError> {
-        let info = vk::CommandBufferAllocateInfo::default()
-            .command_pool(self.cmd_pool)
-            .level(vk::CommandBufferLevel::PRIMARY)
-            .command_buffer_count(1);
-        Ok(unsafe { self.context.device().allocate_command_buffers(&info) }?[0])
-    }
-
-    fn submit_and_wait(
-        &self,
-        cmd: vk::CommandBuffer,
-        frame: &mut FramePool,
-    ) -> Result<(), GpuError> {
-        let vkd = self.context.device();
-        // SAFETY: `frame.fence` belongs to this processor's device and is only
-        // used while `record_lock` is held.
-        unsafe { vkd.reset_fences(&[frame.fence])? };
-
-        let result = self
-            .context
-            .submit(cmd, frame.fence)
-            .and_then(|()| self.context.wait_fence(frame.fence));
-
-        // SAFETY: if submit failed nothing is pending; if it succeeded the wait
-        // above has completed, so the command buffer is no longer in use.
-        unsafe {
-            vkd.free_command_buffers(self.cmd_pool, &[cmd]);
-        }
-
-        result?;
-        Ok(())
+        })();
+        self.inner.store_upload_buffer(width, height, format, buffer);
+        result
     }
 }
 
 impl Drop for GpuImageProcessor {
     fn drop(&mut self) {
-        let vkd = self.context.device();
-        // SAFETY: waiting for idle ensures no submitted dispatch still uses the
-        // pipelines, layouts or pools destroyed below.
-        let _ = unsafe { vkd.device_wait_idle() };
-        let mut dispatch = self.record_lock.lock();
-        let ctx = self.context.as_ref();
-        if let Some(buf) = dispatch.frame.staging_src.take() {
-            ctx.destroy_buffer(buf);
+        if Arc::strong_count(&self.inner) != 1 {
+            return;
         }
-        if let Some(buf) = dispatch.frame.src.take() {
-            ctx.destroy_buffer(buf);
-        }
-        if let Some(buf) = dispatch.frame.ubo.take() {
-            ctx.destroy_buffer(buf);
-        }
-        // SAFETY: every handle below was created by `new` on this device and is
-        // owned solely by this processor, so each is destroyed exactly once.
-        unsafe {
-            vkd.destroy_fence(dispatch.frame.fence, None);
-            for cached in dispatch.ycbcr_pipelines.values() {
-                vkd.destroy_pipeline(cached.pipeline, None);
-                vkd.destroy_pipeline_layout(cached.layout, None);
-                vkd.destroy_descriptor_set_layout(cached.set_layout, None);
+        let inner = Arc::get_mut(&mut self.inner).expect("unique Arc in Drop");
+        drop_gpu_processor_inner(inner);
+    }
+}
+
+impl GpuImageProcessorInner {
+    fn take_upload_buffer(
+        &self,
+        device: &Vulkan,
+        width: u32,
+        height: u32,
+        format: ImageFormat,
+    ) -> Result<infers_gpu::VulkanImageBuffer, CoreError> {
+        let mut slot = self.upload_buffer.lock();
+        if let Some((w, h, fmt, buffer)) = slot.take() {
+            if w == width && h == height && fmt == format {
+                return Ok(buffer);
             }
-            vkd.destroy_pipeline(self.pipeline_ssbo, None);
-            vkd.destroy_pipeline(self.pipeline_image, None);
-            vkd.destroy_pipeline_layout(self.layout_ssbo, None);
-            vkd.destroy_pipeline_layout(self.layout_image, None);
-            vkd.destroy_descriptor_set_layout(self.set_layout_ssbo, None);
-            vkd.destroy_descriptor_set_layout(self.set_layout_image, None);
-            vkd.destroy_shader_module(self.shader_module, None);
-            vkd.destroy_sampler(self.sampler, None);
-            vkd.destroy_command_pool(self.cmd_pool, None);
-            vkd.destroy_descriptor_pool(*self.desc_pool.lock(), None);
+        }
+        device.image_buffer(width, height, format)
+    }
+
+    fn store_upload_buffer(
+        &self,
+        width: u32,
+        height: u32,
+        format: ImageFormat,
+        buffer: infers_gpu::VulkanImageBuffer,
+    ) {
+        *self.upload_buffer.lock() = Some((width, height, format, buffer));
+    }
+
+    fn materialize(
+        &self,
+        options: &ProcessingOptions,
+        input: GpuProcessInput,
+        target: MaterializeTarget,
+        session_staging: Option<&SessionStagingQuery>,
+    ) -> Result<Tensor<Vulkan>, CoreError> {
+        let staging = staging_for_materialize(session_staging);
+        let (shape, dtype) = output_shape_dtype(options)?;
+        let dst_size = shape.byte_size(dtype) as u64;
+
+        match input {
+            GpuProcessInput::LinearUploaded { src, size } => self
+                .dispatch_linear_uploaded(
+                    src,
+                    size,
+                    options,
+                    shape,
+                    dtype,
+                    dst_size,
+                    target,
+                    staging.as_ref(),
+                )
+                .map_err(CoreError::from),
+            GpuProcessInput::LinearUnstaged {
+                staging: staging_buf,
+                gpu,
+                size,
+            } => self
+                .dispatch_linear_unstaged(
+                    staging_buf,
+                    gpu,
+                    size,
+                    options,
+                    shape,
+                    dtype,
+                    dst_size,
+                    target,
+                    staging.as_ref(),
+                )
+                .map_err(CoreError::from),
+            GpuProcessInput::Sampled(sampled) => self
+                .dispatch_sampled(
+                    &sampled,
+                    options,
+                    shape,
+                    dtype,
+                    dst_size,
+                    target,
+                    staging.as_ref(),
+                )
+                .map_err(CoreError::from),
         }
     }
+
+    fn dispatch_linear_uploaded(
+        &self,
+        src_gpu: vk::Buffer,
+        src_size: u64,
+        options: &ProcessingOptions,
+        shape: TensorShape,
+        dtype: DataType,
+        dst_size: u64,
+        target: MaterializeTarget,
+        session_staging: Option<&SessionStagingQuery>,
+    ) -> Result<Tensor<Vulkan>, GpuError> {
+        let ctx = self.context.as_ref();
+        let mut dispatch = self.record_lock.lock();
+        let slot = current_slot(&mut dispatch);
+
+        let options_bytes = write_options_bytes(options);
+
+        let (dst_buffer, dst_info, destination) = resolve_materialize_target(
+            ctx,
+            &mut slot.dst,
+            dst_size,
+            target,
+            session_staging,
+        )
+        .map_err(|err| GpuError::Other(err.to_string()))?;
+
+        let vkd = ctx.device();
+        let src_info = vk::DescriptorBufferInfo::default()
+            .buffer(src_gpu)
+            .offset(0)
+            .range(src_size);
+        let writes = [
+            buffer_write(
+                slot.desc_ssbo,
+                0,
+                vk::DescriptorType::STORAGE_BUFFER,
+                &src_info,
+            ),
+            buffer_write(
+                slot.desc_ssbo,
+                1,
+                vk::DescriptorType::STORAGE_BUFFER,
+                &dst_info,
+            ),
+        ];
+        unsafe { vkd.update_descriptor_sets(&writes, &[]) };
+
+        reset_and_record(slot, vkd, |vkd, cmd| {
+            unsafe {
+                buffer_barrier(
+                    vkd,
+                    cmd,
+                    src_gpu,
+                    vk::PipelineStageFlags::TRANSFER,
+                    vk::PipelineStageFlags::COMPUTE_SHADER,
+                    vk::AccessFlags::TRANSFER_WRITE,
+                    vk::AccessFlags::SHADER_READ,
+                );
+                vkd.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::COMPUTE, self.pipeline_ssbo);
+                vkd.cmd_bind_descriptor_sets(
+                    cmd,
+                    vk::PipelineBindPoint::COMPUTE,
+                    self.layout_ssbo,
+                    0,
+                    &[slot.desc_ssbo],
+                    &[],
+                );
+                vkd.cmd_push_constants(
+                    cmd,
+                    self.layout_ssbo,
+                    vk::ShaderStageFlags::COMPUTE,
+                    0,
+                    &options_bytes,
+                );
+                vkd.cmd_dispatch(
+                    cmd,
+                    options.dest_w.div_ceil(16),
+                    options.dest_h.div_ceil(16),
+                    1,
+                );
+                buffer_barrier(
+                    vkd,
+                    cmd,
+                    dst_buffer,
+                    vk::PipelineStageFlags::COMPUTE_SHADER,
+                    vk::PipelineStageFlags::TRANSFER,
+                    vk::AccessFlags::SHADER_WRITE,
+                    vk::AccessFlags::TRANSFER_READ,
+                );
+            }
+            Ok(())
+        })?;
+
+        self.submit_and_wait(slot)?;
+        finish_materialized_tensor(
+            &self.vulkan,
+            shape,
+            dtype,
+            destination,
+            slot.dst.take(),
+        )
+        .and_then(|tensor| {
+            advance_slot(&mut dispatch);
+            Ok(tensor)
+        })
+    }
+
+    fn dispatch_linear_unstaged(
+        &self,
+        staging: vk::Buffer,
+        gpu: vk::Buffer,
+        size: u64,
+        options: &ProcessingOptions,
+        shape: TensorShape,
+        dtype: DataType,
+        dst_size: u64,
+        target: MaterializeTarget,
+        session_staging: Option<&SessionStagingQuery>,
+    ) -> Result<Tensor<Vulkan>, GpuError> {
+        let ctx = self.context.as_ref();
+        let mut dispatch = self.record_lock.lock();
+        let slot = current_slot(&mut dispatch);
+
+        let options_bytes = write_options_bytes(options);
+
+        let (dst_buffer, dst_info, destination) = resolve_materialize_target(
+            ctx,
+            &mut slot.dst,
+            dst_size,
+            target,
+            session_staging,
+        )
+        .map_err(|err| GpuError::Other(err.to_string()))?;
+
+        let vkd = ctx.device();
+        let src_info = vk::DescriptorBufferInfo::default()
+            .buffer(gpu)
+            .offset(0)
+            .range(size);
+        let writes = [
+            buffer_write(
+                slot.desc_ssbo,
+                0,
+                vk::DescriptorType::STORAGE_BUFFER,
+                &src_info,
+            ),
+            buffer_write(
+                slot.desc_ssbo,
+                1,
+                vk::DescriptorType::STORAGE_BUFFER,
+                &dst_info,
+            ),
+        ];
+        unsafe { vkd.update_descriptor_sets(&writes, &[]) };
+
+        reset_and_record(slot, vkd, |vkd, cmd| {
+            unsafe {
+                vkd.cmd_copy_buffer(
+                    cmd,
+                    staging,
+                    gpu,
+                    &[vk::BufferCopy::default().size(size)],
+                );
+                buffer_barrier(
+                    vkd,
+                    cmd,
+                    gpu,
+                    vk::PipelineStageFlags::TRANSFER,
+                    vk::PipelineStageFlags::COMPUTE_SHADER,
+                    vk::AccessFlags::TRANSFER_WRITE,
+                    vk::AccessFlags::SHADER_READ,
+                );
+                vkd.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::COMPUTE, self.pipeline_ssbo);
+                vkd.cmd_bind_descriptor_sets(
+                    cmd,
+                    vk::PipelineBindPoint::COMPUTE,
+                    self.layout_ssbo,
+                    0,
+                    &[slot.desc_ssbo],
+                    &[],
+                );
+                vkd.cmd_push_constants(
+                    cmd,
+                    self.layout_ssbo,
+                    vk::ShaderStageFlags::COMPUTE,
+                    0,
+                    &options_bytes,
+                );
+                vkd.cmd_dispatch(
+                    cmd,
+                    options.dest_w.div_ceil(16),
+                    options.dest_h.div_ceil(16),
+                    1,
+                );
+                buffer_barrier(
+                    vkd,
+                    cmd,
+                    dst_buffer,
+                    vk::PipelineStageFlags::COMPUTE_SHADER,
+                    vk::PipelineStageFlags::TRANSFER,
+                    vk::AccessFlags::SHADER_WRITE,
+                    vk::AccessFlags::TRANSFER_READ,
+                );
+            }
+            Ok(())
+        })?;
+
+        self.submit_and_wait(slot)?;
+        finish_materialized_tensor(
+            &self.vulkan,
+            shape,
+            dtype,
+            destination,
+            slot.dst.take(),
+        )
+        .and_then(|tensor| {
+            advance_slot(&mut dispatch);
+            Ok(tensor)
+        })
+    }
+
+    fn dispatch_sampled(
+        &self,
+        sampled: &Arc<VulkanSampledImage>,
+        options: &ProcessingOptions,
+        shape: TensorShape,
+        dtype: DataType,
+        dst_size: u64,
+        target: MaterializeTarget,
+        session_staging: Option<&SessionStagingQuery>,
+    ) -> Result<Tensor<Vulkan>, GpuError> {
+        let ctx = self.context.as_ref();
+        let mut dispatch = self.record_lock.lock();
+        let slot_index = dispatch.slot_index;
+        let dispatch_info = SampledDispatchInfo::from(sampled);
+        let binding = self.resolve_sampled_binding(&mut dispatch, dispatch_info, slot_index)?;
+        let slot = &mut dispatch.slots[slot_index];
+
+        let options_bytes = write_options_bytes(options);
+
+        let (dst_buffer, dst_info, destination) = resolve_materialize_target(
+            ctx,
+            &mut slot.dst,
+            dst_size,
+            target,
+            session_staging,
+        )
+        .map_err(|err| GpuError::Other(err.to_string()))?;
+
+        let vkd = ctx.device();
+        let image_info = vk::DescriptorImageInfo::default()
+            .sampler(if dispatch_info.is_ycbcr {
+                vk::Sampler::null()
+            } else {
+                self.sampler
+            })
+            .image_view(dispatch_info.view)
+            .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL);
+        let writes = [
+            vk::WriteDescriptorSet::default()
+                .dst_set(binding.desc_set)
+                .dst_binding(0)
+                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                .image_info(std::slice::from_ref(&image_info)),
+            buffer_write(
+                binding.desc_set,
+                1,
+                vk::DescriptorType::STORAGE_BUFFER,
+                &dst_info,
+            ),
+        ];
+        unsafe { vkd.update_descriptor_sets(&writes, &[]) };
+
+        reset_and_record(slot, vkd, |vkd, cmd| {
+            let target_layout = vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL;
+            if dispatch_info.current_layout != target_layout {
+                let src_queue = if dispatch_info.acquire_from_external {
+                    vk::QUEUE_FAMILY_EXTERNAL
+                } else {
+                    vk::QUEUE_FAMILY_IGNORED
+                };
+                let barrier = vk::ImageMemoryBarrier::default()
+                    .src_access_mask(vk::AccessFlags::empty())
+                    .dst_access_mask(vk::AccessFlags::SHADER_READ)
+                    .old_layout(dispatch_info.current_layout)
+                    .new_layout(target_layout)
+                    .src_queue_family_index(src_queue)
+                    .dst_queue_family_index(if dispatch_info.acquire_from_external {
+                        ctx.queue_family_index()
+                    } else {
+                        vk::QUEUE_FAMILY_IGNORED
+                    })
+                    .image(dispatch_info.image)
+                    .subresource_range(vk::ImageSubresourceRange {
+                        aspect_mask: vk::ImageAspectFlags::COLOR,
+                        base_mip_level: 0,
+                        level_count: 1,
+                        base_array_layer: 0,
+                        layer_count: 1,
+                    });
+                unsafe {
+                    vkd.cmd_pipeline_barrier(
+                        cmd,
+                        vk::PipelineStageFlags::TOP_OF_PIPE,
+                        vk::PipelineStageFlags::COMPUTE_SHADER,
+                        vk::DependencyFlags::empty(),
+                        &[],
+                        &[],
+                        &[barrier],
+                    );
+                }
+                sampled.set_layout(target_layout);
+            }
+            unsafe {
+                vkd.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::COMPUTE, binding.pipeline);
+                vkd.cmd_bind_descriptor_sets(
+                    cmd,
+                    vk::PipelineBindPoint::COMPUTE,
+                    binding.pipeline_layout,
+                    0,
+                    &[binding.desc_set],
+                    &[],
+                );
+                vkd.cmd_push_constants(
+                    cmd,
+                    binding.pipeline_layout,
+                    vk::ShaderStageFlags::COMPUTE,
+                    0,
+                    &options_bytes,
+                );
+                vkd.cmd_dispatch(
+                    cmd,
+                    options.dest_w.div_ceil(16),
+                    options.dest_h.div_ceil(16),
+                    1,
+                );
+                buffer_barrier(
+                    vkd,
+                    cmd,
+                    dst_buffer,
+                    vk::PipelineStageFlags::COMPUTE_SHADER,
+                    vk::PipelineStageFlags::TRANSFER,
+                    vk::AccessFlags::SHADER_WRITE,
+                    vk::AccessFlags::TRANSFER_READ,
+                );
+            }
+            Ok(())
+        })?;
+
+        self.submit_and_wait(slot)?;
+        finish_materialized_tensor(
+            &self.vulkan,
+            shape,
+            dtype,
+            destination,
+            slot.dst.take(),
+        )
+        .and_then(|tensor| {
+            advance_slot(&mut dispatch);
+            Ok(tensor)
+        })
+    }
+
+    fn resolve_sampled_binding(
+        &self,
+        dispatch: &mut DispatchResources,
+        sampled: SampledDispatchInfo,
+        slot_index: usize,
+    ) -> Result<SampledPipelineBinding, GpuError> {
+        if !sampled.is_ycbcr {
+            return Ok(SampledPipelineBinding {
+                pipeline_layout: self.layout_image,
+                pipeline: self.pipeline_image,
+                desc_set: dispatch.slots[slot_index].desc_image,
+            });
+        }
+
+        let ctx = self.context.as_ref();
+        let vkd = ctx.device();
+        let key = sampled.sampler.as_raw();
+        let slot_count = dispatch.slots.len();
+
+        if let Some(cached) = dispatch.ycbcr_pipelines.get_mut(&key) {
+            if cached.desc_sets.len() != slot_count {
+                cached.desc_sets = allocate_ycbcr_desc_sets(
+                    vkd,
+                    self.desc_pool,
+                    cached.set_layout,
+                    slot_count,
+                )?;
+            }
+            return Ok(SampledPipelineBinding {
+                pipeline_layout: cached.layout,
+                pipeline: cached.pipeline,
+                desc_set: cached.desc_sets[slot_index],
+            });
+        }
+
+        let immutable = [sampled.sampler];
+        let bindings = [
+            vk::DescriptorSetLayoutBinding::default()
+                .binding(0)
+                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                .descriptor_count(1)
+                .stage_flags(vk::ShaderStageFlags::COMPUTE)
+                .immutable_samplers(&immutable),
+            storage_binding(1, vk::DescriptorType::STORAGE_BUFFER),
+        ];
+        let set_layout = unsafe {
+            vkd.create_descriptor_set_layout(
+                &vk::DescriptorSetLayoutCreateInfo::default().bindings(&bindings),
+                None,
+            )?
+        };
+        let push_constant_range = vk::PushConstantRange::default()
+            .stage_flags(vk::ShaderStageFlags::COMPUTE)
+            .offset(0)
+            .size(PUSH_CONSTANT_BYTES as u32);
+        let pipeline_layout = unsafe {
+            vkd.create_pipeline_layout(
+                &vk::PipelineLayoutCreateInfo::default()
+                    .set_layouts(&[set_layout])
+                    .push_constant_ranges(&[push_constant_range]),
+                None,
+            )?
+        };
+        let stage = vk::PipelineShaderStageCreateInfo::default()
+            .stage(vk::ShaderStageFlags::COMPUTE)
+            .module(self.shader_module)
+            .name(c"convert_image");
+        let pipeline = unsafe {
+            vkd.create_compute_pipelines(
+                self.pipeline_cache,
+                &[vk::ComputePipelineCreateInfo::default()
+                    .stage(stage)
+                    .layout(pipeline_layout)],
+                None,
+            )
+            .map_err(|(_, err)| err)?[0]
+        };
+        let desc_sets =
+            allocate_ycbcr_desc_sets(vkd, self.desc_pool, set_layout, slot_count)?;
+        let desc_set = desc_sets[slot_index];
+        dispatch.ycbcr_pipelines.insert(
+            key,
+            YcbcrPipeline {
+                set_layout,
+                layout: pipeline_layout,
+                pipeline,
+                desc_sets,
+            },
+        );
+        Ok(SampledPipelineBinding {
+            pipeline_layout,
+            pipeline,
+            desc_set,
+        })
+    }
+
+    fn submit_and_wait(&self, slot: &GpuFrameSlot) -> Result<(), GpuError> {
+        let vkd = self.context.device();
+        unsafe { vkd.reset_fences(&[slot.fence])? };
+        self.context
+            .submit(slot.cmd, slot.fence)
+            .and_then(|()| self.context.wait_fence(slot.fence))
+    }
+}
+
+fn drop_gpu_processor_inner(inner: &mut GpuImageProcessorInner) {
+    let vkd = inner.context.device();
+    let _ = unsafe { vkd.device_wait_idle() };
+    let mut dispatch = inner.record_lock.lock();
+    let ctx = inner.context.as_ref();
+    for slot in &mut dispatch.slots {
+        if let Some(buf) = slot.dst.take() {
+            ctx.destroy_buffer(buf);
+        }
+        unsafe {
+            vkd.destroy_fence(slot.fence, None);
+            vkd.free_command_buffers(inner.cmd_pool, &[slot.cmd]);
+        }
+    }
+    unsafe {
+        for cached in dispatch.ycbcr_pipelines.values() {
+            vkd.destroy_pipeline(cached.pipeline, None);
+            vkd.destroy_pipeline_layout(cached.layout, None);
+            vkd.destroy_descriptor_set_layout(cached.set_layout, None);
+        }
+        vkd.destroy_pipeline(inner.pipeline_ssbo, None);
+        vkd.destroy_pipeline(inner.pipeline_image, None);
+        vkd.destroy_pipeline_layout(inner.layout_ssbo, None);
+        vkd.destroy_pipeline_layout(inner.layout_image, None);
+        vkd.destroy_descriptor_set_layout(inner.set_layout_ssbo, None);
+        vkd.destroy_descriptor_set_layout(inner.set_layout_image, None);
+        vkd.destroy_pipeline_cache(inner.pipeline_cache, None);
+        vkd.destroy_shader_module(inner.shader_module, None);
+        vkd.destroy_sampler(inner.sampler, None);
+        vkd.destroy_command_pool(inner.cmd_pool, None);
+        vkd.destroy_descriptor_pool(inner.desc_pool, None);
+    }
+}
+
+fn validate_process(
+    inner: &GpuImageProcessorInner,
+    input: &VulkanImage,
+    options: &ProcessingOptions,
+) -> Result<(), CoreError> {
+    if !Arc::ptr_eq(&inner.context, input.context()) {
+        return Err(CoreError::DeviceMismatch {
+            expected: inner.vulkan.info().clone(),
+            actual: input.context().device_info().clone(),
+        });
+    }
+
+    let (dest_w, dest_h) = (options.dest_w, options.dest_h);
+    if dest_w == 0 || dest_h == 0 {
+        return Err(CoreError::InvalidImageBuffer(
+            "Destination dimensions must be non-zero".into(),
+        ));
+    }
+    if options.dest_format.is_yuv() {
+        return Err(CoreError::InvalidImageBuffer(
+            "GPU convert kernels emit RGB888 or RGBF32, not YUV".into(),
+        ));
+    }
+
+    let src_format = input.format();
+    if src_format.is_yuv()
+        && (!input.width().is_multiple_of(2) || !input.height().is_multiple_of(2))
+    {
+        return Err(CoreError::InvalidImageBuffer(
+            "YUV 4:2:0 input width and height must be even".into(),
+        ));
+    }
+
+    let (_crop_x, _crop_y, crop_w, crop_h) = options.effective_crop();
+    if crop_w == 0 || crop_h == 0 {
+        return Err(CoreError::InvalidImageBuffer(
+            "Effective crop width and height must be greater than zero".into(),
+        ));
+    }
+
+    Ok(())
+}
+
+fn resolve_materialize_target(
+    ctx: &VulkanContext,
+    dst_slot: &mut Option<AllocatedBuffer>,
+    dst_size: u64,
+    target: MaterializeTarget,
+    session_staging: Option<&SessionStagingQuery>,
+) -> Result<(vk::Buffer, vk::DescriptorBufferInfo, OutputDestination), CoreError> {
+    match target {
+        MaterializeTarget::Owned => {
+            pool_buffer(
+                ctx,
+                dst_slot,
+                dst_size,
+                vk::BufferUsageFlags::STORAGE_BUFFER | vk::BufferUsageFlags::TRANSFER_SRC,
+                MemoryLocation::GpuOnly,
+                "dst-ssbo",
+            )
+            .map_err(CoreError::from)?;
+            let dst = dst_slot.as_ref().expect("dst pooled");
+            Ok((
+                dst.buffer,
+                vk::DescriptorBufferInfo::default()
+                    .buffer(dst.buffer)
+                    .offset(0)
+                    .range(dst.size),
+                OutputDestination::Pooled,
+            ))
+        }
+        MaterializeTarget::SessionInput { slot } => {
+            let query = session_staging.ok_or_else(|| {
+                CoreError::BufferTransferFailed(
+                    "session input staging query not configured for GPU preprocess".into(),
+                )
+            })?;
+            let handle = query(slot)?;
+            if handle.size < dst_size {
+                return Err(CoreError::BufferTransferFailed(format!(
+                    "session input staging buffer needs {dst_size} bytes but only {} are available",
+                    handle.size
+                )));
+            }
+            Ok((
+                handle.buffer,
+                vk::DescriptorBufferInfo::default()
+                    .buffer(handle.buffer)
+                    .offset(handle.offset)
+                    .range(dst_size),
+                OutputDestination::External(handle),
+            ))
+        }
+    }
+}
+
+fn finish_materialized_tensor(
+    vulkan: &Vulkan,
+    shape: TensorShape,
+    dtype: DataType,
+    destination: OutputDestination,
+    pooled_dst: Option<AllocatedBuffer>,
+) -> Result<Tensor<Vulkan>, GpuError> {
+    match destination {
+        OutputDestination::Pooled => {
+            let buffer = pooled_dst.ok_or_else(|| {
+                GpuError::Other("pooled output buffer missing after dispatch".into())
+            })?;
+            Ok(tensor_from_allocated(vulkan, shape, dtype, buffer))
+        }
+        OutputDestination::External(handle) => Ok(tensor_from_external(
+            vulkan,
+            shape,
+            dtype,
+            handle,
+        )),
+    }
+}
+
+fn current_slot<'a>(dispatch: &'a mut DispatchResources) -> &'a mut GpuFrameSlot {
+    &mut dispatch.slots[dispatch.slot_index]
+}
+
+fn advance_slot(dispatch: &mut DispatchResources) {
+    dispatch.slot_index = (dispatch.slot_index + 1) % dispatch.slots.len();
+}
+
+fn create_frame_slot(
+    vkd: &ash::Device,
+    cmd_pool: vk::CommandPool,
+    desc_pool: vk::DescriptorPool,
+    set_layout_ssbo: vk::DescriptorSetLayout,
+    set_layout_image: vk::DescriptorSetLayout,
+) -> Result<GpuFrameSlot, GpuError> {
+    let fence = unsafe { vkd.create_fence(&vk::FenceCreateInfo::default(), None) }?;
+    let cmd = unsafe {
+        vkd.allocate_command_buffers(
+            &vk::CommandBufferAllocateInfo::default()
+                .command_pool(cmd_pool)
+                .level(vk::CommandBufferLevel::PRIMARY)
+                .command_buffer_count(1),
+        )?
+    }[0];
+    let layouts_ssbo = [set_layout_ssbo];
+    let layouts_image = [set_layout_image];
+    let desc_ssbo = unsafe {
+        vkd.allocate_descriptor_sets(
+            &vk::DescriptorSetAllocateInfo::default()
+                .descriptor_pool(desc_pool)
+                .set_layouts(&layouts_ssbo),
+        )?
+    }[0];
+    let desc_image = unsafe {
+        vkd.allocate_descriptor_sets(
+            &vk::DescriptorSetAllocateInfo::default()
+                .descriptor_pool(desc_pool)
+                .set_layouts(&layouts_image),
+        )?
+    }[0];
+    Ok(GpuFrameSlot {
+        dst: None,
+        cmd,
+        desc_ssbo,
+        desc_image,
+        fence,
+    })
+}
+
+fn allocate_ycbcr_desc_sets(
+    vkd: &ash::Device,
+    desc_pool: vk::DescriptorPool,
+    set_layout: vk::DescriptorSetLayout,
+    count: usize,
+) -> Result<Vec<vk::DescriptorSet>, GpuError> {
+    let layouts: Vec<_> = (0..count).map(|_| set_layout).collect();
+    Ok(unsafe {
+        vkd.allocate_descriptor_sets(
+            &vk::DescriptorSetAllocateInfo::default()
+                .descriptor_pool(desc_pool)
+                .set_layouts(&layouts),
+        )?
+    })
+}
+
+fn output_shape_dtype(options: &ProcessingOptions) -> Result<(TensorShape, DataType), CoreError> {
+    let (dest_w, dest_h) = (options.dest_w, options.dest_h);
+    let shape = match options.dest_layout {
+        processing_core::TensorLayout::Nhwc => {
+            TensorShape::new(vec![1, dest_h as usize, dest_w as usize, 3])?
+        }
+        processing_core::TensorLayout::Nchw => {
+            TensorShape::new(vec![1, 3, dest_h as usize, dest_w as usize])?
+        }
+    };
+    let dtype = match options.dest_format {
+        ImageFormat::Rgb888 => DataType::U8,
+        ImageFormat::Rgbf32 => DataType::F32,
+        ImageFormat::Nv12 | ImageFormat::I420 => {
+            return Err(CoreError::InvalidImageBuffer(
+                "GPU convert kernels emit RGB888 or RGBF32, not YUV".into(),
+            ));
+        }
+    };
+    Ok((shape, dtype))
+}
+
+fn reset_and_record<F>(
+    slot: &GpuFrameSlot,
+    vkd: &ash::Device,
+    record: F,
+) -> Result<(), GpuError>
+where
+    F: FnOnce(&ash::Device, vk::CommandBuffer) -> Result<(), GpuError>,
+{
+    unsafe {
+        vkd.reset_command_buffer(slot.cmd, vk::CommandBufferResetFlags::empty())?;
+        vkd.begin_command_buffer(
+            slot.cmd,
+            &vk::CommandBufferBeginInfo::default()
+                .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT),
+        )?;
+    }
+    record(vkd, slot.cmd)?;
+    unsafe { vkd.end_command_buffer(slot.cmd) }?;
+    Ok(())
 }
 
 fn pool_buffer<'a>(
@@ -718,24 +1310,16 @@ fn spirv_words(bytes: &[u8]) -> Result<Vec<u32>, GpuError> {
         .collect())
 }
 
-/// Number of 32-bit words in the shader's `ProcessingOptions` uniform block.
+/// Number of 32-bit words in the shader's `ProcessingOptions` push constant block.
 const OPTIONS_WORDS: usize = 13;
 
-/// Vulkan guarantees uniform buffers may be bound at 64-byte granularity, so the
-/// UBO is padded to that even though the payload is smaller.
-const UBO_MIN_BYTES: usize = 64;
+/// Byte size of the shader's `ProcessingOptions` push constant block.
+const PUSH_CONSTANT_BYTES: usize = std::mem::size_of::<ProcessingOptions>();
 
-/// Serialise `options` into the uniform-buffer layout the shaders expect.
-///
-/// `processing_core::ProcessingOptions` is `#[repr(C)]` with twelve 32-bit
-/// fields, matching the uniform block declared in `processing-shaders`. Writing
-/// each field explicitly keeps that contract visible and avoids reinterpreting
-/// the struct's bytes; the assertion below fails the build if a field is ever
-/// added or resized without updating the shader side.
-fn options_bytes(options: &ProcessingOptions) -> Vec<u8> {
+fn write_options_bytes(options: &ProcessingOptions) -> [u8; PUSH_CONSTANT_BYTES] {
     const _: () = assert!(
-        std::mem::size_of::<ProcessingOptions>() == OPTIONS_WORDS * 4,
-        "ProcessingOptions no longer matches the shader uniform block layout"
+        PUSH_CONSTANT_BYTES == OPTIONS_WORDS * 4,
+        "ProcessingOptions no longer matches the shader push constant layout"
     );
 
     let words: [u32; OPTIONS_WORDS] = [
@@ -754,9 +1338,9 @@ fn options_bytes(options: &ProcessingOptions) -> Vec<u8> {
         options.dest_layout as u32,
     ];
 
-    let mut bytes = vec![0u8; (OPTIONS_WORDS * 4).max(UBO_MIN_BYTES)];
-    for (slot, word) in bytes.chunks_exact_mut(4).zip(words) {
+    let mut out = [0u8; PUSH_CONSTANT_BYTES];
+    for (slot, word) in out.chunks_exact_mut(4).zip(words) {
         slot.copy_from_slice(&word.to_le_bytes());
     }
-    bytes
+    out
 }

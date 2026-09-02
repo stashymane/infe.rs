@@ -45,4 +45,8 @@ public sealed class InfersException(
     public class InternalError(
         override val reason: String,
     ) : InfersException("Internal error: $reason")
+
+    public class AlreadyConsumed(
+        reason: String = "handle already consumed",
+    ) : InfersException(reason)
 }

@@ -1,9 +1,7 @@
 package dev.stashy.infers.vulkan
 
 import dev.stashy.infers.CpuTensor
-import dev.stashy.infers.Device
 import dev.stashy.infers.DeviceInfo
-import dev.stashy.infers.HostImage
 import dev.stashy.infers.InfersInternalApi
 import dev.stashy.infers.internal.CloseGate
 import dev.stashy.infers.internal.fromFfi
@@ -31,20 +29,14 @@ public class GpuDevice private constructor(
         }
 
     @InfersInternalApi
+    internal fun ensureOpen() = gate.ensureOpen()
+
+    @InfersInternalApi
     internal suspend fun uploadTensorInternal(tensor: CpuTensor): GpuTensor = withContext(Dispatchers.Default) {
         withFfiErrors {
             gate.ensureOpen()
             tensor.ensureOpen()
             GpuTensor.fromFfi(handle.uploadTensor(tensor.handle))
-        }
-    }
-
-    @InfersInternalApi
-    internal suspend fun uploadImageInternal(image: HostImage): GpuImage = withContext(Dispatchers.Default) {
-        withFfiErrors {
-            gate.ensureOpen()
-            image.ensureOpen()
-            GpuImage(handle.uploadImage(image.handle))
         }
     }
 

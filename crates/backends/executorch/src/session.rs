@@ -7,7 +7,8 @@ use crate::program::{validate_program_bytes, MethodDescriptor, TensorDescriptor}
 #[cfg(feature = "vulkan")]
 use crate::gpu_input::{self, VulkanComputeGraph};
 use crate::tensor_ptr::{evalue_to_cpu_tensor, HostInputPlan};
-use infers_core::{CoreError, Cpu, Device, Session, Tensor, TensorShape};
+use infers_core::{CoreError, Cpu, Device, MaterializeTarget, Pending, Session, SessionInputSink, Tensor, TensorShape, prepare_infer};
+use infers_core::infer_input::InferInput;
 #[cfg(feature = "vulkan")]
 use crate::vulkan_adapter;
 use executorch::module::Module;
@@ -230,8 +231,13 @@ impl Session<Cpu> for ExecuTorchSession<Cpu> {
         &self.output_shapes
     }
 
-    fn run(&mut self, inputs: &[&Tensor<Cpu>]) -> Result<Vec<Tensor<Cpu>>, CoreError> {
-        validate_inputs(&self.method, inputs)?;
+    fn infer(&mut self, input: impl InferInput<Cpu>) -> Result<Vec<Tensor<Cpu>>, CoreError> {
+        let mut sink = SingleInputSink::<Cpu>::default();
+        prepare_infer(input, &mut sink)?;
+        let tensor = sink
+            .tensor
+            .ok_or_else(|| CoreError::InferenceFailed("missing inference input".into()))?;
+        validate_inputs(&self.method, &[&tensor])?;
 
         let mut module = self
             .module
@@ -239,7 +245,7 @@ impl Session<Cpu> for ExecuTorchSession<Cpu> {
             .ok_or_else(|| CoreError::InferenceFailed("session module dropped".into()))?
             .lock();
 
-        let plan = HostInputPlan::build(inputs)?;
+        let plan = HostInputPlan::build(&[&tensor])?;
         let evalues: Vec<_> = plan.tensor_ptrs.iter().map(|p| p.as_evalue()).collect();
         let outputs = module
             .execute(&self.method_name, &evalues)
@@ -269,12 +275,20 @@ impl Session<Vulkan> for ExecuTorchSession<Vulkan> {
         &self.output_shapes
     }
 
-    fn run(&mut self, inputs: &[&Tensor<Vulkan>]) -> Result<Vec<Tensor<Cpu>>, CoreError> {
-        validate_inputs_vulkan(&self.method, inputs, &self.device)?;
-
+    fn infer(&mut self, input: impl InferInput<Vulkan>) -> Result<Vec<Tensor<Cpu>>, CoreError> {
         let extra = self.vulkan_extra.as_ref().ok_or_else(|| {
             CoreError::InferenceFailed("Vulkan session missing context".into())
         })?;
+
+        let mut sink = VulkanInferSink {
+            graph: extra.vulkan_graph,
+            tensor: None,
+        };
+        prepare_infer(input, &mut sink)?;
+        let tensor = sink
+            .tensor
+            .ok_or_else(|| CoreError::InferenceFailed("missing inference input".into()))?;
+        validate_inputs_vulkan(&self.method, &[&tensor], &self.device)?;
 
         let mut module = self
             .module
@@ -282,7 +296,7 @@ impl Session<Vulkan> for ExecuTorchSession<Vulkan> {
             .ok_or_else(|| CoreError::InferenceFailed("session module dropped".into()))?
             .lock();
 
-        let plan = gpu_input::prepare_inputs(inputs, &extra.context, extra.vulkan_graph)?;
+        let plan = gpu_input::prepare_inputs(&[&tensor], &extra.context, extra.vulkan_graph)?;
         gpu_input::set_skip_staging_copy_mask(plan.skip_staging_mask);
         let evalues: Vec<_> = plan.tensor_ptrs.iter().map(|p| p.as_evalue()).collect();
         let outputs = module
@@ -327,6 +341,57 @@ fn validate_inputs(
         }
     }
     Ok(())
+}
+
+#[derive(Default)]
+struct SingleInputSink<D: Device> {
+    tensor: Option<Tensor<D>>,
+}
+
+impl<D: Device> SessionInputSink<D> for SingleInputSink<D> {
+    fn materialize_pending(&mut self, pending: Pending<D>) -> Result<(), CoreError> {
+        self.tensor = Some(pending.materialize()?);
+        Ok(())
+    }
+
+    fn adopt_tensor(&mut self, tensor: &Tensor<D>) -> Result<(), CoreError> {
+        self.tensor = Some(tensor.clone());
+        Ok(())
+    }
+}
+
+#[cfg(feature = "vulkan")]
+struct VulkanInferSink {
+    graph: Option<gpu_input::VulkanComputeGraph>,
+    tensor: Option<Tensor<Vulkan>>,
+}
+
+#[cfg(feature = "vulkan")]
+impl SessionInputSink<Vulkan> for VulkanInferSink {
+    fn materialize_pending(&mut self, pending: Pending<Vulkan>) -> Result<(), CoreError> {
+        use processing::gpu::processor::{set_session_staging_query, SessionStagingQuery};
+        use std::sync::Arc;
+
+        let graph = self.graph.ok_or_else(|| {
+            CoreError::InferenceFailed("Vulkan compute graph unavailable for session input".into())
+        })?;
+        let query: SessionStagingQuery = Arc::new(move |slot: usize| {
+            graph
+                .staging_target(slot)
+                .map(|(handle, _size)| handle)
+                .map_err(|e| CoreError::BufferTransferFailed(e.to_string()))
+        });
+        set_session_staging_query(Some(Arc::clone(&query)));
+        let result = pending.materialize_with_target(MaterializeTarget::SessionInput { slot: 0 });
+        set_session_staging_query(None);
+        self.tensor = Some(result?);
+        Ok(())
+    }
+
+    fn adopt_tensor(&mut self, tensor: &Tensor<Vulkan>) -> Result<(), CoreError> {
+        self.tensor = Some(tensor.clone());
+        Ok(())
+    }
 }
 
 #[cfg(feature = "vulkan")]

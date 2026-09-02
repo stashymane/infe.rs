@@ -1,9 +1,12 @@
 //! End-to-end inference tests using real ExecuTorch models (no session mocks).
 
 use infers::{
-    CpuImageProcessor, DataType, Device, ExecuTorchBackend, GpuImageProcessor, Session, Vulkan,
-    VulkanOptions, XnnpackOptions,
+    CpuImageProcessor, DataType, Device, ExecuTorchBackend, GpuImageProcessor, HardwareImageVulkanExt,
+    Session, Vulkan, VulkanOptions, XnnpackOptions,
 };
+use processing::DeferredCpuProcessExt;
+#[cfg(feature = "vulkan")]
+use processing::DeferredVulkanProcessExt;
 use infers_test_utils::{
     assets::{
         assert_detector_inference_outputs, read_model_bytes, yolo26n_face_asset, yolo26n_face_imgsz,
@@ -36,15 +39,16 @@ fn test_xnnpack_detector_pipeline_inference() {
 
     let image_proc = CpuImageProcessor::new();
     let frame = camera_frame_640x480(128);
-    let input = image_proc
-        .process(&frame, &detector_preprocess_options(imgsz))
+    let pending = frame
+        .on_cpu()
+        .process(&image_proc, &detector_preprocess_options(imgsz))
         .expect("cpu preprocess");
 
-    assert_eq!(input.shape().dims(), &[1, 3, imgsz as usize, imgsz as usize]);
-    assert_eq!(input.dtype(), DataType::F32);
+    assert_eq!(pending.shape().dims(), &[1, 3, imgsz as usize, imgsz as usize]);
+    assert_eq!(pending.dtype(), DataType::F32);
 
     let outputs = session
-        .run(&[&input])
+        .infer(pending)
         .expect("xnnpack detector inference must complete");
 
     let expected_shapes = session.output_shapes().to_vec();
@@ -82,16 +86,16 @@ fn test_vulkan_detector_pipeline_inference() {
 
     let image_proc = GpuImageProcessor::new(vulkan.clone()).expect("gpu processor");
     let frame = camera_frame_640x480(128);
-    let gpu_image = vulkan.upload_image(&frame).expect("upload frame");
-    let input = image_proc
-        .process(&gpu_image, &detector_preprocess_options(imgsz))
+    let pending = frame
+        .on(&vulkan)
+        .process(&image_proc, &detector_preprocess_options(imgsz))
         .expect("gpu preprocess");
 
-    assert_eq!(input.shape().dims(), &[1, 3, imgsz as usize, imgsz as usize]);
-    assert_eq!(input.dtype(), DataType::F32);
+    assert_eq!(pending.shape().dims(), &[1, 3, imgsz as usize, imgsz as usize]);
+    assert_eq!(pending.dtype(), DataType::F32);
 
     let outputs = session
-        .run(&[&input])
+        .infer(pending)
         .expect("vulkan detector inference must complete");
 
     let expected_shapes = session.output_shapes().to_vec();

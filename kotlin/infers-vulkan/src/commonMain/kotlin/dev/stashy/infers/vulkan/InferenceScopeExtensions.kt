@@ -8,11 +8,15 @@ public suspend fun GpuDevice.uploadTensor(tensor: CpuTensor): GpuTensor = scope.
 
 @OptIn(InfersInternalApi::class)
 context(scope: InferenceScope)
-public suspend fun GpuDevice.uploadImage(image: DeviceImage<CpuDevice>): GpuImage =
-    scope.register(uploadImageInternal(image as HostImage))
+public suspend fun ModelSession<GpuDevice>.infer(pending: GpuPending): List<CpuTensor> =
+    inferPendingInternal(pending).map { scope.register(it) }
 
+@OptIn(InfersInternalApi::class)
 context(scope: InferenceScope)
-public suspend fun CpuTensor.uploadTo(device: GpuDevice): GpuTensor = device.uploadTensor(this)
+public suspend fun ModelSession<GpuDevice>.infer(input: Tensor<GpuDevice>): List<CpuTensor> =
+    infer(listOf(input))
 
+@OptIn(InfersInternalApi::class)
 context(scope: InferenceScope)
-public suspend fun DeviceImage<CpuDevice>.uploadTo(device: GpuDevice): GpuImage = device.uploadImage(this)
+public suspend fun ModelSession<GpuDevice>.infer(inputs: List<Tensor<GpuDevice>>): List<CpuTensor> =
+    runInternal(inputs).map { scope.register(it) }

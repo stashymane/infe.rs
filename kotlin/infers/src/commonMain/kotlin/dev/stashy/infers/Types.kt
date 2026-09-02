@@ -74,6 +74,26 @@ public data class ProcessingOptions(
          */
         public operator fun invoke(block: ProcessingOptionsBuilder.() -> Unit): ProcessingOptions =
             ProcessingOptionsBuilder().apply(block).build()
+
+        /** Builds detector-style options from a loaded model's first input shape. */
+        public fun forModelInput(
+            session: ModelSession<*>,
+            block: ProcessingOptionsBuilder.() -> Unit = {},
+        ): ProcessingOptions {
+            val shape = session.inputShapes.firstOrNull() ?: error("model has no inputs")
+            val dims = shape.dims.map { it.toInt() }
+            require(dims.size == 4 && dims[0] == 1 && dims[1] == 3 && dims[2] == dims[3]) {
+                "expected square NCHW input [1, 3, H, H], got $dims"
+            }
+            val imgsz = dims[2]
+            return ProcessingOptions {
+                dest = imgsz to imgsz
+                destFormat = ImageFormat.Rgbf32
+                destLayout = TensorLayout.Nchw
+                fitMode = FitMode.Contain
+                block()
+            }
+        }
     }
 }
 

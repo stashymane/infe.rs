@@ -2,8 +2,11 @@ use infers::{
     CoreError, CpuImageProcessor, DataType, Device, ExecuTorchBackend,
     Session, XnnpackOptions,
 };
+use processing::DeferredCpuProcessExt;
 #[cfg(feature = "vulkan")]
-use infers::{GpuImageProcessor, Vulkan};
+use infers::{GpuImageProcessor, HardwareImageVulkanExt, Vulkan};
+#[cfg(feature = "vulkan")]
+use processing::DeferredVulkanProcessExt;
 use infers_test_utils::{
     camera_frame_640x480, detector_preprocess_options, landmarker_preprocess_options,
     mock_cpu_detector, mock_cpu_landmarker, mock_gpu_detector, mock_gpu_landmarker,
@@ -17,29 +20,33 @@ fn test_cpu_face_pipeline() {
     let mut landmarker = mock_cpu_landmarker(224);
 
     let frame = camera_frame_640x480(128);
-    let detector_input = image_proc
-        .process(&frame, &detector_preprocess_options(224))
+    let detector_pending = frame
+        .clone()
+        .on_cpu()
+        .process(&image_proc, &detector_preprocess_options(224))
         .expect("detector preprocess");
 
-    assert_eq!(detector_input.shape().dims(), &[1, 3, 224, 224]);
-    assert_eq!(detector_input.dtype(), DataType::F32);
+    assert_eq!(detector_pending.shape().dims(), &[1, 3, 224, 224]);
+    assert_eq!(detector_pending.dtype(), DataType::F32);
 
     let detector_outputs = detector
-        .run(&[&detector_input])
-        .expect("detector run");
+        .infer(detector_pending)
+        .expect("detector infer");
     let boxes = read_f32_output(&detector_outputs).expect("read boxes");
     assert_eq!(boxes.len(), 4);
 
-    let landmarker_input = image_proc
+    let landmarker_pending = frame
+        .clone()
+        .on_cpu()
         .process(
-            &frame,
+            &image_proc,
             &landmarker_preprocess_options(boxes[0], boxes[1], boxes[2], boxes[3], 224),
         )
         .expect("landmarker preprocess");
 
     let landmarker_outputs = landmarker
-        .run(&[&landmarker_input])
-        .expect("landmarker run");
+        .infer(landmarker_pending)
+        .expect("landmarker infer");
     let landmarks = read_f32_output(&landmarker_outputs).expect("read landmarks");
     assert_eq!(landmarks.len(), 4);
 }
@@ -85,30 +92,33 @@ fn test_gpu_shared_vulkan_face_pipeline() {
     let image_proc = GpuImageProcessor::new(vulkan.clone()).expect("gpu processor");
 
     let frame = camera_frame_640x480(128);
-    let gpu_image = vulkan.upload_image(&frame).expect("upload frame");
-    let detector_input = image_proc
-        .process(&gpu_image, &detector_preprocess_options(224))
+    let detector_pending = frame
+        .clone()
+        .on(&vulkan)
+        .process(&image_proc, &detector_preprocess_options(224))
         .expect("gpu detector preprocess");
 
-    assert_eq!(detector_input.shape().dims(), &[1, 3, 224, 224]);
-    assert_eq!(detector_input.dtype(), DataType::F32);
+    assert_eq!(detector_pending.shape().dims(), &[1, 3, 224, 224]);
+    assert_eq!(detector_pending.dtype(), DataType::F32);
 
     let detector_outputs = detector
-        .run(&[&detector_input])
-        .expect("gpu detector run");
+        .infer(detector_pending)
+        .expect("gpu detector infer");
     let boxes = read_f32_output(&detector_outputs).expect("read boxes");
     assert_eq!(boxes, vec![10.0, 20.0, 100.0, 120.0]);
 
-    let landmarker_input = image_proc
+    let landmarker_pending = frame
+        .clone()
+        .on(&vulkan)
         .process(
-            &vulkan.upload_image(&frame).expect("upload"),
+            &image_proc,
             &landmarker_preprocess_options(boxes[0], boxes[1], boxes[2], boxes[3], 224),
         )
         .expect("gpu landmarker preprocess");
 
     let landmarker_outputs = landmarker
-        .run(&[&landmarker_input])
-        .expect("gpu landmarker run");
+        .infer(landmarker_pending)
+        .expect("gpu landmarker infer");
     let landmarks = read_f32_output(&landmarker_outputs).expect("read landmarks");
     assert_eq!(landmarks, vec![30.0, 40.0, 50.0, 60.0]);
 }
@@ -134,11 +144,9 @@ fn test_execu_torch_vulkan_load_shares_context_with_processor() {
     );
     assert!(result.is_err());
 
-    let gpu_image = vulkan
-        .upload_image(&camera_frame_640x480(64))
-        .expect("upload");
-    let _ = image_proc
-        .process(&gpu_image, &detector_preprocess_options(64))
+    let _ = camera_frame_640x480(64)
+        .on(&vulkan)
+        .process(&image_proc, &detector_preprocess_options(64))
         .expect("preprocess");
 
     drop(image_proc);

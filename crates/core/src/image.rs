@@ -1,24 +1,46 @@
 pub use processing_core::{FitMode, ImageFormat, ProcessingOptions, Rotation, TensorLayout};
 
+use crate::device::Device;
 use crate::error::CoreError;
+use std::sync::Arc;
 
-/// Device-resident image accepted by a typed image processor.
-pub trait DeviceImage: Send + Sync {
+/// Materialized image resident on device [D].
+pub trait Image<D: Device>: Send + Sync {
     fn width(&self) -> u32;
     fn height(&self) -> u32;
     fn format(&self) -> ImageFormat;
 }
 
-/// Host-resident image bytes (camera frame, decoded file, etc.).
-#[derive(Clone, Debug, PartialEq)]
-pub struct HostImage {
+/// Input-only source bytes (camera frame, decoded file, AHB CPU copy). Not processable directly.
+#[derive(Debug)]
+pub struct HardwareImage {
     width: u32,
     height: u32,
     format: ImageFormat,
     data: Vec<u8>,
 }
 
-impl HostImage {
+impl PartialEq for HardwareImage {
+    fn eq(&self, other: &Self) -> bool {
+        self.width == other.width
+            && self.height == other.height
+            && self.format == other.format
+            && self.data == other.data
+    }
+}
+
+impl Clone for HardwareImage {
+    fn clone(&self) -> Self {
+        Self {
+            width: self.width,
+            height: self.height,
+            format: self.format,
+            data: self.data.clone(),
+        }
+    }
+}
+
+impl HardwareImage {
     pub fn new(
         width: u32,
         height: u32,
@@ -62,18 +84,41 @@ impl HostImage {
     pub fn as_bytes(&self) -> &[u8] {
         &self.data
     }
+
+    /// Defer placement on CPU (zero-copy wrap at materialize time).
+    pub fn on_cpu(self) -> crate::Deferred<Cpu> {
+        crate::Deferred::from_hardware(Cpu, Arc::new(self))
+    }
 }
 
-impl DeviceImage for HostImage {
+use crate::Cpu;
+
+/// Materialized CPU-resident image (wraps [`HardwareImage`] bytes without copy).
+#[derive(Clone, Debug)]
+pub struct CpuImage {
+    inner: Arc<HardwareImage>,
+}
+
+impl CpuImage {
+    pub(crate) fn from_hardware(hardware: Arc<HardwareImage>) -> Self {
+        Self { inner: hardware }
+    }
+
+    pub fn hardware(&self) -> Arc<HardwareImage> {
+        Arc::clone(&self.inner)
+    }
+}
+
+impl Image<Cpu> for CpuImage {
     fn width(&self) -> u32 {
-        self.width
+        self.inner.width()
     }
 
     fn height(&self) -> u32 {
-        self.height
+        self.inner.height()
     }
 
     fn format(&self) -> ImageFormat {
-        self.format
+        self.inner.format()
     }
 }

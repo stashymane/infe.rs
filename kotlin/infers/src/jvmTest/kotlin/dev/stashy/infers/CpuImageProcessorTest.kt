@@ -12,8 +12,9 @@ class CpuImageProcessorTest {
             assertEquals(DeviceKind.Cpu, processor.deviceInfo.kind)
             inferenceScope {
                 val options = rgb4x4To2x2()
-                val image = HostImage.fromBytes(rawBytes, 4u, 4u, ImageFormat.Rgb888)
-                val out = processor.process(image, options)
+                val hardware = HardwareImage.fromBytes(rawBytes, 4u, 4u, ImageFormat.Rgb888)
+                val pending = hardware.onCpu().process(processor, options)
+                val out = pending.materialize()
                 assertEquals(TensorShape.of(1, 3, 2, 2), out.shape)
                 assertEquals(DataType.F32, out.dtype)
                 assertEquals(12, out.readFloats().size)

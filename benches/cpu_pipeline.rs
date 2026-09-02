@@ -5,19 +5,21 @@ mod fixtures;
 mod cpu;
 
 use cpu::{infer, preprocess, setup};
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 use std::hint::black_box;
 
 fn preprocess_bench(c: &mut Criterion) {
     let bench = setup();
     c.bench_function("preprocess", |b| {
-        b.iter(|| black_box(preprocess(&bench)));
+        b.iter(|| black_box(preprocess(&bench).materialize().expect("materialize")));
     });
 }
 
 fn inference_bench(c: &mut Criterion) {
     let mut bench = setup();
-    let input = preprocess(&bench);
+    let input = preprocess(&bench)
+        .materialize()
+        .expect("materialize preprocess output");
     c.bench_function("inference", |b| {
         b.iter(|| black_box(infer(&mut bench, &input)));
     });
@@ -27,8 +29,8 @@ fn full_pass_bench(c: &mut Criterion) {
     let mut bench = setup();
     c.bench_function("full_pass", |b| {
         b.iter(|| {
-            let input = preprocess(&bench);
-            black_box(infer(&mut bench, &input));
+            let pending = preprocess(&bench);
+            black_box(infer(&mut bench, pending));
         });
     });
 }

@@ -36,6 +36,9 @@ pub enum InfersError {
 
     #[error("Internal error: {reason}")]
     InternalError { reason: String },
+
+    #[error("Handle already consumed")]
+    AlreadyConsumed,
 }
 
 impl From<CoreError> for InfersError {
@@ -62,6 +65,7 @@ impl From<CoreError> for InfersError {
             CoreError::Gpu(err) => InfersError::ProcessingFailed {
                 reason: err.to_string(),
             },
+            CoreError::AlreadyConsumed => InfersError::AlreadyConsumed,
         }
     }
 }

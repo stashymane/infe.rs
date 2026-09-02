@@ -37,10 +37,9 @@ internal class GpuPipeline private constructor(
     private val processingOptions: ProcessingOptions,
 ) : AutoCloseable {
     fun processFrames(frames: Flow<CameraFrame>): Flow<GpuPipelineOutput> = frames.mapInference { frame ->
-        val host = HostImage.fromBytes(frame.bytes, frame.width, frame.height, ImageFormat.Rgb888)
-        val gpuImage = host.uploadTo(device)
-        val input = processor.process(gpuImage, processingOptions)
-        val outputs = session.infer(input)
+        val hardware = HardwareImage.fromBytes(frame.bytes, frame.width, frame.height, ImageFormat.Rgb888)
+        val pending = hardware.on(device).process(processor, processingOptions)
+        val outputs = session.infer(pending)
         val primary = outputs.firstOrNull()
         val preview = primary
             ?.readFloats()
@@ -74,14 +73,9 @@ internal class GpuPipeline private constructor(
                     backend.loadModel(modelPath, device, VulkanOptions())
                 }
                 val processor = GpuImageProcessor(device)
-                val inputShape = session.inputShapes.firstOrNull() ?: error("model has no inputs")
-                val imgsz = imgszFromInputShape(inputShape)
-                val options = ProcessingOptions {
+                val options = ProcessingOptions.forModelInput(session) {
                     source = frameWidth.toInt() to frameHeight.toInt()
-                    dest = imgsz to imgsz
                     srcFormat = ImageFormat.Rgb888
-                    destFormat = ImageFormat.Rgbf32
-                    fitMode = FitMode.Contain
                 }
                 GpuPipeline(device, backend, session, processor, options)
             } catch (_: Throwable) {

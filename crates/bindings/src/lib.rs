@@ -7,6 +7,7 @@ pub mod device;
 pub mod error;
 #[cfg(feature = "vulkan")]
 pub mod gpu_device;
+pub mod deferred;
 pub mod image;
 pub mod session;
 pub mod tensor;
@@ -19,6 +20,7 @@ pub use device::*;
 pub use error::*;
 #[cfg(feature = "vulkan")]
 pub use gpu_device::*;
+pub use deferred::*;
 pub use image::*;
 pub use session::*;
 pub use tensor::*;

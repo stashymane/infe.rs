@@ -46,7 +46,8 @@ fn test_cpu_image_processor() {
     assert_eq!(processor.device_info().kind, DeviceKind::Cpu);
 
     let raw_bytes: Vec<u8> = (0..48).map(|v| (v * 5) as u8).collect();
-    let host = create_host_image(4, 4, ImageFormat::Rgb888, raw_bytes).expect("host image");
+    let hardware =
+        create_hardware_image(4, 4, ImageFormat::Rgb888, raw_bytes).expect("hardware image");
 
     let options = ProcessingOptions {
         src_w: 4,
@@ -64,7 +65,9 @@ fn test_cpu_image_processor() {
         dest_layout: TensorLayout::Nchw,
     };
 
-    let out = processor.process(host, options).expect("process");
+    let deferred = hardware.on_cpu();
+    let pending = deferred.process(processor, options).expect("process");
+    let out = pending.materialize().expect("materialize");
     assert_eq!(out.shape().dims, vec![1, 3, 2, 2]);
     assert_eq!(out.dtype(), DataType::F32);
 }

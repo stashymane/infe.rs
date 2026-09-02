@@ -50,7 +50,7 @@ impl VulkanComputeGraph {
         }
     }
 
-    fn staging_target(
+    pub fn staging_target(
         &self,
         input_index: usize,
     ) -> Result<(VulkanBufferHandle, u64), ExecuTorchError> {

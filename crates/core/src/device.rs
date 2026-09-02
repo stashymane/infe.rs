@@ -1,4 +1,6 @@
 use crate::sealed::Sealed;
+use crate::image::{CpuImage, HardwareImage, Image};
+use std::sync::Arc;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum DeviceKind {
@@ -40,7 +42,8 @@ impl Cpu {
 /// Execution device handle. Each implementor owns its context and storage types.
 pub trait Device: Sealed + Clone + Send + Sync + 'static {
     type Storage: Send + Sync + std::fmt::Debug + Clone;
-    type Image: crate::DeviceImage;
+    /// Materialized image type for this device (implements [`Image<Self>`]).
+    type Image: Image<Self>;
 
     fn info(&self) -> &DeviceInfo;
 
@@ -58,5 +61,49 @@ pub trait Device: Sealed + Clone + Send + Sync + 'static {
         dtype: crate::DataType,
     ) -> Result<crate::HostTensor, crate::CoreError>;
 
-    fn upload_image(&self, host: &crate::HostImage) -> Result<Self::Image, crate::CoreError>;
+    fn materialize_deferred(
+        device: &Self,
+        hardware: Arc<HardwareImage>,
+    ) -> Result<Self::Image, crate::CoreError>;
+}
+
+impl Device for Cpu {
+    type Storage = crate::tensor::HostBytes;
+    type Image = CpuImage;
+
+    fn info(&self) -> &DeviceInfo {
+        Cpu::info()
+    }
+
+    fn store(
+        &self,
+        shape: &crate::TensorShape,
+        dtype: crate::DataType,
+        bytes: &[u8],
+    ) -> Result<Self::Storage, crate::CoreError> {
+        if bytes.len() != shape.byte_size(dtype) {
+            return Err(crate::CoreError::InvalidShape(format!(
+                "Byte size mismatch: expected {}, got {}",
+                shape.byte_size(dtype),
+                bytes.len()
+            )));
+        }
+        Ok(crate::tensor::HostBytes(bytes.to_vec()))
+    }
+
+    fn load(
+        &self,
+        storage: &Self::Storage,
+        shape: &crate::TensorShape,
+        dtype: crate::DataType,
+    ) -> Result<crate::HostTensor, crate::CoreError> {
+        crate::HostTensor::new(shape.clone(), dtype, storage.0.clone())
+    }
+
+    fn materialize_deferred(
+        _device: &Self,
+        hardware: Arc<HardwareImage>,
+    ) -> Result<Self::Image, crate::CoreError> {
+        Ok(CpuImage::from_hardware(hardware))
+    }
 }

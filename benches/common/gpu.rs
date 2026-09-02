@@ -1,8 +1,8 @@
 use infers::{
-    Cpu, Device, ExecuTorchBackend, ExecuTorchSession, GpuImageProcessor, Session, Tensor, Vulkan,
-    VulkanOptions,
+    Cpu, ExecuTorchBackend, ExecuTorchSession, GpuImageProcessor, ProcessingOptions, Session,
+    Vulkan, VulkanImage, VulkanOptions,
 };
-use infers_gpu::VulkanImage;
+use processing::ImageProcessor;
 
 use super::fixtures::{
     camera_frame, detector_options, imgsz_from_input_shape, model_path, require_model, FRAME_H,
@@ -13,7 +13,7 @@ pub struct Bench {
     pub processor: GpuImageProcessor,
     pub session: ExecuTorchSession<Vulkan>,
     pub image: VulkanImage,
-    pub options: infers::ProcessingOptions,
+    pub options: ProcessingOptions,
 }
 
 pub fn setup() -> Bench {
@@ -33,7 +33,12 @@ pub fn setup() -> Bench {
     let imgsz = imgsz_from_input_shape(&session.input_shapes()[0]);
     let frame = camera_frame(FRAME_W, FRAME_H);
     let options = detector_options(FRAME_W, FRAME_H, imgsz);
-    let image = vulkan.upload_image(&frame).expect("upload frame");
+
+    let mut buffer = vulkan
+        .image_buffer(frame.width(), frame.height(), frame.format())
+        .expect("allocate GPU image buffer");
+    buffer.write(frame.as_bytes()).expect("upload frame");
+    let image = VulkanImage::Linear(buffer);
 
     Bench {
         processor,
@@ -43,13 +48,16 @@ pub fn setup() -> Bench {
     }
 }
 
-pub fn preprocess(bench: &Bench) -> Tensor<Vulkan> {
+pub fn preprocess(bench: &Bench) -> infers::Pending<Vulkan> {
     bench
         .processor
         .process(&bench.image, &bench.options)
         .expect("GPU preprocess")
 }
 
-pub fn infer(bench: &mut Bench, input: &Tensor<Vulkan>) -> Vec<Tensor<Cpu>> {
-    bench.session.run(&[input]).expect("Vulkan inference")
+pub fn infer(
+    bench: &mut Bench,
+    input: impl infers::InferInput<Vulkan>,
+) -> Vec<infers::Tensor<Cpu>> {
+    bench.session.infer(input).expect("Vulkan inference")
 }

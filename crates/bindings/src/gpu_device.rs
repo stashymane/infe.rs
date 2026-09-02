@@ -1,9 +1,8 @@
 use crate::device::DeviceInfo;
 use crate::error::InfersError;
-use crate::image::{GpuImage, GpuImageProcessor, HostImage};
-use crate::tensor::{CpuTensor, GpuTensor};
-use infers_core::Device;
-use infers_gpu::Vulkan;
+use crate::tensor::{CpuTensor, GpuTensor, DataType, TensorShape};
+use crate::image::GpuImageProcessor;
+use infers_gpu::{allocate_tensor, Vulkan};
 use processing::GpuImageProcessor as CoreGpuImageProcessor;
 use std::sync::Arc;
 
@@ -62,14 +61,6 @@ impl GpuDevice {
         let gpu = tensor.inner().to_device(&self.vulkan).map_err(InfersError::from)?;
         Ok(Arc::new(GpuTensor::from_inner(gpu)))
     }
-
-    pub fn upload_image(&self, image: Arc<HostImage>) -> Result<Arc<GpuImage>, InfersError> {
-        let vulkan_image = self
-            .vulkan
-            .upload_image(image.inner())
-            .map_err(InfersError::from)?;
-        Ok(Arc::new(GpuImage::from_vulkan(vulkan_image)))
-    }
 }
 
 /// Create a GPU image processor bound to [device].
@@ -79,4 +70,17 @@ pub fn create_gpu_image_processor(
 ) -> Result<Arc<GpuImageProcessor>, InfersError> {
     let proc = CoreGpuImageProcessor::new(device.vulkan.clone()).map_err(InfersError::from)?;
     Ok(Arc::new(GpuImageProcessor { inner: proc }))
+}
+
+/// Allocate an uninitialized GPU tensor on [device].
+#[uniffi::export]
+pub fn create_gpu_tensor(
+    device: Arc<GpuDevice>,
+    shape: TensorShape,
+    dtype: DataType,
+) -> Result<Arc<GpuTensor>, InfersError> {
+    let core_shape: infers_core::TensorShape = shape.try_into()?;
+    let core_dtype: infers_core::DataType = dtype.into();
+    let tensor = allocate_tensor(&device.vulkan, core_shape, core_dtype).map_err(InfersError::from)?;
+    Ok(Arc::new(GpuTensor::from_inner(tensor)))
 }

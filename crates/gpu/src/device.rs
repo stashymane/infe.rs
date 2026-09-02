@@ -5,7 +5,7 @@ use crate::sampled_image::VulkanSampledImage;
 use ash::vk;
 use gpu_allocator::MemoryLocation;
 use infers_core::{
-    CoreError, DataType, Device, DeviceImage, DeviceInfo, HostImage, HostTensor,
+    CoreError, DataType, Deferred, Device, DeviceInfo, HardwareImage, HostTensor, Image,
     ImageFormat, Tensor, TensorAdopt, TensorShape,
 };
 use std::sync::Arc;
@@ -74,7 +74,8 @@ pub struct VulkanStorage {
 
 struct VulkanStorageInner {
     context: Arc<VulkanContext>,
-    buffer: Option<AllocatedBuffer>,
+    owned: Option<AllocatedBuffer>,
+    external: Option<VulkanBufferHandle>,
 }
 
 impl std::fmt::Debug for VulkanStorage {
@@ -89,18 +90,38 @@ impl VulkanStorage {
     }
 
     pub fn vulkan_handle(&self) -> Option<VulkanBufferHandle> {
-        self.inner.buffer.as_ref().map(|b| b.vulkan_handle())
+        if let Some(handle) = self.inner.external {
+            Some(handle)
+        } else {
+            self.inner.owned.as_ref().map(|b| b.vulkan_handle())
+        }
     }
 
     pub fn allocated_buffer(&self) -> Option<&AllocatedBuffer> {
-        self.inner.buffer.as_ref()
+        self.inner.owned.as_ref()
+    }
+
+    pub fn is_external(&self) -> bool {
+        self.inner.external.is_some()
     }
 
     pub fn from_allocated(context: Arc<VulkanContext>, buffer: AllocatedBuffer) -> Self {
         Self {
             inner: Arc::new(VulkanStorageInner {
                 context,
-                buffer: Some(buffer),
+                owned: Some(buffer),
+                external: None,
+            }),
+        }
+    }
+
+    /// Wrap a caller-owned buffer without taking ownership. The buffer is not destroyed on drop.
+    pub fn from_external_handle(context: Arc<VulkanContext>, handle: VulkanBufferHandle) -> Self {
+        Self {
+            inner: Arc::new(VulkanStorageInner {
+                context,
+                owned: None,
+                external: Some(handle),
             }),
         }
     }
@@ -141,19 +162,30 @@ impl VulkanStorage {
     }
 
     fn try_read_bytes(&self) -> Result<Vec<u8>, GpuError> {
-        let src = self.inner.buffer.as_ref().ok_or_else(|| {
-            GpuError::Other("GPU buffer already destroyed".into())
-        })?;
+        let (buffer, offset, size) = self
+            .inner
+            .external
+            .map(|h| (h.buffer, h.offset, h.size))
+            .or_else(|| {
+                self.inner.owned.as_ref().map(|src| {
+                    (src.buffer, 0, src.size)
+                })
+            })
+            .ok_or_else(|| GpuError::Other("GPU buffer already destroyed".into()))?;
         let staging = self.inner.context.create_buffer(
-            src.size,
+            size,
             vk::BufferUsageFlags::TRANSFER_DST,
             MemoryLocation::GpuToCpu,
             "readback-staging",
         )?;
-        self.inner
-            .context
-            .copy_buffer(src.buffer, 0, staging.buffer, 0, src.size)?;
-        let mut out = vec![0u8; src.size as usize];
+        self.inner.context.copy_buffer(
+            buffer,
+            offset,
+            staging.buffer,
+            0,
+            size,
+        )?;
+        let mut out = vec![0u8; size as usize];
         VulkanContext::read_allocation(&staging.allocation, &mut out)?;
         self.inner.context.destroy_buffer(staging);
         Ok(out)
@@ -162,7 +194,7 @@ impl VulkanStorage {
 
 impl Drop for VulkanStorageInner {
     fn drop(&mut self) {
-        if let Some(buffer) = self.buffer.take() {
+        if let Some(buffer) = self.owned.take() {
             self.context.destroy_buffer(buffer);
         }
     }
@@ -176,6 +208,8 @@ pub struct VulkanImageBuffer {
     format: ImageFormat,
     staging: Option<AllocatedBuffer>,
     gpu: Option<AllocatedBuffer>,
+    /// Staging holds bytes not yet copied to [`Self::gpu`].
+    staging_dirty: bool,
 }
 
 impl VulkanImageBuffer {
@@ -205,10 +239,11 @@ impl VulkanImageBuffer {
             format,
             staging: Some(staging),
             gpu: Some(gpu),
+            staging_dirty: false,
         })
     }
 
-    pub fn write(&mut self, bytes: &[u8]) -> Result<(), CoreError> {
+    pub fn write_staging(&mut self, bytes: &[u8]) -> Result<(), CoreError> {
         let expected = self.format.frame_bytes(self.width, self.height) as usize;
         if bytes.len() != expected {
             return Err(CoreError::InvalidImageBuffer(format!(
@@ -220,16 +255,41 @@ impl VulkanImageBuffer {
         let staging = self.staging.as_mut().ok_or_else(|| {
             CoreError::InvalidImageBuffer("image staging buffer destroyed".into())
         })?;
+        VulkanContext::write_allocation(&mut staging.allocation, bytes)?;
+        self.staging_dirty = true;
+        Ok(())
+    }
+
+    /// Returns true when staged bytes still need copying to the GPU SSBO.
+    pub fn staging_dirty(&self) -> bool {
+        self.staging_dirty
+    }
+
+    /// Copy staged bytes to the GPU SSBO (separate from [`Self::write`] for deferred upload).
+    pub fn flush_staging_to_gpu(&mut self) -> Result<(), CoreError> {
+        let staging = self.staging.as_ref().ok_or_else(|| {
+            CoreError::InvalidImageBuffer("image staging buffer destroyed".into())
+        })?;
         let gpu = self.gpu.as_ref().ok_or_else(|| {
             CoreError::InvalidImageBuffer("image gpu buffer destroyed".into())
         })?;
-        VulkanContext::write_allocation(&mut staging.allocation, bytes)?;
-        self.context.copy_buffer(staging.buffer, 0, gpu.buffer, 0, gpu.size)?;
+        self.context
+            .copy_buffer(staging.buffer, 0, gpu.buffer, 0, gpu.size)?;
+        self.staging_dirty = false;
         Ok(())
+    }
+
+    pub fn write(&mut self, bytes: &[u8]) -> Result<(), CoreError> {
+        self.write_staging(bytes)?;
+        self.flush_staging_to_gpu()
     }
 
     pub fn gpu_buffer(&self) -> Option<&AllocatedBuffer> {
         self.gpu.as_ref()
+    }
+
+    pub fn staging_buffer(&self) -> Option<&AllocatedBuffer> {
+        self.staging.as_ref()
     }
 
     pub fn context(&self) -> &Arc<VulkanContext> {
@@ -251,12 +311,12 @@ impl Drop for VulkanImageBuffer {
 /// GPU image input: linear SSBO buffer or imported sampled image.
 pub enum VulkanImage {
     Linear(VulkanImageBuffer),
-    Sampled(VulkanSampledImage),
+    Sampled(Arc<VulkanSampledImage>),
 }
 
 impl VulkanImage {
     pub fn from_sampled(image: VulkanSampledImage) -> Self {
-        Self::Sampled(image)
+        Self::Sampled(Arc::new(image))
     }
 
     pub fn context(&self) -> &Arc<VulkanContext> {
@@ -302,7 +362,7 @@ impl VulkanImage {
     }
 }
 
-impl DeviceImage for VulkanImage {
+impl Image<Vulkan> for VulkanImage {
     fn width(&self) -> u32 {
         self.width()
     }
@@ -361,9 +421,13 @@ impl Device for Vulkan {
         HostTensor::new(shape.clone(), dtype, bytes)
     }
 
-    fn upload_image(&self, host: &HostImage) -> Result<Self::Image, CoreError> {
-        let mut buffer = self.image_buffer(host.width(), host.height(), host.format())?;
-        buffer.write(host.as_bytes())?;
+    fn materialize_deferred(
+        device: &Self,
+        hardware: std::sync::Arc<HardwareImage>,
+    ) -> Result<Self::Image, CoreError> {
+        let mut buffer =
+            device.image_buffer(hardware.width(), hardware.height(), hardware.format())?;
+        buffer.write_staging(hardware.as_bytes())?;
         Ok(VulkanImage::Linear(buffer))
     }
 }
@@ -387,6 +451,11 @@ impl TensorAdopt for Vulkan {
     }
 }
 
+/// Defer GPU placement of [`HardwareImage`] bytes without committing an upload yet.
+pub fn defer_hardware(device: &Vulkan, hardware: HardwareImage) -> Deferred<Vulkan> {
+    Deferred::from_hardware(device.clone(), std::sync::Arc::new(hardware))
+}
+
 /// Build a tensor from an already-allocated GPU buffer on `device`.
 pub fn tensor_from_allocated(
     device: &Vulkan,
@@ -395,6 +464,18 @@ pub fn tensor_from_allocated(
     buffer: AllocatedBuffer,
 ) -> Tensor<Vulkan> {
     let storage = VulkanStorage::from_allocated(Arc::clone(device.context()), buffer);
+    Tensor::from_storage(device.clone(), shape, dtype, storage)
+}
+
+/// Build a tensor view over a caller-owned external buffer on `device`.
+pub fn tensor_from_external(
+    device: &Vulkan,
+    shape: TensorShape,
+    dtype: DataType,
+    handle: VulkanBufferHandle,
+) -> Tensor<Vulkan> {
+    let storage =
+        VulkanStorage::from_external_handle(Arc::clone(device.context()), handle);
     Tensor::from_storage(device.clone(), shape, dtype, storage)
 }
 /// Allocate a zero-initialized GPU tensor on `device`.

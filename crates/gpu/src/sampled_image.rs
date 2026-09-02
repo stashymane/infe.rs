@@ -2,6 +2,7 @@ use crate::context::VulkanContext;
 use ash::vk;
 use infers_core::ImageFormat;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicI32, Ordering};
 
 /// Vulkan objects and metadata that make up a [`VulkanSampledImage`].
 pub struct VulkanSampledImageParts {
@@ -30,6 +31,7 @@ pub struct VulkanSampledImage {
     width: u32,
     height: u32,
     format: ImageFormat,
+    layout: AtomicI32,
 }
 
 impl VulkanSampledImage {
@@ -46,7 +48,16 @@ impl VulkanSampledImage {
             width: parts.width,
             height: parts.height,
             format: parts.format,
+            layout: AtomicI32::new(vk::ImageLayout::UNDEFINED.as_raw()),
         }
+    }
+
+    pub fn current_layout(&self) -> vk::ImageLayout {
+        vk::ImageLayout::from_raw(self.layout.load(Ordering::Relaxed))
+    }
+
+    pub fn set_layout(&self, layout: vk::ImageLayout) {
+        self.layout.store(layout.as_raw(), Ordering::Relaxed);
     }
 
     pub fn vulkan_context(&self) -> &Arc<VulkanContext> {

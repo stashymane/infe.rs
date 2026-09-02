@@ -8,9 +8,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import dev.stashy.infers.ffi.CpuImageProcessor as FfiCpuImageProcessor
 
-/** CPU image preprocessor producing [CpuTensor]. */
+/** CPU image preprocessor producing deferred [CpuPending] commits. */
 public class CpuImageProcessor private constructor(
-    internal val handle: FfiCpuImageProcessor,
+    @InfersInternalApi internal val handle: FfiCpuImageProcessor,
     private val dispatcher: CoroutineDispatcher,
 ) : ImageProcessor<CpuDevice> {
     private val gate = CloseGate("CpuImageProcessor")
@@ -23,16 +23,13 @@ public class CpuImageProcessor private constructor(
     override val deviceInfo: DeviceInfo = CpuDevice.info
 
     @InfersInternalApi
+    internal fun ensureOpen() = gate.ensureOpen()
+
+    @InfersInternalApi
     override suspend fun processInternal(
         image: DeviceImage<CpuDevice>,
         options: ProcessingOptions,
-    ): Tensor<CpuDevice> = withContext(dispatcher) {
-        withFfiErrors {
-            gate.ensureOpen()
-            val host = image as HostImage
-            CpuTensor.fromFfi(handle.process(host.handle, options.toFfi()))
-        }
-    }
+    ): Tensor<CpuDevice> = error("use hardware.onCpu().process(processor, options)")
 
     override fun close() {
         if (gate.markClosed()) {

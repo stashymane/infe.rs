@@ -1,4 +1,4 @@
-//! Primary crate for the Infers on-device inference runtime.
+//! Primary crate for the on-device inference runtime.
 //!
 //! Re-exports [`infers_core`], [`processing`], and [`infers_backend_executorch`] so
 //! applications can depend on a single package. Enable `vulkan` for GPU preprocessing
@@ -6,19 +6,31 @@
 
 pub use infers_core::*;
 pub use processing::CpuImageProcessor;
-pub use processing::{
-    convert_layout_cpu, infer_rgb_layout, nhwc_to_nchw_cpu,
-};
+pub use processing::ImageProcessor;
 #[cfg(feature = "vulkan")]
-pub use processing::{
-    convert_layout_vulkan, GpuImageProcessor, LayoutGpuPass, nhwc_to_nchw_gpu,
-};
+pub use processing::DeferredVulkanProcessExt;
+pub use processing::DeferredCpuProcessExt;
 pub use infers_backend_executorch::{
     config::{VulkanOptions, XnnpackOptions},
     ExecuTorchBackend, ExecuTorchDelegate, ExecuTorchSession, ProgramMetadata, TensorDescriptor,
 };
 #[cfg(feature = "vulkan")]
-pub use infers_gpu::{GpuError, Vulkan, VulkanContext, VulkanImage};
+pub use processing::GpuImageProcessor;
+#[cfg(feature = "vulkan")]
+pub use infers_gpu::{defer_hardware, GpuError, Vulkan, VulkanBufferHandle, VulkanContext, VulkanImage};
+
+/// GPU placement for [`HardwareImage`].
+#[cfg(feature = "vulkan")]
+pub trait HardwareImageVulkanExt {
+    fn on(self, device: &Vulkan) -> Deferred<Vulkan>;
+}
+
+#[cfg(feature = "vulkan")]
+impl HardwareImageVulkanExt for HardwareImage {
+    fn on(self, device: &Vulkan) -> Deferred<Vulkan> {
+        defer_hardware(device, self)
+    }
+}
 
 #[cfg(target_os = "android")]
 pub use platform_android::{

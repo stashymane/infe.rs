@@ -1,11 +1,8 @@
 package dev.stashy.infers.vulkan
 
-import dev.stashy.infers.DeviceImage
 import dev.stashy.infers.DeviceInfo
-import dev.stashy.infers.ImageProcessor
 import dev.stashy.infers.InfersInternalApi
 import dev.stashy.infers.ProcessingOptions
-import dev.stashy.infers.Tensor
 import dev.stashy.infers.ffi.createGpuImageProcessor
 import dev.stashy.infers.internal.CloseGate
 import dev.stashy.infers.internal.fromFfi
@@ -16,11 +13,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import dev.stashy.infers.ffi.GpuImageProcessor as FfiGpuImageProcessor
 
-/** GPU image preprocessor producing [GpuTensor]. */
+/** GPU image preprocessor producing [GpuPending] commits. */
 public class GpuImageProcessor private constructor(
-    internal val handle: FfiGpuImageProcessor,
+    @InfersInternalApi internal val handle: FfiGpuImageProcessor,
     private val dispatcher: CoroutineDispatcher,
-) : ImageProcessor<GpuDevice> {
+) : dev.stashy.infers.ImageProcessor<GpuDevice> {
     private val gate = CloseGate("GpuImageProcessor")
 
     public constructor(device: GpuDevice) : this(
@@ -39,15 +36,9 @@ public class GpuImageProcessor private constructor(
 
     @InfersInternalApi
     override suspend fun processInternal(
-        image: DeviceImage<GpuDevice>,
+        image: dev.stashy.infers.DeviceImage<GpuDevice>,
         options: ProcessingOptions,
-    ): Tensor<GpuDevice> = withContext(dispatcher) {
-        withFfiErrors {
-            gate.ensureOpen()
-            val gpuImage = image as GpuImage
-            GpuTensor.fromFfi(handle.process(gpuImage.handle, options.toFfi()))
-        }
-    }
+    ): dev.stashy.infers.Tensor<GpuDevice> = error("use hardware.on(device).process(processor, options)")
 
     override fun close() {
         if (gate.markClosed()) {

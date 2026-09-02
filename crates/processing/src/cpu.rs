@@ -4,14 +4,17 @@ use fast_image_resize::{FilterType, PixelType, ResizeAlg, ResizeOptions, Resizer
 use image::imageops;
 use image::RgbImage;
 use infers_core::{
-    Cpu, HostImage, HostTensor, ImageFormat, ProcessingOptions, Rotation, Tensor, TensorShape,
+    Cpu, CpuImage, HardwareImage, HostTensor, ImageFormat, MaterializeTarget, ProcessingOptions,
+    Rotation, Tensor, TensorShape,
 };
 use parking_lot::Mutex;
 use processing_core::{FitMode, TensorLayout};
+use std::sync::Arc;
 
-/// High-performance CPU image processor delegating to `fast_image_resize` (SIMD) and `image`
+/// High-performance CPU image processor delegating to `fast_image_resize` (SIMD) and `image`.
+#[derive(Clone)]
 pub struct CpuImageProcessor {
-    resizer: Mutex<Resizer>,
+    resizer: Arc<Mutex<Resizer>>,
 }
 
 impl Default for CpuImageProcessor {
@@ -24,13 +27,22 @@ impl CpuImageProcessor {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            resizer: Mutex::new(Resizer::new()),
+            resizer: Arc::new(Mutex::new(Resizer::new())),
         }
     }
 
-  pub fn process(
+    pub(crate) fn materialize_from_hardware(
         &self,
-        input: &HostImage,
+        input: Arc<HardwareImage>,
+        options: &ProcessingOptions,
+        _target: MaterializeTarget,
+    ) -> Result<Tensor<Cpu>, CoreError> {
+        self.process_hardware(&input, options)
+    }
+
+    fn process_hardware(
+        &self,
+        input: &HardwareImage,
         options: &ProcessingOptions,
     ) -> Result<Tensor<Cpu>, CoreError> {
         let src_bytes = input.as_bytes();
@@ -62,8 +74,6 @@ impl CpuImageProcessor {
             ));
         }
 
-        // Checked arithmetic: `crop_x + crop_w` would otherwise wrap and let an
-        // out-of-bounds region pass this validation.
         let exceeds = crop_x.checked_add(crop_w).is_none_or(|r| r > src_w)
             || crop_y.checked_add(crop_h).is_none_or(|b| b > src_h);
         if exceeds {
@@ -73,7 +83,6 @@ impl CpuImageProcessor {
             )));
         }
 
-        // 1. Extract crop region as RgbImage
         let mut cropped_img = RgbImage::new(crop_w, crop_h);
         for y in 0..crop_h {
             let src_row_start = ((crop_y + y) * src_w + crop_x) as usize * 3;
@@ -84,7 +93,6 @@ impl CpuImageProcessor {
                 .copy_from_slice(&src_bytes[src_row_start..src_row_end]);
         }
 
-        // 2. Apply rotation if requested
         let rotated_img = match options.rotation {
             Rotation::None => cropped_img,
             Rotation::Rot90 => imageops::rotate90(&cropped_img),
@@ -101,7 +109,6 @@ impl CpuImageProcessor {
             ));
         }
 
-        // 3. Handle fit mode and scale using fast_image_resize
         let dst_rgb_bytes = match options.fit_mode {
             FitMode::Stretch => {
                 let src_ref = ImageRef::new(cur_w, cur_h, rotated_img.as_raw(), PixelType::U8x3)
@@ -193,7 +200,6 @@ impl CpuImageProcessor {
             }
         };
 
-        // 4. Format conversion into TensorBuffer
         pack_rgb_tensor(
             &dst_rgb_bytes,
             dest_w,
@@ -202,6 +208,30 @@ impl CpuImageProcessor {
             options.dest_layout,
         )
     }
+}
+
+pub(crate) fn output_shape_dtype(
+    options: &ProcessingOptions,
+) -> Result<(TensorShape, infers_core::DataType), CoreError> {
+    let (dest_w, dest_h) = (options.dest_w, options.dest_h);
+    let shape = match options.dest_layout {
+        TensorLayout::Nhwc => {
+            TensorShape::new(vec![1, dest_h as usize, dest_w as usize, 3])?
+        }
+        TensorLayout::Nchw => {
+            TensorShape::new(vec![1, 3, dest_h as usize, dest_w as usize])?
+        }
+    };
+    let dtype = match options.dest_format {
+        ImageFormat::Rgb888 => infers_core::DataType::U8,
+        ImageFormat::Rgbf32 => infers_core::DataType::F32,
+        ImageFormat::Nv12 | ImageFormat::I420 => {
+            return Err(CoreError::InvalidImageBuffer(
+                "CPU convert kernels emit RGB888 or RGBF32, not YUV".into(),
+            ));
+        }
+    };
+    Ok((shape, dtype))
 }
 
 fn pack_rgb_tensor(

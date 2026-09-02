@@ -1,32 +1,32 @@
 package dev.stashy.infers
 
-import dev.stashy.infers.ffi.createHostImage
+import dev.stashy.infers.ffi.createHardwareImage
 import dev.stashy.infers.internal.CloseGate
 import dev.stashy.infers.internal.fromFfi
 import dev.stashy.infers.internal.toFfi
 import dev.stashy.infers.internal.withFfiErrors
-import dev.stashy.infers.ffi.HostImage as FfiHostImage
+import dev.stashy.infers.ffi.HardwareImage as FfiHardwareImage
 
 /** Host-resident image bytes (camera frame, decoded file, etc.). */
-public class HostImage @InfersInternalApi constructor(
+public class HardwareImage @InfersInternalApi constructor(
     @InfersInternalApi
-    public val handle: FfiHostImage,
-) : DeviceImage<CpuDevice> {
-    private val gate = CloseGate("HostImage")
+    public val handle: FfiHardwareImage,
+) : AutoCloseable {
+    private val gate = CloseGate("HardwareImage")
 
-    override val width: UInt
+    public val width: UInt
         get() {
             gate.ensureOpen()
             return handle.width()
         }
 
-    override val height: UInt
+    public val height: UInt
         get() {
             gate.ensureOpen()
             return handle.height()
         }
 
-    override val format: ImageFormat
+    public val format: ImageFormat
         get() {
             gate.ensureOpen()
             return handle.format().fromFfi()
@@ -43,11 +43,11 @@ public class HostImage @InfersInternalApi constructor(
 
     public companion object {
         @InfersInternalApi
-        internal fun fromBytesInternal(bytes: ByteArray, width: UInt, height: UInt, format: ImageFormat): HostImage =
+        internal fun fromBytesInternal(bytes: ByteArray, width: UInt, height: UInt, format: ImageFormat): HardwareImage =
             withFfiErrors {
-                HostImage(createHostImage(width, height, format.toFfi(), bytes))
+                HardwareImage(createHardwareImage(width, height, format.toFfi(), bytes))
             }
-        
+
         @OptIn(InfersInternalApi::class)
         context(scope: InferenceScope)
         public fun fromBytes(
@@ -55,6 +55,10 @@ public class HostImage @InfersInternalApi constructor(
             width: UInt,
             height: UInt,
             format: ImageFormat,
-        ): DeviceImage<CpuDevice> = scope.register(fromBytesInternal(bytes, width, height, format))
+        ): HardwareImage = scope.register(fromBytesInternal(bytes, width, height, format))
     }
 }
+
+@OptIn(InfersInternalApi::class)
+context(scope: InferenceScope)
+public fun HardwareImage.onCpu(): CpuDeferred = scope.register(CpuDeferred(handle.onCpu()))

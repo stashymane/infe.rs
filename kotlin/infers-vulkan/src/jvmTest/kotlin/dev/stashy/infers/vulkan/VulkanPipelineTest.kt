@@ -39,13 +39,13 @@ class VulkanPipelineTest {
                 GpuImageProcessor(it).use { gpu ->
                     val cpuShape =
                         inferenceScope {
-                            val image = HostImage.fromBytes(rawBytes, 4u, 4u, ImageFormat.Rgb888)
-                            cpu.process(image, options).shape
+                            val hardware = HardwareImage.fromBytes(rawBytes, 4u, 4u, ImageFormat.Rgb888)
+                            hardware.onCpu().process(cpu, options).materialize().shape
                         }
                     inferenceScope {
-                        val host = HostImage.fromBytes(rawBytes, 4u, 4u, ImageFormat.Rgb888)
-                        val gpuImage = host.uploadTo(it)
-                        val out = gpu.process(gpuImage, options)
+                        val hardware = HardwareImage.fromBytes(rawBytes, 4u, 4u, ImageFormat.Rgb888)
+                        val pending = hardware.on(it).process(gpu, options)
+                        val out = pending.materialize()
                         assertEquals(cpuShape, out.shape)
                         assertEquals(12, out.readFloats().size)
                     }

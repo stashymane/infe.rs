@@ -4,6 +4,7 @@ import dev.stashy.infers.CpuTensor
 import dev.stashy.infers.DeviceInfo
 import dev.stashy.infers.InfersInternalApi
 import dev.stashy.infers.ModelSession
+import dev.stashy.infers.Pending
 import dev.stashy.infers.Tensor
 import dev.stashy.infers.TensorShape
 import dev.stashy.infers.internal.CloseGate
@@ -45,9 +46,21 @@ public class GpuSession @InfersInternalApi constructor(
     override suspend fun runInternal(inputs: List<Tensor<GpuDevice>>): List<CpuTensor> = withContext(dispatcher) {
         withFfiErrors {
             gate.ensureOpen()
+            val primary = inputs.singleOrNull() as? GpuTensor ?: error("expected one GPU tensor input")
+            primary.ensureOpen()
             handle
-                .run(inputs.map { (it as GpuTensor).handle })
+                .inferTensor(primary.handle)
                 .map { CpuTensor.fromFfi(it) }
+        }
+    }
+
+    @InfersInternalApi
+    override suspend fun inferPendingInternal(pending: Pending<GpuDevice>): List<CpuTensor> = withContext(dispatcher) {
+        withFfiErrors {
+            gate.ensureOpen()
+            val gpuPending = pending as GpuPending
+            gpuPending.ensureOpen()
+            handle.infer(gpuPending.handle).map { CpuTensor.fromFfi(it) }
         }
     }
 

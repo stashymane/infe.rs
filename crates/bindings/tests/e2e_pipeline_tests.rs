@@ -26,16 +26,18 @@ fn bindings_processing_options(
 fn test_cpu_preprocess_pipeline() {
     let processor = CpuImageProcessor::new();
     let frame = infers_test_utils::camera_frame_640x480(128);
-    let host = create_host_image(
+    let hardware = create_hardware_image(
         frame.width(),
         frame.height(),
         ImageFormat::Rgb888,
         frame.as_bytes().to_vec(),
     )
-    .expect("host image");
+    .expect("hardware image");
 
     let options = bindings_processing_options(infers_test_utils::detector_preprocess_options(224));
-    let tensor = processor.process(host, options).expect("preprocess");
+    let deferred = hardware.on_cpu();
+    let pending = deferred.process(processor, options).expect("preprocess");
+    let tensor = pending.materialize().expect("materialize");
     assert_eq!(
         tensor.shape(),
         TensorShape {

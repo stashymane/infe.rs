@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use infers::{HostImage, ImageFormat, ProcessingOptions, Rotation, TensorLayout, TensorShape};
+use infers::{HardwareImage, ImageFormat, ProcessingOptions, Rotation, TensorLayout, TensorShape};
 use processing::FitMode;
 
 pub const FRAME_W: u32 = 1280;
@@ -22,7 +22,7 @@ pub fn require_model(path: &Path) -> Vec<u8> {
     })
 }
 
-pub fn camera_frame(width: u32, height: u32) -> HostImage {
+pub fn camera_frame(width: u32, height: u32) -> HardwareImage {
     let mut data = Vec::with_capacity((width * height * 3) as usize);
     for y in 0..height {
         for x in 0..width {
@@ -31,7 +31,7 @@ pub fn camera_frame(width: u32, height: u32) -> HostImage {
             data.push((((x + y) * 255) / (width + height).max(1)) as u8);
         }
     }
-    HostImage::new(width, height, ImageFormat::Rgb888, data).expect("synthetic camera frame")
+    HardwareImage::new(width, height, ImageFormat::Rgb888, data).expect("synthetic camera frame")
 }
 
 pub fn detector_options(src_w: u32, src_h: u32, imgsz: u32) -> ProcessingOptions {

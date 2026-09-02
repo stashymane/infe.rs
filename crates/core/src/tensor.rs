@@ -1,6 +1,5 @@
 use crate::device::{Cpu, Device, DeviceInfo};
 use crate::error::CoreError;
-use crate::image::HostImage;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum DataType {
@@ -275,41 +274,3 @@ impl TensorAdopt for Cpu {
 /// CPU tensor storage is host bytes.
 #[derive(Clone, Debug, PartialEq)]
 pub struct HostBytes(pub Vec<u8>);
-
-impl Device for Cpu {
-    type Storage = HostBytes;
-    type Image = HostImage;
-
-    fn info(&self) -> &DeviceInfo {
-        Cpu::info()
-    }
-
-    fn store(
-        &self,
-        shape: &TensorShape,
-        dtype: DataType,
-        bytes: &[u8],
-    ) -> Result<Self::Storage, CoreError> {
-        if bytes.len() != shape.byte_size(dtype) {
-            return Err(CoreError::InvalidShape(format!(
-                "Byte size mismatch: expected {}, got {}",
-                shape.byte_size(dtype),
-                bytes.len()
-            )));
-        }
-        Ok(HostBytes(bytes.to_vec()))
-    }
-
-    fn load(
-        &self,
-        storage: &Self::Storage,
-        shape: &TensorShape,
-        dtype: DataType,
-    ) -> Result<HostTensor, CoreError> {
-        HostTensor::new(shape.clone(), dtype, storage.0.clone())
-    }
-
-    fn upload_image(&self, host: &HostImage) -> Result<Self::Image, CoreError> {
-        Ok(host.clone())
-    }
-}

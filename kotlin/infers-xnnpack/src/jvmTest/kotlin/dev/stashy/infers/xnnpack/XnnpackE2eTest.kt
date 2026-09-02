@@ -33,10 +33,10 @@ class XnnpackE2eTest {
 
                 CpuImageProcessor().use { processor ->
                     inferenceScope {
-                        val image = HostImage.fromBytes(bytes, width.toUInt(), height.toUInt(), ImageFormat.Rgb888)
-                        val input = processor.process(image, options)
-                        if (input.shape != inputShape) return@inferenceScope
-                        val outputs = session.infer(listOf(input))
+                        val hardware = HardwareImage.fromBytes(bytes, width.toUInt(), height.toUInt(), ImageFormat.Rgb888)
+                        val pending = hardware.onCpu().process(processor, options)
+                        if (pending.shape != inputShape) return@inferenceScope
+                        val outputs = session.infer(pending)
                         assertTrue(outputs.isNotEmpty())
                         for (out in outputs) {
                             val floats = out.readFloats()

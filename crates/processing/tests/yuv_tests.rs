@@ -1,9 +1,9 @@
 #![cfg(feature = "vulkan")]
 
-use infers_core::{DataType, Device, HostImage, ImageFormat, ProcessingOptions};
-use infers_gpu::Vulkan;
+use infers_core::{DataType, Device, HardwareImage, ImageFormat, ProcessingOptions};
+use infers_gpu::{defer_hardware, Vulkan};
 use processing_core::{FitMode, TensorLayout};
-use processing::GpuImageProcessor;
+use processing::{DeferredVulkanProcessExt, GpuImageProcessor};
 
 fn rgb_to_nv12(width: u32, height: u32, rgb: &[u8]) -> Vec<u8> {
     let y_size = (width * height) as usize;
@@ -81,7 +81,7 @@ fn test_gpu_nv12_to_rgb888() {
         }
     }
     let nv12 = rgb_to_nv12(width, height, &rgb);
-    let host = HostImage::new(width, height, ImageFormat::Nv12, nv12).unwrap();
+    let host = HardwareImage::new(width, height, ImageFormat::Nv12, nv12).unwrap();
     let (vulkan, processor) = match try_gpu_processor() {
         Some(p) => p,
         None => {
@@ -89,7 +89,6 @@ fn test_gpu_nv12_to_rgb888() {
             return;
         }
     };
-    let gpu_image = vulkan.upload_image(&host).expect("upload nv12");
     let opts = ProcessingOptions {
         src_w: width,
         src_h: height,
@@ -99,7 +98,11 @@ fn test_gpu_nv12_to_rgb888() {
         fit_mode: FitMode::Stretch,
         ..Default::default()
     };
-    let out = processor.process(&gpu_image, &opts).unwrap();
+    let out = defer_hardware(&vulkan, host)
+        .process(&processor, &opts)
+        .unwrap()
+        .materialize()
+        .unwrap();
     assert_eq!(out.dtype(), DataType::U8);
     let host = out.read_to_host().unwrap();
     let bytes = host.as_slice_u8().unwrap();
@@ -117,7 +120,7 @@ fn test_gpu_i420_to_rgbf32() {
     let height = 16u32;
     let rgb = [200u8, 40, 40].repeat((width * height) as usize);
     let i420 = rgb_to_i420(width, height, &rgb);
-    let host = HostImage::new(width, height, ImageFormat::I420, i420).unwrap();
+    let host = HardwareImage::new(width, height, ImageFormat::I420, i420).unwrap();
     let (vulkan, processor) = match try_gpu_processor() {
         Some(p) => p,
         None => {
@@ -125,7 +128,6 @@ fn test_gpu_i420_to_rgbf32() {
             return;
         }
     };
-    let gpu_image = vulkan.upload_image(&host).expect("upload i420");
     let opts = ProcessingOptions {
         src_w: width,
         src_h: height,
@@ -136,7 +138,11 @@ fn test_gpu_i420_to_rgbf32() {
         fit_mode: FitMode::Stretch,
         ..Default::default()
     };
-    let out = processor.process(&gpu_image, &opts).unwrap();
+    let out = defer_hardware(&vulkan, host)
+        .process(&processor, &opts)
+        .unwrap()
+        .materialize()
+        .unwrap();
     assert_eq!(out.dtype(), DataType::F32);
     let host = out.read_to_host().unwrap();
     let vals = host.as_slice_f32().unwrap();

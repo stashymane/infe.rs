@@ -1,7 +1,7 @@
 #![cfg(target_os = "android")]
 
 use infers_core::{
-    DeviceInfo, DeviceKind, HostImage, ImageFormat, ProcessingOptions, Rotation,
+    DeviceInfo, DeviceKind, HardwareImage, ImageFormat, ProcessingOptions, Rotation,
 };
 use platform_android::{
     AndroidHardwareBufferHandle, AHardwareBuffer_Desc, AHardwareBuffer_allocate,
@@ -68,7 +68,7 @@ fn test_android_hardware_buffer_metadata() {
 fn test_android_hardware_buffer_with_image_processors() {
     let device = gpu0_info();
     let handle = allocate_rgb888_buffer(32, 32, device.clone());
-    let cpu_img = HostImage::new(
+    let cpu_img = HardwareImage::new(
         handle.width(),
         handle.height(),
         handle.format(),

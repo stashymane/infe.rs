@@ -108,19 +108,12 @@ fn nchw_to_nhwc_cpu(input: &Tensor<Cpu>) -> Result<Tensor<Cpu>, CoreError> {
 #[cfg(feature = "vulkan")]
 /// Convert layout on GPU tensors (Vulkan device only).
 pub fn convert_layout_vulkan(
-    input: &Tensor<infers_gpu::Vulkan>,
-    target_layout: TensorLayout,
+    _processor: &crate::gpu::GpuImageProcessor,
+    _input: &Tensor<infers_gpu::Vulkan>,
+    _target_layout: TensorLayout,
 ) -> Result<Tensor<infers_gpu::Vulkan>, CoreError> {
-    let current = infer_rgb_layout(input.shape())?;
-    if current == target_layout {
-        return Ok(input.clone());
-    }
-    match (current, target_layout) {
-        (TensorLayout::Nhwc, TensorLayout::Nchw) => {
-            crate::gpu::nhwc_to_nchw_gpu(input.device(), input)
-        }
-        _ => Err(CoreError::InvalidShape(
-            "GPU layout conversion supports NHWC→NCHW only".into(),
-        )),
-    }
+    Err(CoreError::InvalidShape(
+        "GPU layout conversion is no longer supported; emit the target layout from preprocess"
+            .into(),
+    ))
 }

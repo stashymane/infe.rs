@@ -56,6 +56,15 @@ impl Default for ProcessingOptions {
 }
 
 impl ProcessingOptions {
+    pub fn for_model_input() -> Self {
+        let dest_format = ImageFormat::Rgbf32;
+        Self {
+            dest_format,
+            dest_layout: TensorLayout::Nchw,
+            ..Self::default()
+        }
+    }
+
     /// Returns the effective crop region `(crop_x, crop_y, crop_w, crop_h)`.
     /// If `crop_w` or `crop_h` is 0, the full source dimensions are used.
     #[inline]

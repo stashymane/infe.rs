@@ -171,6 +171,10 @@ public fun mapFfiException(error: FfiInfersException): InfersException = when (e
     is FfiInfersException.InternalException -> {
         InfersException.InternalError(error.reason)
     }
+
+    is FfiInfersException.AlreadyConsumed -> {
+        InfersException.AlreadyConsumed()
+    }
 }
 
 /** Runs [block], remapping generated UniFFI exceptions to [InfersException]. */

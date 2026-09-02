@@ -1,12 +1,47 @@
-use infers_core::{Cpu, DataType, Device, HostImage, ImageFormat, ProcessingOptions, Rotation};
+use infers_core::{Cpu, DataType, Device, HardwareImage, ImageFormat, ProcessingOptions, Rotation, Tensor};
 use processing_core::TensorLayout;
 #[cfg(feature = "vulkan")]
-use infers_gpu::Vulkan;
-use processing::{CpuImageProcessor, FitMode};
+use infers_gpu::{defer_hardware, Vulkan};
+use processing::{CpuImageProcessor, DeferredCpuProcessExt, FitMode};
 #[cfg(feature = "vulkan")]
-use processing::GpuImageProcessor;
+use processing::{DeferredVulkanProcessExt, GpuImageProcessor};
 
-fn create_test_pattern_image(width: u32, height: u32) -> (Vec<u8>, HostImage) {
+fn process_cpu(
+    processor: &CpuImageProcessor,
+    input: &HardwareImage,
+    opts: &ProcessingOptions,
+) -> Tensor<Cpu> {
+    input
+        .clone()
+        .on_cpu()
+        .process(processor, opts)
+        .unwrap()
+        .materialize()
+        .unwrap()
+}
+
+#[cfg(feature = "vulkan")]
+fn process_gpu(
+    processor: &GpuImageProcessor,
+    vulkan: &Vulkan,
+    input: &HardwareImage,
+    opts: &ProcessingOptions,
+) -> Tensor<Vulkan> {
+    defer_hardware(vulkan, input.clone())
+        .process(processor, opts)
+        .unwrap()
+        .materialize()
+        .unwrap()
+}
+
+#[cfg(feature = "vulkan")]
+fn materialize_gpu(vulkan: &Vulkan, input: &HardwareImage) -> infers_gpu::VulkanImage {
+    defer_hardware(vulkan, input.clone())
+        .materialize()
+        .unwrap()
+}
+
+fn create_test_pattern_image(width: u32, height: u32) -> (Vec<u8>, HardwareImage) {
     let mut data = Vec::with_capacity((width * height * 3) as usize);
     for y in 0..height {
         for x in 0..width {
@@ -18,7 +53,7 @@ fn create_test_pattern_image(width: u32, height: u32) -> (Vec<u8>, HostImage) {
             data.push(b);
         }
     }
-    let buf = HostImage::new(width, height, ImageFormat::Rgb888, data.clone()).unwrap();
+    let buf = HardwareImage::new(width, height, ImageFormat::Rgb888, data.clone()).unwrap();
     (data, buf)
 }
 
@@ -38,7 +73,7 @@ fn test_cpu_processor_stretch_rgb888() {
         ..Default::default()
     };
 
-    let tensor_buf = processor.process(&input, &opts).unwrap();
+    let tensor_buf = process_cpu(&processor, &input, &opts);
     assert_eq!(tensor_buf.shape().dims(), &[1, 32, 32, 3]);
     assert_eq!(tensor_buf.dtype(), DataType::U8);
     assert_eq!(tensor_buf.device(), &Cpu);
@@ -65,7 +100,7 @@ fn test_cpu_processor_contain_rgbf32() {
         ..Default::default()
     };
 
-    let tensor_buf = processor.process(&input, &opts).unwrap();
+    let tensor_buf = process_cpu(&processor, &input, &opts);
     assert_eq!(tensor_buf.shape().dims(), &[1, 3, 64, 64]);
     assert_eq!(tensor_buf.dtype(), DataType::F32);
 
@@ -100,7 +135,7 @@ fn test_cpu_processor_rotations() {
             ..Default::default()
         };
 
-        let tensor_buf = processor.process(&input, &opts).unwrap();
+        let tensor_buf = process_cpu(&processor, &input, &opts);
         assert_eq!(tensor_buf.shape().dims(), &[1, 48, 48, 3]);
         let host = tensor_buf.read_to_host().unwrap();
         assert_eq!(host.as_slice_u8().unwrap().len(), 48 * 48 * 3);
@@ -118,13 +153,7 @@ fn test_gpu_process_outputs() {
             return;
         }
     };
-    let gpu_image = match vulkan.upload_image(&host_input) {
-        Ok(img) => img,
-        Err(err) => {
-            eprintln!("skipping GPU process test: {err}");
-            return;
-        }
-    };
+    let gpu_image = materialize_gpu(&vulkan, &host_input);
     let gpu_processor = match GpuImageProcessor::new(vulkan.clone()) {
         Ok(proc) => proc,
         Err(err) => {
@@ -180,7 +209,11 @@ fn test_gpu_process_outputs() {
     ];
 
     for opts in test_cases {
-        let gpu_buf = gpu_processor.process(&gpu_image, &opts).unwrap();
+        let gpu_buf = gpu_processor
+            .process(&gpu_image, &opts)
+            .unwrap()
+            .materialize()
+            .unwrap();
         let expected_dims = match opts.dest_format {
             ImageFormat::Rgbf32 => &[1, 3, 32, 32][..],
             _ => &[1, 32, 32, 3],
@@ -202,5 +235,52 @@ fn test_gpu_process_outputs() {
             }
             assert!(vals.iter().any(|&v| v > 0.0), "expected non-zero RGBF32 output");
         }
+    }
+}
+
+#[test]
+#[cfg(feature = "vulkan")]
+fn test_gpu_process_pooled_repeated_calls_match_cpu() {
+    let (_, host_input) = create_test_pattern_image(64, 64);
+    let vulkan = match Vulkan::new(0) {
+        Ok(v) => v,
+        Err(err) => {
+            eprintln!("skipping: {err}");
+            return;
+        }
+    };
+    let gpu_image = materialize_gpu(&vulkan, &host_input);
+    let gpu_processor = GpuImageProcessor::new(vulkan.clone()).expect("processor");
+
+    let opts = ProcessingOptions {
+        src_w: 64,
+        src_h: 64,
+        dest_w: 32,
+        dest_h: 32,
+        dest_format: ImageFormat::Rgbf32,
+        dest_layout: TensorLayout::default_for_dest_format(ImageFormat::Rgbf32),
+        fit_mode: FitMode::Stretch,
+        rotation: Rotation::None,
+        ..Default::default()
+    };
+
+    let reference = gpu_processor
+        .process(&gpu_image, &opts)
+        .unwrap()
+        .materialize()
+        .unwrap();
+    let reference_bytes = reference.read_to_host().unwrap().as_bytes().to_vec();
+
+    for _ in 0..8 {
+        let gpu_out = gpu_processor
+            .process(&gpu_image, &opts)
+            .unwrap()
+            .materialize()
+            .unwrap();
+        let gpu_bytes = gpu_out.read_to_host().unwrap().as_bytes().to_vec();
+        assert_eq!(
+            gpu_bytes, reference_bytes,
+            "pooled GPU output should be deterministic across calls"
+        );
     }
 }

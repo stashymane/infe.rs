@@ -39,4 +39,7 @@ pub enum CoreError {
 
     #[error("GPU error")]
     Gpu(#[source] Box<dyn std::error::Error + Send + Sync>),
+
+    #[error("Handle already consumed")]
+    AlreadyConsumed,
 }

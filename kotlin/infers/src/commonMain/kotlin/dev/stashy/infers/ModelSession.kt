@@ -17,6 +17,9 @@ public interface ModelSession<D : Device> : AutoCloseable {
 
     @InfersInternalApi
     public suspend fun runInternal(inputs: List<Tensor<D>>): List<CpuTensor>
+
+    @InfersInternalApi
+    public suspend fun inferPendingInternal(pending: Pending<D>): List<CpuTensor>
 }
 
 /**
@@ -49,9 +52,21 @@ public class CpuSession @InfersInternalApi constructor(
     override suspend fun runInternal(inputs: List<Tensor<CpuDevice>>): List<CpuTensor> = withContext(dispatcher) {
         withFfiErrors {
             gate.ensureOpen()
+            val primary = inputs.singleOrNull() as? CpuTensor ?: error("expected one CPU tensor input")
+            primary.ensureOpen()
             handle
-                .run(inputs.map { (it as CpuTensor).handle })
+                .inferTensor(primary.handle)
                 .map { CpuTensor.fromFfi(it) }
+        }
+    }
+
+    @InfersInternalApi
+    override suspend fun inferPendingInternal(pending: Pending<CpuDevice>): List<CpuTensor> = withContext(dispatcher) {
+        withFfiErrors {
+            gate.ensureOpen()
+            val cpuPending = pending as CpuPending
+            cpuPending.ensureOpen()
+            handle.infer(cpuPending.handle).map { CpuTensor.fromFfi(it) }
         }
     }
 

@@ -1,9 +1,12 @@
+use crate::device::DeviceInfo;
 use crate::error::InfersError;
 use crate::tensor::{CpuTensor, TensorShape};
 use infers_backend_executorch::ExecuTorchSession;
 use infers_core::{Cpu, Session};
 use parking_lot::Mutex;
 use std::sync::Arc;
+
+use crate::deferred::{CpuPending, GpuPending};
 
 #[cfg(feature = "vulkan")]
 use crate::tensor::GpuTensor;
@@ -63,13 +66,24 @@ impl CpuSession {
         self.output_shapes.clone()
     }
 
-    pub fn run(
+    pub fn infer(
         &self,
-        inputs: Vec<Arc<CpuTensor>>,
+        pending: Arc<CpuPending>,
     ) -> Result<Vec<Arc<CpuTensor>>, InfersError> {
-        let refs: Vec<&infers_core::Tensor<Cpu>> = inputs.iter().map(|t| t.inner()).collect();
         let mut lock = self.inner.lock();
-        let outputs = lock.run(&refs).map_err(InfersError::from)?;
+        let outputs = lock.infer(pending.take()?).map_err(InfersError::from)?;
+        Ok(outputs
+            .into_iter()
+            .map(|t| Arc::new(CpuTensor::from_inner(t)))
+            .collect())
+    }
+
+    pub fn infer_tensor(
+        &self,
+        input: Arc<CpuTensor>,
+    ) -> Result<Vec<Arc<CpuTensor>>, InfersError> {
+        let mut lock = self.inner.lock();
+        let outputs = lock.infer(input.inner()).map_err(InfersError::from)?;
         Ok(outputs
             .into_iter()
             .map(|t| Arc::new(CpuTensor::from_inner(t)))
@@ -134,13 +148,24 @@ impl GpuSession {
         self.output_shapes.clone()
     }
 
-    pub fn run(
+    pub fn infer(
         &self,
-        inputs: Vec<Arc<GpuTensor>>,
+        pending: Arc<GpuPending>,
     ) -> Result<Vec<Arc<CpuTensor>>, InfersError> {
-        let refs: Vec<&infers_core::Tensor<Vulkan>> = inputs.iter().map(|t| t.inner()).collect();
         let mut lock = self.inner.lock();
-        let outputs = lock.run(&refs).map_err(InfersError::from)?;
+        let outputs = lock.infer(pending.take()?).map_err(InfersError::from)?;
+        Ok(outputs
+            .into_iter()
+            .map(|t| Arc::new(CpuTensor::from_inner(t)))
+            .collect())
+    }
+
+    pub fn infer_tensor(
+        &self,
+        input: Arc<GpuTensor>,
+    ) -> Result<Vec<Arc<CpuTensor>>, InfersError> {
+        let mut lock = self.inner.lock();
+        let outputs = lock.infer(input.inner()).map_err(InfersError::from)?;
         Ok(outputs
             .into_iter()
             .map(|t| Arc::new(CpuTensor::from_inner(t)))

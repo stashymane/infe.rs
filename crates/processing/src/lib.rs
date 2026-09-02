@@ -2,18 +2,19 @@
 
 pub mod cpu;
 pub mod layout;
+pub mod processor;
 
 #[cfg(feature = "vulkan")]
 pub mod gpu;
 
 pub use cpu::CpuImageProcessor;
-pub use layout::{convert_layout_cpu, infer_rgb_layout, nhwc_to_nchw_cpu};
+pub use processor::{DeferredCpuProcessExt, ImageProcessor};
 #[cfg(feature = "vulkan")]
-pub use layout::convert_layout_vulkan;
+pub use processor::DeferredVulkanProcessExt;
 pub use processing_core::*;
 
 #[cfg(feature = "vulkan")]
-pub use gpu::{GpuImageProcessor, LayoutGpuPass, nhwc_to_nchw_gpu};
+pub use gpu::GpuImageProcessor;
 #[cfg(feature = "vulkan")]
 pub use infers_gpu::{
     GpuError, Vulkan, VulkanContext, VulkanImage, VulkanSampledImage, VulkanStorage,

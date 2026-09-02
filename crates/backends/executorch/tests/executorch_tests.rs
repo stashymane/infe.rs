@@ -352,7 +352,7 @@ fn test_yolo26n_face_xnnpack_inference() {
 
     let input = detector_input_zeros(imgsz).expect("detector input tensor");
     let outputs = session
-        .run(&[&input])
+        .infer(&input)
         .expect("xnnpack inference must complete without crashing");
 
     let expected_shapes = session.output_shapes().to_vec();
@@ -388,7 +388,7 @@ fn test_yolo26n_face_vulkan_inference() {
     let cpu_input = detector_input_zeros(imgsz).expect("detector input tensor");
     let gpu_input = cpu_input.to_device(&vulkan).expect("upload input to GPU");
     let outputs = session
-        .run(&[&gpu_input])
+        .infer(&gpu_input)
         .expect("vulkan inference must complete without crashing");
 
     let expected_shapes = session.output_shapes().to_vec();

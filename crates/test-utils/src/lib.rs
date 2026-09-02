@@ -3,8 +3,9 @@ pub mod assets;
 use std::sync::Arc;
 
 use infers_core::{
-    CoreError, Cpu, FitMode, HostImage, HostTensor, ImageFormat, ProcessingOptions,
-    Rotation, Session, Tensor, TensorLayout, TensorShape,
+    CoreError, Cpu, FitMode, HardwareImage, HostTensor, ImageFormat, InferInput, Pending,
+    ProcessingOptions, Rotation, Session, SessionInputSink, Tensor, TensorLayout, TensorShape,
+    prepare_infer,
 };
 
 #[cfg(feature = "vulkan")]
@@ -48,22 +49,20 @@ impl Session<Cpu> for MockCpuSession {
         &self.output_shapes
     }
 
-    fn run(&mut self, inputs: &[&Tensor<Cpu>]) -> Result<Vec<Tensor<Cpu>>, CoreError> {
-        for (i, input) in inputs.iter().enumerate() {
-            if i < self.input_shapes.len()
-                && input.shape() != &self.input_shapes[i]
-                && input.shape().element_count() != self.input_shapes[i].element_count()
+    fn infer(&mut self, input: impl InferInput<Cpu>) -> Result<Vec<Tensor<Cpu>>, CoreError> {
+        let mut sink = SingleInputSink::default();
+        let tensor = sink.prepare(input)?;
+        if let Some(expected) = self.input_shapes.first() {
+            if tensor.shape() != expected && tensor.shape().element_count() != expected.element_count()
             {
                 return Err(CoreError::InvalidShape(format!(
-                    "Input {} shape mismatch: expected {:?}, got {:?}",
-                    i,
-                    self.input_shapes[i].dims(),
-                    input.shape().dims()
+                    "Input shape mismatch: expected {:?}, got {:?}",
+                    expected.dims(),
+                    tensor.shape().dims()
                 )));
             }
         }
-
-        (self.forward)(inputs)
+        (self.forward)(&[&tensor])
     }
 }
 
@@ -112,28 +111,89 @@ impl Session<Vulkan> for MockGpuSession {
         &self.output_shapes
     }
 
-    fn run(&mut self, inputs: &[&Tensor<Vulkan>]) -> Result<Vec<Tensor<Cpu>>, CoreError> {
-        for (i, input) in inputs.iter().enumerate() {
-            if !Arc::ptr_eq(input.device().context(), self.device.context()) {
-                return Err(CoreError::DeviceMismatch {
-                    expected: self.device.info().clone(),
-                    actual: input.device().info().clone(),
-                });
-            }
-            if i < self.input_shapes.len()
-                && input.shape() != &self.input_shapes[i]
-                && input.shape().element_count() != self.input_shapes[i].element_count()
+    fn infer(&mut self, input: impl InferInput<Vulkan>) -> Result<Vec<Tensor<Cpu>>, CoreError> {
+        let mut sink = SingleInputSinkVulkan::new();
+        let tensor = sink.prepare(input)?;
+        if !Arc::ptr_eq(tensor.device().context(), self.device.context()) {
+            return Err(CoreError::DeviceMismatch {
+                expected: self.device.info().clone(),
+                actual: tensor.device().info().clone(),
+            });
+        }
+        if let Some(expected) = self.input_shapes.first() {
+            if tensor.shape() != expected && tensor.shape().element_count() != expected.element_count()
             {
                 return Err(CoreError::InvalidShape(format!(
-                    "Input {} shape mismatch: expected {:?}, got {:?}",
-                    i,
-                    self.input_shapes[i].dims(),
-                    input.shape().dims()
+                    "Input shape mismatch: expected {:?}, got {:?}",
+                    expected.dims(),
+                    tensor.shape().dims()
                 )));
             }
         }
+        (self.forward)(&[&tensor])
+    }
+}
 
-        (self.forward)(inputs)
+struct SingleInputSink {
+    tensor: Option<Tensor<Cpu>>,
+}
+
+impl Default for SingleInputSink {
+    fn default() -> Self {
+        Self { tensor: None }
+    }
+}
+
+impl SingleInputSink {
+    fn prepare(&mut self, input: impl InferInput<Cpu>) -> Result<Tensor<Cpu>, CoreError> {
+        prepare_infer(input, self)?;
+        self.tensor
+            .take()
+            .ok_or_else(|| CoreError::InferenceFailed("missing inference input".into()))
+    }
+}
+
+#[cfg(feature = "vulkan")]
+struct SingleInputSinkVulkan {
+    tensor: Option<Tensor<Vulkan>>,
+}
+
+#[cfg(feature = "vulkan")]
+impl SingleInputSinkVulkan {
+    fn new() -> Self {
+        Self { tensor: None }
+    }
+
+    fn prepare(&mut self, input: impl InferInput<Vulkan>) -> Result<Tensor<Vulkan>, CoreError> {
+        prepare_infer(input, self)?;
+        self.tensor
+            .take()
+            .ok_or_else(|| CoreError::InferenceFailed("missing inference input".into()))
+    }
+}
+
+impl SessionInputSink<Cpu> for SingleInputSink {
+    fn materialize_pending(&mut self, pending: Pending<Cpu>) -> Result<(), CoreError> {
+        self.tensor = Some(pending.materialize()?);
+        Ok(())
+    }
+
+    fn adopt_tensor(&mut self, tensor: &Tensor<Cpu>) -> Result<(), CoreError> {
+        self.tensor = Some(tensor.clone());
+        Ok(())
+    }
+}
+
+#[cfg(feature = "vulkan")]
+impl SessionInputSink<Vulkan> for SingleInputSinkVulkan {
+    fn materialize_pending(&mut self, pending: Pending<Vulkan>) -> Result<(), CoreError> {
+        self.tensor = Some(pending.materialize()?);
+        Ok(())
+    }
+
+    fn adopt_tensor(&mut self, tensor: &Tensor<Vulkan>) -> Result<(), CoreError> {
+        self.tensor = Some(tensor.clone());
+        Ok(())
     }
 }
 
@@ -153,9 +213,9 @@ pub fn gpu_tensor_f32(device: &Vulkan, shape: TensorShape, values: &[f32]) -> Re
 }
 
 /// Solid-color 640×480 RGB camera frame for pipeline tests.
-pub fn camera_frame_640x480(fill: u8) -> HostImage {
+pub fn camera_frame_640x480(fill: u8) -> HardwareImage {
     let bytes = vec![fill; 640 * 480 * 3];
-    HostImage::new(640, 480, ImageFormat::Rgb888, bytes).expect("valid frame buffer")
+    HardwareImage::new(640, 480, ImageFormat::Rgb888, bytes).expect("valid frame buffer")
 }
 
 pub fn detector_preprocess_options(dest: u32) -> ProcessingOptions {

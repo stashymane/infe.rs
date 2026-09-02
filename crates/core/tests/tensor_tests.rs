@@ -1,5 +1,5 @@
 use infers_core::{
-    Cpu, DataType, HostImage, HostTensor, ImageFormat, Tensor, TensorShape,
+    Cpu, DataType, HardwareImage, HostTensor, ImageFormat, Tensor, TensorShape,
 };
 
 #[test]
@@ -29,12 +29,12 @@ fn test_cpu_tensor_roundtrip() {
 #[test]
 fn test_host_image_validation() {
     let bytes = vec![0u8; 4 * 4 * 3];
-    let img = HostImage::new(4, 4, ImageFormat::Rgb888, bytes).unwrap();
+    let img = HardwareImage::new(4, 4, ImageFormat::Rgb888, bytes).unwrap();
     assert_eq!(img.width(), 4);
     assert_eq!(img.height(), 4);
     assert_eq!(img.format(), ImageFormat::Rgb888);
 
-    let bad = HostImage::new(4, 4, ImageFormat::Rgb888, vec![0u8; 10]);
+    let bad = HardwareImage::new(4, 4, ImageFormat::Rgb888, vec![0u8; 10]);
     assert!(bad.is_err());
 }
 

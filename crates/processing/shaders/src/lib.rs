@@ -301,9 +301,9 @@ fn write_dest_pixel(
 #[spirv(compute(threads(16, 16)))]
 pub fn convert_main(
     #[spirv(global_invocation_id)] gid: UVec3,
-    #[spirv(descriptor_set = 0, binding = 0, uniform)] params: &ProcessingOptions,
-    #[spirv(descriptor_set = 0, binding = 1, storage_buffer)] src: &[u8],
-    #[spirv(descriptor_set = 0, binding = 2, storage_buffer)] dst: &mut [u8],
+    #[spirv(push_constant)] params: &ProcessingOptions,
+    #[spirv(descriptor_set = 0, binding = 0, storage_buffer)] src: &[u8],
+    #[spirv(descriptor_set = 0, binding = 1, storage_buffer)] dst: &mut [u8],
 ) {
     let dx = gid.x;
     let dy = gid.y;
@@ -328,9 +328,9 @@ pub fn convert_main(
 #[spirv(compute(threads(16, 16)))]
 pub fn convert_image(
     #[spirv(global_invocation_id)] gid: UVec3,
-    #[spirv(descriptor_set = 0, binding = 0, uniform)] params: &ProcessingOptions,
-    #[spirv(descriptor_set = 0, binding = 1)] src: &SampledImage<Image!(2D, type = f32, sampled)>,
-    #[spirv(descriptor_set = 0, binding = 2, storage_buffer)] dst: &mut [u8],
+    #[spirv(push_constant)] params: &ProcessingOptions,
+    #[spirv(descriptor_set = 0, binding = 0)] src: &SampledImage<Image!(2D, type = f32, sampled)>,
+    #[spirv(descriptor_set = 0, binding = 1, storage_buffer)] dst: &mut [u8],
 ) {
     let dx = gid.x;
     let dy = gid.y;
