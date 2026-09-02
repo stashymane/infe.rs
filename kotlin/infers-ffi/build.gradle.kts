@@ -2,9 +2,6 @@ import gobley.gradle.GobleyHost
 import gobley.gradle.cargo.dsl.android
 import gobley.gradle.cargo.dsl.jvm
 import gobley.gradle.cargo.tasks.CargoBuildTask
-import gobley.gradle.rust.targets.RustAndroidTarget
-import gobley.gradle.rust.targets.RustPosixTarget
-import gobley.gradle.rust.targets.RustTarget
 
 plugins {
     id("infers.kmp-library")
@@ -26,12 +23,6 @@ val androidApi: Int = libs.versions.android.min.sdk
 val repoRoot = rootProject.layout.projectDirectory.dir("..")
 val executorchOutputDir = repoRoot.dir("target/executorch")
 
-// Prebuilt ExecuTorch trees from scripts/build_executorch.sh / CI artifacts.
-val executorchLibDirs: Map<RustTarget, String> = mapOf(
-    RustAndroidTarget.Arm64 to executorchOutputDir.dir("android-arm64").asFile.absolutePath,
-    RustPosixTarget.LinuxX64 to executorchOutputDir.dir("x86_64-unknown-linux-gnu").asFile.absolutePath,
-)
-
 cargo {
     packageDirectory = rootProject.layout.projectDirectory.dir("../crates/bindings")
     features = setOf(
@@ -47,12 +38,9 @@ cargo {
         dynamicLibraries.add("c++_shared")
     }
     builds.configureEach {
-        val libDir = executorchLibDirs[rustTarget] ?: return@configureEach
         variants {
             buildTaskProvider.configure {
-                // Gobley cargo tasks use a curated env; an empty EXECUTORCH_RS_EXECUTORCH_LIB_DIR
-                // blocks the .cargo/config.toml fallback.
-                additionalEnvironment.put("EXECUTORCH_RS_EXECUTORCH_LIB_DIR", libDir)
+                additionalEnvironment.put("EXECUTORCH_RS_EXECUTORCH_LIB_DIR", executorchOutputDir.asFile.absolutePath)
             }
         }
     }

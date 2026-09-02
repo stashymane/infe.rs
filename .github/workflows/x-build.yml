@@ -46,7 +46,7 @@ jobs:
       packages: write
       actions: read
     env:
-      EXECUTORCH_RS_EXECUTORCH_LIB_DIR: ${{ github.workspace }}/target/executorch/x86_64-unknown-linux-gnu
+      EXECUTORCH_RS_EXECUTORCH_LIB_DIR: ${{ github.workspace }}/target/executorch
       CARGO_TARGET_DIR: ${{ github.workspace }}/target
     steps:
       - uses: actions/checkout@v7

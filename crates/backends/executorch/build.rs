@@ -1,6 +1,8 @@
 use std::env;
 use std::path::{Path, PathBuf};
 
+include!("../../../build/executorch_lib_dir.rs");
+
 fn main() {
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
     let workspace_root = manifest_dir
@@ -10,13 +12,16 @@ fn main() {
         .expect("workspace root")
         .to_path_buf();
 
-    let libs_dir = env::var("EXECUTORCH_RS_EXECUTORCH_LIB_DIR")
+    let env_root = env::var("EXECUTORCH_RS_EXECUTORCH_LIB_DIR")
         .ok()
-        .filter(|dir| !dir.is_empty())
         .map(PathBuf::from)
-        .unwrap_or_else(|| workspace_root.join("target/executorch/x86_64-unknown-linux-gnu"));
+        .unwrap_or_else(|| workspace_root.join("target/executorch"));
+
+    let libs_dir = resolve_executorch_lib_dir(env_root, &workspace_root);
 
     println!("cargo:rerun-if-env-changed=EXECUTORCH_RS_EXECUTORCH_LIB_DIR");
+
+    link_executorch(&libs_dir);
 
     if feature_enabled("portable") {
         link_portable(&libs_dir);
@@ -46,6 +51,64 @@ fn require_file(path: &Path, feature: &str, description: &str) {
          the `{feature}` feature on `infers-backend-executorch`.",
         path.display()
     );
+}
+
+/// Core ExecuTorch static libraries required by `executorch-sys` (mirrors its build.rs).
+fn link_executorch(libs_dir: &Path) {
+    require_file(
+        &libs_dir.join("libexecutorch.a"),
+        "executorch",
+        "libexecutorch.a",
+    );
+
+    println!("cargo:rustc-link-search=native={}", libs_dir.display());
+    println!("cargo:rustc-link-lib=static:+whole-archive=executorch");
+    println!("cargo:rustc-link-lib=static:+whole-archive=executorch_core");
+
+    let data_loader = libs_dir.join("extension/data_loader");
+    require_file(
+        &data_loader.join("libextension_data_loader.a"),
+        "executorch",
+        "libextension_data_loader.a",
+    );
+    println!("cargo:rustc-link-search=native={}", data_loader.display());
+    println!("cargo:rustc-link-lib=static:+whole-archive=extension_data_loader");
+
+    let module = libs_dir.join("extension/module");
+    require_file(
+        &module.join("libextension_module_static.a"),
+        "executorch",
+        "libextension_module_static.a",
+    );
+    println!("cargo:rustc-link-search=native={}", module.display());
+    println!("cargo:rustc-link-lib=static:+whole-archive=extension_module_static");
+
+    let named_data_map = libs_dir.join("extension/named_data_map");
+    require_file(
+        &named_data_map.join("libextension_named_data_map.a"),
+        "executorch",
+        "libextension_named_data_map.a",
+    );
+    println!("cargo:rustc-link-search=native={}", named_data_map.display());
+    println!("cargo:rustc-link-lib=static:+whole-archive=extension_named_data_map");
+
+    let flat_tensor = libs_dir.join("extension/flat_tensor");
+    require_file(
+        &flat_tensor.join("libextension_flat_tensor.a"),
+        "executorch",
+        "libextension_flat_tensor.a",
+    );
+    println!("cargo:rustc-link-search=native={}", flat_tensor.display());
+    println!("cargo:rustc-link-lib=static:+whole-archive=extension_flat_tensor");
+
+    let tensor = libs_dir.join("extension/tensor");
+    require_file(
+        &tensor.join("libextension_tensor.a"),
+        "executorch",
+        "libextension_tensor.a",
+    );
+    println!("cargo:rustc-link-search=native={}", tensor.display());
+    println!("cargo:rustc-link-lib=static:+whole-archive=extension_tensor");
 }
 
 fn link_portable(libs_dir: &Path) {
