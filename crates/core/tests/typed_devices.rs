@@ -1,6 +1,6 @@
 //! Compile-fail tests for typed device invariants.
 
-#[cfg(feature = "vulkan")]
+#[cfg(all(feature = "vulkan", not(target_os = "android")))]
 #[test]
 fn ui() {
     let t = trybuild::TestCases::new();

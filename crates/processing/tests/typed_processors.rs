@@ -1,6 +1,6 @@
 //! Compile-fail: host image cannot be passed to GPU image processor.
 
-#[cfg(feature = "vulkan")]
+#[cfg(all(feature = "vulkan", not(target_os = "android")))]
 #[test]
 fn ui() {
     let t = trybuild::TestCases::new();

@@ -1,6 +1,7 @@
 use std::env;
 use std::path::{Path, PathBuf};
 
+include!("../../../build/android_ndk.rs");
 include!("../../../build/executorch_lib_dir.rs");
 
 fn main() {
@@ -34,6 +35,10 @@ fn main() {
     if feature_enabled("vulkan") {
         link_vulkan(&libs_dir);
     }
+
+    if env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("android") {
+        link_executorch_android();
+    }
 }
 
 fn feature_enabled(name: &str) -> bool {
@@ -53,156 +58,133 @@ fn require_file(path: &Path, feature: &str, description: &str) {
     );
 }
 
-/// Core ExecuTorch static libraries required by `executorch-sys` (mirrors its build.rs).
+fn link_static(dir: &Path, lib: &str, whole_archive: bool) {
+    println!("cargo:rustc-link-search=native={}", dir.display());
+    if whole_archive {
+        println!("cargo:rustc-link-lib=static:+whole-archive={lib}");
+    } else {
+        println!("cargo:rustc-link-lib=static={lib}");
+    }
+}
+
+fn link_archive(dir: &Path, feature: &str, file: &str, lib: &str, whole_archive: bool) {
+    require_file(&dir.join(file), feature, file);
+    link_static(dir, lib, whole_archive);
+}
+
 fn link_executorch(libs_dir: &Path) {
-    require_file(
-        &libs_dir.join("libexecutorch.a"),
-        "executorch",
-        "libexecutorch.a",
-    );
+    link_archive(libs_dir, "executorch", "libexecutorch.a", "executorch", true);
+    link_static(libs_dir, "executorch_core", true);
 
-    println!("cargo:rustc-link-search=native={}", libs_dir.display());
-    println!("cargo:rustc-link-lib=static:+whole-archive=executorch");
-    println!("cargo:rustc-link-lib=static:+whole-archive=executorch_core");
-
-    let data_loader = libs_dir.join("extension/data_loader");
-    require_file(
-        &data_loader.join("libextension_data_loader.a"),
-        "executorch",
-        "libextension_data_loader.a",
-    );
-    println!("cargo:rustc-link-search=native={}", data_loader.display());
-    println!("cargo:rustc-link-lib=static:+whole-archive=extension_data_loader");
-
-    let module = libs_dir.join("extension/module");
-    require_file(
-        &module.join("libextension_module_static.a"),
-        "executorch",
-        "libextension_module_static.a",
-    );
-    println!("cargo:rustc-link-search=native={}", module.display());
-    println!("cargo:rustc-link-lib=static:+whole-archive=extension_module_static");
-
-    let named_data_map = libs_dir.join("extension/named_data_map");
-    require_file(
-        &named_data_map.join("libextension_named_data_map.a"),
-        "executorch",
-        "libextension_named_data_map.a",
-    );
-    println!("cargo:rustc-link-search=native={}", named_data_map.display());
-    println!("cargo:rustc-link-lib=static:+whole-archive=extension_named_data_map");
-
-    let flat_tensor = libs_dir.join("extension/flat_tensor");
-    require_file(
-        &flat_tensor.join("libextension_flat_tensor.a"),
-        "executorch",
-        "libextension_flat_tensor.a",
-    );
-    println!("cargo:rustc-link-search=native={}", flat_tensor.display());
-    println!("cargo:rustc-link-lib=static:+whole-archive=extension_flat_tensor");
-
-    let tensor = libs_dir.join("extension/tensor");
-    require_file(
-        &tensor.join("libextension_tensor.a"),
-        "executorch",
-        "libextension_tensor.a",
-    );
-    println!("cargo:rustc-link-search=native={}", tensor.display());
-    println!("cargo:rustc-link-lib=static:+whole-archive=extension_tensor");
+    for (subdir, file, lib) in [
+        (
+            "extension/data_loader",
+            "libextension_data_loader.a",
+            "extension_data_loader",
+        ),
+        (
+            "extension/module",
+            "libextension_module_static.a",
+            "extension_module_static",
+        ),
+        (
+            "extension/named_data_map",
+            "libextension_named_data_map.a",
+            "extension_named_data_map",
+        ),
+        (
+            "extension/flat_tensor",
+            "libextension_flat_tensor.a",
+            "extension_flat_tensor",
+        ),
+        (
+            "extension/tensor",
+            "libextension_tensor.a",
+            "extension_tensor",
+        ),
+    ] {
+        link_archive(&libs_dir.join(subdir), "executorch", file, lib, true);
+    }
 }
 
 fn link_portable(libs_dir: &Path) {
     let portable = libs_dir.join("kernels/portable");
-    let ops = portable.join("libportable_ops_lib.a");
-    let kernels = portable.join("libportable_kernels.a");
-    require_file(&ops, "portable", "libportable_ops_lib.a");
-    require_file(&kernels, "portable", "libportable_kernels.a");
-
-    println!("cargo:rustc-link-search=native={}", portable.display());
-    println!("cargo:rustc-link-lib=static:+whole-archive=portable_ops_lib");
-    println!("cargo:rustc-link-lib=static:+whole-archive=portable_kernels");
+    link_archive(
+        &portable,
+        "portable",
+        "libportable_ops_lib.a",
+        "portable_ops_lib",
+        true,
+    );
+    link_archive(
+        &portable,
+        "portable",
+        "libportable_kernels.a",
+        "portable_kernels",
+        true,
+    );
 }
 
 fn link_xnnpack(libs_dir: &Path) {
     let xnnpack_dir = libs_dir.join("backends/xnnpack");
-    let backend = xnnpack_dir.join("libxnnpack_backend.a");
-    require_file(&backend, "xnnpack", "libxnnpack_backend.a");
-
-    let threadpool = libs_dir.join("extension/threadpool/libextension_threadpool.a");
-    require_file(&threadpool, "xnnpack", "libextension_threadpool.a");
-
-    let deps = [
-        (
-            xnnpack_dir.join("third-party/pthreadpool/libpthreadpool.a"),
-            "libpthreadpool.a",
-        ),
-        (
-            xnnpack_dir.join("third-party/cpuinfo/libcpuinfo.a"),
-            "libcpuinfo.a",
-        ),
-        (
-            xnnpack_dir.join("third-party/XNNPACK/libXNNPACK.a"),
-            "libXNNPACK.a",
-        ),
-        (
-            xnnpack_dir.join("third-party/XNNPACK/libxnnpack-microkernels-prod.a"),
-            "libxnnpack-microkernels-prod.a",
-        ),
-    ];
-    for (path, name) in deps {
-        require_file(&path, "xnnpack", name);
-    }
-
-    println!(
-        "cargo:rustc-link-search=native={}",
-        libs_dir.join("extension/threadpool").display()
+    link_archive(
+        &xnnpack_dir,
+        "xnnpack",
+        "libxnnpack_backend.a",
+        "xnnpack_backend",
+        true,
     );
-    println!("cargo:rustc-link-lib=static=extension_threadpool");
+    link_archive(
+        &libs_dir.join("extension/threadpool"),
+        "xnnpack",
+        "libextension_threadpool.a",
+        "extension_threadpool",
+        false,
+    );
 
-    println!("cargo:rustc-link-search=native={}", xnnpack_dir.display());
-    println!("cargo:rustc-link-lib=static:+whole-archive=xnnpack_backend");
-
-    for sub in [
-        "third-party/pthreadpool",
-        "third-party/cpuinfo",
-        "third-party/XNNPACK",
+    for (subdir, file, lib) in [
+        (
+            "third-party/pthreadpool",
+            "libpthreadpool.a",
+            "pthreadpool",
+        ),
+        ("third-party/cpuinfo", "libcpuinfo.a", "cpuinfo"),
+        ("third-party/XNNPACK", "libXNNPACK.a", "XNNPACK"),
+        (
+            "third-party/XNNPACK",
+            "libxnnpack-microkernels-prod.a",
+            "xnnpack-microkernels-prod",
+        ),
     ] {
-        let p = xnnpack_dir.join(sub);
-        println!("cargo:rustc-link-search=native={}", p.display());
-    }
-    for lib in ["pthreadpool", "cpuinfo", "XNNPACK", "xnnpack-microkernels-prod"] {
-        println!("cargo:rustc-link-lib=static={lib}");
+        link_archive(&xnnpack_dir.join(subdir), "xnnpack", file, lib, false);
     }
 
-    // Android/arm64 XNNPACK builds pull KleidiAI microkernels; link when present.
     let kleidiai = libs_dir.join("kleidiai/libkleidiai.a");
     if kleidiai.exists() {
-        println!(
-            "cargo:rustc-link-search=native={}",
-            libs_dir.join("kleidiai").display()
-        );
-        println!("cargo:rustc-link-lib=static=kleidiai");
+        link_archive(&libs_dir.join("kleidiai"), "xnnpack", "libkleidiai.a", "kleidiai", false);
     }
 }
 
 fn link_vulkan(libs_dir: &Path) {
     let vulkan_dir = libs_dir.join("backends/vulkan");
-    let vulkan_backend = vulkan_dir.join("libvulkan_backend.a");
-    let vulkan_ffi = vulkan_dir.join("libinfers_et_vulkan_ffi.a");
-    require_file(&vulkan_backend, "vulkan", "libvulkan_backend.a");
-    require_file(
-        &vulkan_ffi,
+    link_archive(
+        &vulkan_dir,
         "vulkan",
-        "libinfers_et_vulkan_ffi.a (Nix-built Vulkan FFI)",
+        "libinfers_et_vulkan_ffi.a",
+        "infers_et_vulkan_ffi",
+        false,
+    );
+    link_archive(
+        &vulkan_dir,
+        "vulkan",
+        "libvulkan_backend.a",
+        "vulkan_backend",
+        true,
     );
 
-    println!("cargo:rustc-link-search=native={}", vulkan_dir.display());
-    println!("cargo:rustc-link-lib=static=infers_et_vulkan_ffi");
-    println!("cargo:rustc-link-lib=static:+whole-archive=vulkan_backend");
-
-    let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
-    let target_vendor = env::var("CARGO_CFG_TARGET_VENDOR").unwrap_or_default();
-    if target_os == "linux" && target_vendor != "android" {
+    if env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("linux")
+        && env::var("CARGO_CFG_TARGET_VENDOR").as_deref() != Ok("android")
+    {
         println!("cargo:rustc-link-lib=dylib=vulkan");
         println!("cargo:rustc-link-lib=dylib=stdc++");
     }

@@ -1,18 +1,28 @@
 #![cfg(target_os = "android")]
 
-use infers_core::{CpuImageBuffer, Device, ImageFormat, ProcessingOptions, Rotation};
+use infers_core::{
+    DeviceInfo, DeviceKind, HostImage, ImageFormat, ProcessingOptions, Rotation,
+};
 use platform_android::{
     AndroidHardwareBufferHandle, AHardwareBuffer_Desc, AHardwareBuffer_allocate,
     AHARDWAREBUFFER_FORMAT_R8G8B8_UNORM, AHARDWAREBUFFER_USAGE_CPU_READ_OFTEN,
     AHARDWAREBUFFER_USAGE_CPU_WRITE_OFTEN, AHARDWAREBUFFER_USAGE_GPU_SAMPLED_IMAGE,
 };
-use processing::{CpuImageProcessor, FitMode, GpuImageProcessor};
+use processing::{CpuImageProcessor, FitMode, GpuImageProcessor, TensorLayout, Vulkan, VulkanImage};
 use std::sync::Arc;
+
+fn gpu0_info() -> DeviceInfo {
+    DeviceInfo {
+        kind: DeviceKind::Gpu,
+        id: 0,
+        name: "GPU:0".to_string(),
+    }
+}
 
 fn allocate_rgb888_buffer(
     width: u32,
     height: u32,
-    device: Device,
+    device: DeviceInfo,
 ) -> AndroidHardwareBufferHandle {
     let desc = AHardwareBuffer_Desc {
         width,
@@ -38,12 +48,13 @@ fn allocate_rgb888_buffer(
 
 #[test]
 fn test_android_hardware_buffer_metadata() {
-    let handle = allocate_rgb888_buffer(64, 64, Device::gpu(0));
+    let device = gpu0_info();
+    let handle = allocate_rgb888_buffer(64, 64, device.clone());
 
     assert_eq!(handle.width(), 64);
     assert_eq!(handle.height(), 64);
     assert_eq!(handle.format(), ImageFormat::Rgb888);
-    assert_eq!(handle.device(), &Device::gpu(0));
+    assert_eq!(handle.device_info(), &device);
     assert_eq!(handle.desc().width, 64);
     assert_eq!(handle.desc().height, 64);
     assert_eq!(handle.desc().format, AHARDWAREBUFFER_FORMAT_R8G8B8_UNORM);
@@ -55,16 +66,15 @@ fn test_android_hardware_buffer_metadata() {
 
 #[test]
 fn test_android_hardware_buffer_with_image_processors() {
-    let handle = allocate_rgb888_buffer(32, 32, Device::gpu(0));
-    let locked = handle.lock_cpu_read().unwrap();
-    let cpu_img = CpuImageBuffer::new(
+    let device = gpu0_info();
+    let handle = allocate_rgb888_buffer(32, 32, device.clone());
+    let cpu_img = HostImage::new(
         handle.width(),
         handle.height(),
         handle.format(),
-        locked.as_slice().to_vec(),
+        handle.copy_cpu_packed().unwrap(),
     )
     .unwrap();
-    drop(locked);
 
     let opts = ProcessingOptions {
         src_w: 32,
@@ -72,6 +82,7 @@ fn test_android_hardware_buffer_with_image_processors() {
         dest_w: 16,
         dest_h: 16,
         dest_format: ImageFormat::Rgbf32,
+        dest_layout: TensorLayout::default_for_dest_format(ImageFormat::Rgbf32),
         fit_mode: FitMode::Stretch,
         rotation: Rotation::None,
         ..Default::default()
@@ -81,14 +92,15 @@ fn test_android_hardware_buffer_with_image_processors() {
     let cpu_out = cpu_proc.process(&cpu_img, &opts).unwrap();
     assert_eq!(cpu_out.shape().dims(), &[1, 3, 16, 16]);
 
-    let context = match platform_android::create_vulkan_context(&Device::gpu(0)) {
+    let context = match platform_android::create_vulkan_context(&device) {
         Ok(ctx) => Arc::new(ctx),
         Err(err) => {
             eprintln!("skipping Android GPU processor test: {err}");
             return;
         }
     };
-    let gpu_proc = match GpuImageProcessor::new(Arc::clone(&context)) {
+    let vulkan = Vulkan::from_context(Arc::clone(&context));
+    let gpu_proc = match GpuImageProcessor::new(vulkan.clone()) {
         Ok(proc) => proc,
         Err(err) => {
             eprintln!("skipping Android GPU processor test: {err}");
@@ -102,7 +114,8 @@ fn test_android_hardware_buffer_with_image_processors() {
             return;
         }
     };
-    let gpu_out = gpu_proc.process(&sampled, &opts).unwrap();
+    let gpu_image = VulkanImage::from_sampled(sampled);
+    let gpu_out = gpu_proc.process(&gpu_image, &opts).unwrap();
     assert_eq!(gpu_out.shape().dims(), &[1, 3, 16, 16]);
-    assert_eq!(gpu_out.device(), &Device::gpu(0));
+    assert_eq!(gpu_out.device().info(), vulkan.info());
 }

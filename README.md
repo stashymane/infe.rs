@@ -48,6 +48,7 @@ By default, these load `yolo26n-face`, which is not bundled in this repo — bui
 
 * Nix (with flake support)
 * Rust toolchain (specified in `rust-toolchain.toml`)
+    * `cargo-ndk` if working with Android
 * JDK + Gradle (for Kotlin library)
 
 ### Steps

@@ -3,3 +3,19 @@ INFERS_VERSION = { value = "0.0.0-dev", force = false }
 
 EXECUTORCH_RS_LINK = { value = "0", force = false }
 EXECUTORCH_RS_EXECUTORCH_LIB_DIR = { value = "target/executorch", relative = true, force = false }
+
+# Defaults for `cargo ndk` / `cargo ndk-test` (read by the cargo-ndk CLI, not Cargo `[env]`).
+CARGO_NDK_PLATFORM = "26"
+CARGO_NDK_TARGET = "arm64-v8a"
+
+[target.aarch64-linux-android]
+runner = "cargo ndk-runner"
+
+[target.armv7-linux-androideabi]
+runner = "cargo ndk-runner"
+
+[target.i686-linux-android]
+runner = "cargo ndk-runner"
+
+[target.x86_64-linux-android]
+runner = "cargo ndk-runner"

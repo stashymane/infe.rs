@@ -14,6 +14,7 @@ let
 
   # nixpkgs androidenv (NDK 29.0.14206865); requires allowUnfree + android_sdk.accept_license.
   androidNdkPkg = pkgs.androidenv.androidPkgs.ndk-bundle;
+  androidPlatformTools = pkgs.androidenv.androidPkgs.platform-tools;
   androidNdk = "${androidNdkPkg}/libexec/android-sdk/ndk-bundle";
   ndkVersion = androidNdkPkg.version;
 
@@ -55,6 +56,7 @@ let
   toolchainPkgs =
     [
       androidNdkPkg
+      androidPlatformTools
       cmake
       pythonEnv
     ]
@@ -95,6 +97,7 @@ let
     export PYTHON3=${pythonEnv}/bin/python3
     # Host glslc (shaderc) must precede the NDK copy, which lacks GL_EXT_integer_dot_product.
     export PATH=${lib.makeBinPath [
+      androidPlatformTools
       pkgs.shaderc
       pythonEnv
       cmake
