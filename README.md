@@ -25,22 +25,23 @@ infers = { git = "...", features = ["..."] }
 | `xnnpack`  | ✓      | XNNPACK CPU acceleration                                                |
 | `vulkan`   | ✓      | Vulkan ExecuTorch delegate, `GpuImageProcessor`, shared `VulkanContext` |
 
-## Benchmarks/examples
-
-Benchmarks are available in `examples/` which time how long preprocessing and inference take on the CPU or Vulkan.
-
-```bash
-# CPU: preprocess (NCHW) -> XNNPACK yolo26n-face
-cargo run --release --example cpu_pipeline_bench
-cargo run --release --example cpu_pipeline_bench -- --iters 100 --threads 4
-
-# GPU: Vulkan preprocess (NCHW on GPU) -> Vulkan ExecuTorch
-cargo run --release --example gpu_pipeline_bench
-cargo run --release --example gpu_pipeline_bench -- --iters 100
-```
+## Benchmarks
 
 By default, these load `yolo26n-face`, which is not bundled in this repo — build the models with
-`scripts/build_yolo26n_face.sh`.
+`scripts/build_yolo26n_face.sh` (or just `scripts/build_assets.sh`).
+
+```bash
+# CPU
+cargo bench --bench cpu_pipeline
+
+# GPU
+cargo bench --bench gpu_pipeline
+
+# Run a single stage
+cargo bench --bench cpu_pipeline -- preprocess
+cargo bench --bench cpu_pipeline -- inference
+cargo bench --bench cpu_pipeline -- full_pass
+```
 
 ## Development
 
