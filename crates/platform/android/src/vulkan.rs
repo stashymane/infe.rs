@@ -21,6 +21,7 @@ pub fn vulkan_context_options() -> VulkanContextOptions {
         ash::khr::external_memory::NAME,
         ash::ext::queue_family_foreign::NAME,
     ];
+    options.require_extra_extensions = true;
     options.sampler_ycbcr_conversion = true;
     options
 }
@@ -32,7 +33,7 @@ pub fn create_vulkan_context(device: &DeviceInfo) -> Result<VulkanContext, Andro
 }
 
 impl AndroidHardwareBufferHandle {
-    /// Defer zero-copy Vulkan import until materialize/process time.
+    /// Defer zero-copy Vulkan import until Pending materialize time.
     pub fn on(&self, vulkan: &infers_gpu::Vulkan) -> infers_core::Deferred<infers_gpu::Vulkan> {
         use infers_core::CoreError;
         use infers_gpu::VulkanImage;
@@ -60,6 +61,12 @@ fn import_hardware_buffer(
     context: Arc<VulkanContext>,
     src: &AndroidHardwareBufferHandle,
 ) -> Result<VulkanSampledImage, AndroidPlatformError> {
+    if !src.supports_gpu_sampling() {
+        return Err(AndroidPlatformError::VulkanImportError(
+            "AHardwareBuffer lacks GPU_SAMPLED_IMAGE usage".into(),
+        ));
+    }
+
     let ahb = ash::android::external_memory_android_hardware_buffer::Device::new(
         context.instance(),
         context.device(),
@@ -175,6 +182,14 @@ fn import_hardware_buffer(
         let components = queried.sampler_ycbcr_conversion_components;
         let x_chroma = queried.suggested_x_chroma_offset;
         let y_chroma = queried.suggested_y_chroma_offset;
+        let format_features = queried.format_features;
+        let chroma_filter =
+            if format_features.contains(vk::FormatFeatureFlags::SAMPLED_IMAGE_YCBCR_CONVERSION_LINEAR_FILTER)
+            {
+                vk::Filter::LINEAR
+            } else {
+                vk::Filter::NEAREST
+            };
         Some(
             context
                 .get_or_create_ycbcr_sampler(key, move |device| {
@@ -185,7 +200,7 @@ fn import_hardware_buffer(
                         .components(components)
                         .x_chroma_offset(x_chroma)
                         .y_chroma_offset(y_chroma)
-                        .chroma_filter(vk::Filter::LINEAR)
+                        .chroma_filter(chroma_filter)
                         .force_explicit_reconstruction(false);
                     let mut conv_ext =
                         vk::ExternalFormatANDROID::default().external_format(external_format);
@@ -200,9 +215,10 @@ fn import_hardware_buffer(
                     };
                     let mut ycbcr_sampler_info =
                         vk::SamplerYcbcrConversionInfo::default().conversion(conv);
+                    // YCbCr samplers require mag/min to match chroma_filter.
                     let sampler_info = vk::SamplerCreateInfo::default()
-                        .mag_filter(vk::Filter::LINEAR)
-                        .min_filter(vk::Filter::LINEAR)
+                        .mag_filter(chroma_filter)
+                        .min_filter(chroma_filter)
                         .mipmap_mode(vk::SamplerMipmapMode::NEAREST)
                         .address_mode_u(vk::SamplerAddressMode::CLAMP_TO_EDGE)
                         .address_mode_v(vk::SamplerAddressMode::CLAMP_TO_EDGE)
@@ -306,6 +322,7 @@ struct QueriedBufferProperties {
     memory_type_bits: u32,
     format: vk::Format,
     external_format: u64,
+    format_features: vk::FormatFeatureFlags,
     suggested_ycbcr_model: vk::SamplerYcbcrModelConversion,
     suggested_ycbcr_range: vk::SamplerYcbcrRange,
     sampler_ycbcr_conversion_components: vk::ComponentMapping,
@@ -338,6 +355,7 @@ fn query_buffer_properties(
         memory_type_bits,
         format: format_props.format,
         external_format: format_props.external_format,
+        format_features: format_props.format_features,
         suggested_ycbcr_model: format_props.suggested_ycbcr_model,
         suggested_ycbcr_range: format_props.suggested_ycbcr_range,
         sampler_ycbcr_conversion_components: format_props.sampler_ycbcr_conversion_components,

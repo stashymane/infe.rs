@@ -242,7 +242,7 @@ impl HardwareBufferHandle {
     }
 }
 
-/// Defer zero-copy Vulkan import of this buffer until materialize/process.
+/// Defer zero-copy Vulkan import of this buffer until Pending materialize.
 #[cfg(feature = "vulkan")]
 #[uniffi::export]
 impl HardwareBufferHandle {

@@ -1,4 +1,4 @@
-use crate::device::{Cpu, Device, DeviceInfo};
+use crate::device::{Cpu, Device};
 use crate::error::CoreError;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]

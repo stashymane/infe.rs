@@ -1,5 +1,5 @@
 use infers_core::{
-    CoreError, Cpu, CpuImage, Deferred, Device, Image, Pending, ProcessingOptions,
+    CoreError, Cpu, CpuImage, Deferred, Device, Pending, ProcessingOptions,
 };
 
 #[cfg(feature = "vulkan")]
@@ -91,8 +91,21 @@ pub fn process_deferred_vulkan(
             }),
         ))
     } else {
-        let image = deferred.materialize()?;
-        processor.process(&image, options)
+        // Keep AHB / custom import deferred until Pending::materialize so camera
+        // ImageReader buffers are not held across preprocess scheduling.
+        let device = deferred.device().clone();
+        let (shape, dtype) = output_shape_dtype(options)?;
+        let options = *options;
+        let processor = processor.clone();
+        Ok(Pending::schedule(
+            device,
+            shape,
+            dtype,
+            Box::new(move |target| {
+                let image = deferred.materialize()?;
+                processor.materialize_image(&image, &options, target, None)
+            }),
+        ))
     }
 }
 

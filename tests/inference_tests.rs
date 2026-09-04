@@ -1,7 +1,7 @@
 //! End-to-end inference tests using real ExecuTorch models (no session mocks).
 
 use infers::{
-    CpuImageProcessor, DataType, Device, ExecuTorchBackend, GpuImageProcessor, HardwareImageVulkanExt,
+    CpuImageProcessor, DataType, ExecuTorchBackend, GpuImageProcessor, HardwareImageVulkanExt,
     Session, Vulkan, VulkanOptions, XnnpackOptions,
 };
 use processing::DeferredCpuProcessExt;

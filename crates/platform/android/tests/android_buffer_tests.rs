@@ -8,7 +8,10 @@ use platform_android::{
     AHARDWAREBUFFER_FORMAT_R8G8B8_UNORM, AHARDWAREBUFFER_USAGE_CPU_READ_OFTEN,
     AHARDWAREBUFFER_USAGE_CPU_WRITE_OFTEN, AHARDWAREBUFFER_USAGE_GPU_SAMPLED_IMAGE,
 };
-use processing::{CpuImageProcessor, FitMode, GpuImageProcessor, TensorLayout, Vulkan, VulkanImage};
+use processing::{
+    CpuImageProcessor, DeferredCpuProcessExt, FitMode, GpuImageProcessor, TensorLayout, Vulkan,
+    VulkanImage,
+};
 use std::sync::Arc;
 
 fn gpu0_info() -> DeviceInfo {
@@ -89,7 +92,12 @@ fn test_android_hardware_buffer_with_image_processors() {
     };
 
     let cpu_proc = CpuImageProcessor::new();
-    let cpu_out = cpu_proc.process(&cpu_img, &opts).unwrap();
+    let cpu_out = cpu_img
+        .on_cpu()
+        .process(&cpu_proc, &opts)
+        .unwrap()
+        .materialize()
+        .unwrap();
     assert_eq!(cpu_out.shape().dims(), &[1, 3, 16, 16]);
 
     let context = match platform_android::create_vulkan_context(&device) {
@@ -115,7 +123,11 @@ fn test_android_hardware_buffer_with_image_processors() {
         }
     };
     let gpu_image = VulkanImage::from_sampled(sampled);
-    let gpu_out = gpu_proc.process(&gpu_image, &opts).unwrap();
+    let gpu_out = gpu_proc
+        .process(&gpu_image, &opts)
+        .unwrap()
+        .materialize()
+        .unwrap();
     assert_eq!(gpu_out.shape().dims(), &[1, 3, 16, 16]);
     assert_eq!(gpu_out.device().info(), vulkan.info());
 }

@@ -13,6 +13,9 @@ use std::sync::Arc;
 pub struct VulkanContextOptions {
     pub extra_instance_extensions: Vec<&'static CStr>,
     pub extra_device_extensions: Vec<&'static CStr>,
+    /// When true, every `extra_*_extensions` entry must be present or context
+    /// creation fails. Android AHB import sets this.
+    pub require_extra_extensions: bool,
     pub sampler_ycbcr_conversion: bool,
 }
 
@@ -41,9 +44,12 @@ pub struct VulkanContext {
     device: ash::Device,
     queue: vk::Queue,
     queue_family_index: u32,
+    /// True when `VK_EXT_queue_family_foreign` was enabled (camera AHB acquire).
+    queue_family_foreign: bool,
     queue_lock: Mutex<()>,
     oneshot_lock: Mutex<()>,
     oneshot_cmd_pool: vk::CommandPool,
+    oneshot_cmd: vk::CommandBuffer,
     oneshot_fence: vk::Fence,
     allocator: Mutex<Option<Allocator>>,
     /// One YCbCr conversion+sampler per format key (camera frames reuse these).
@@ -83,6 +89,17 @@ impl VulkanContext {
             .engine_name(&engine_name)
             .engine_version(vk::make_api_version(0, 0, 1, 0))
             .api_version(vk::API_VERSION_1_1);
+
+        if options.require_extra_extensions {
+            let available = unsafe { entry.enumerate_instance_extension_properties(None)? };
+            for name in &options.extra_instance_extensions {
+                if !ext_available(&available, name) {
+                    return Err(GpuError::MissingFeature(
+                        name.to_string_lossy().into_owned(),
+                    ));
+                }
+            }
+        }
 
         let instance_exts: Vec<*const c_char> = options
             .extra_instance_extensions
@@ -135,6 +152,14 @@ impl VulkanContext {
                 None,
             )?
         };
+        let oneshot_cmd = unsafe {
+            created.device.allocate_command_buffers(
+                &vk::CommandBufferAllocateInfo::default()
+                    .command_pool(oneshot_cmd_pool)
+                    .level(vk::CommandBufferLevel::PRIMARY)
+                    .command_buffer_count(1),
+            )?
+        }[0];
         let oneshot_fence = unsafe {
             created.device.create_fence(&vk::FenceCreateInfo::default(), None)?
         };
@@ -146,9 +171,11 @@ impl VulkanContext {
             device: created.device,
             queue: created.queue,
             queue_family_index,
+            queue_family_foreign: created.queue_family_foreign,
             queue_lock: Mutex::new(()),
             oneshot_lock: Mutex::new(()),
             oneshot_cmd_pool,
+            oneshot_cmd,
             oneshot_fence,
             allocator: Mutex::new(Some(allocator)),
             ycbcr_samplers: Mutex::new(HashMap::new()),
@@ -214,6 +241,21 @@ impl VulkanContext {
         self.queue_family_index
     }
 
+    /// Whether `VK_EXT_queue_family_foreign` is enabled (prefer for Gralloc/camera AHB).
+    pub fn supports_queue_family_foreign(&self) -> bool {
+        self.queue_family_foreign
+    }
+
+    /// Queue family used when acquiring images imported from non-Vulkan producers
+    /// (camera / Gralloc). Prefers FOREIGN when available, else EXTERNAL.
+    pub fn external_acquire_queue_family(&self) -> u32 {
+        if self.queue_family_foreign {
+            vk::QUEUE_FAMILY_FOREIGN_EXT
+        } else {
+            vk::QUEUE_FAMILY_EXTERNAL
+        }
+    }
+
     pub fn allocator(&self) -> &Mutex<Option<Allocator>> {
         &self.allocator
     }
@@ -254,8 +296,9 @@ impl VulkanContext {
         let _guard = self.oneshot_lock.lock();
         let device = self.device();
 
-        // SAFETY: `oneshot_cmd_pool` belongs to this device and is exclusively
-        // held under `oneshot_lock`.
+        // SAFETY: `oneshot_cmd_pool` / `oneshot_cmd` belong to this device and are
+        // exclusively held under `oneshot_lock`. Resetting the pool rewinds the
+        // single reused command buffer without reallocating.
         unsafe {
             device.reset_command_pool(
                 self.oneshot_cmd_pool,
@@ -264,16 +307,9 @@ impl VulkanContext {
             device.reset_fences(&[self.oneshot_fence])?;
         }
 
-        let cmd = unsafe {
-            device.allocate_command_buffers(
-                &vk::CommandBufferAllocateInfo::default()
-                    .command_pool(self.oneshot_cmd_pool)
-                    .level(vk::CommandBufferLevel::PRIMARY)
-                    .command_buffer_count(1),
-            )?
-        }[0];
+        let cmd = self.oneshot_cmd;
 
-        // SAFETY: `cmd` was freshly allocated and is not recording or pending.
+        // SAFETY: `cmd` was reset with the pool and is not recording or pending.
         unsafe {
             device.begin_command_buffer(
                 cmd,
@@ -335,6 +371,7 @@ fn ext_available(available: &[vk::ExtensionProperties], name: &CStr) -> bool {
 struct CreatedDevice {
     device: ash::Device,
     queue: vk::Queue,
+    queue_family_foreign: bool,
 }
 
 fn create_logical_device(
@@ -370,6 +407,19 @@ fn create_logical_device(
         .storage_buffer16_bit_access(true)
         .uniform_and_storage_buffer16_bit_access(true);
 
+    if options.sampler_ycbcr_conversion {
+        let mut queried = vk::PhysicalDeviceVulkan11Features::default();
+        let mut features2 = vk::PhysicalDeviceFeatures2::default().push_next(&mut queried);
+        unsafe {
+            instance.get_physical_device_features2(physical_device, &mut features2);
+        }
+        if queried.sampler_ycbcr_conversion == vk::FALSE {
+            return Err(GpuError::MissingFeature(
+                "samplerYcbcrConversion".into(),
+            ));
+        }
+    }
+
     if api_minor < 2 {
         if !ext_available(&available, vk::KHR_8BIT_STORAGE_NAME) {
             return Err(GpuError::MissingFeature("VK_KHR_8bit_storage".into()));
@@ -384,9 +434,17 @@ fn create_logical_device(
         }
     }
 
+    let mut queue_family_foreign = false;
     for name in &options.extra_device_extensions {
         if ext_available(&available, name) {
             enabled_exts.push(name.as_ptr());
+            if *name == ash::ext::queue_family_foreign::NAME {
+                queue_family_foreign = true;
+            }
+        } else if options.require_extra_extensions {
+            return Err(GpuError::MissingFeature(
+                name.to_string_lossy().into_owned(),
+            ));
         }
     }
 
@@ -417,5 +475,9 @@ fn create_logical_device(
     let device = unsafe { instance.create_device(physical_device, &device_info, None) }?;
     let queue = unsafe { device.get_device_queue(queue_family_index, 0) };
 
-    Ok(CreatedDevice { device, queue })
+    Ok(CreatedDevice {
+        device,
+        queue,
+        queue_family_foreign,
+    })
 }

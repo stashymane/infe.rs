@@ -1,5 +1,5 @@
 use infers::{
-    CoreError, CpuImageProcessor, DataType, Device, ExecuTorchBackend,
+    CoreError, CpuImageProcessor, DataType, ExecuTorchBackend,
     Session, XnnpackOptions,
 };
 use processing::DeferredCpuProcessExt;

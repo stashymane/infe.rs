@@ -1,4 +1,3 @@
-use crate::device::DeviceInfo;
 use crate::error::InfersError;
 use crate::tensor::{CpuTensor, TensorShape};
 use infers_backend_executorch::ExecuTorchSession;

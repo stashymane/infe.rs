@@ -369,7 +369,7 @@ struct VulkanInferSink {
 #[cfg(feature = "vulkan")]
 impl SessionInputSink<Vulkan> for VulkanInferSink {
     fn materialize_pending(&mut self, pending: Pending<Vulkan>) -> Result<(), CoreError> {
-        use processing::gpu::processor::{set_session_staging_query, SessionStagingQuery};
+        use processing::gpu::{set_session_staging_query, SessionStagingQuery};
         use std::sync::Arc;
 
         let graph = self.graph.ok_or_else(|| {
