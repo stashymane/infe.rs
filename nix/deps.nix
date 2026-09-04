@@ -5,8 +5,8 @@
 let
   inherit (pkgs) lib;
 
-  ndkApi = "26";
-  torchVersion = "2.13.0";
+  ndkApi = "29";
+  torchVersion = "2.14.0";
 
   cmake = pkgs.cmake_3 or pkgs.cmake;
 
@@ -18,14 +18,13 @@ let
   androidNdk = "${androidNdkPkg}/libexec/android-sdk/ndk-bundle";
   ndkVersion = androidNdkPkg.version;
 
-  # Official CPU wheel (same pin as the old pip install). nixpkgs torch is not 2.13.
   torch = python.pkgs.buildPythonPackage {
     pname = "torch";
     version = "${torchVersion}+cpu";
     format = "wheel";
     src = pkgs.fetchurl {
       url = "https://download.pytorch.org/whl/cpu/torch-${torchVersion}%2Bcpu-cp312-cp312-manylinux_2_28_x86_64.whl";
-      hash = "sha256-TKSpOUsMdxI4pPc1kP27xN662F7Q+mPQJq4bCF2n1uI=";
+      hash = "sha256-oJmHyV7Ez/2233mNPWQVWBEKM0z8zOIvLwRtgxQrwmA=";
     };
     nativeBuildInputs = [ pkgs.autoPatchelfHook ];
     buildInputs = [
@@ -53,39 +52,38 @@ let
     torch
   ]);
 
-  toolchainPkgs =
-    [
-      androidNdkPkg
-      androidPlatformTools
-      cmake
-      pythonEnv
-    ]
-    ++ (with pkgs; [
-      bash
-      binutils
-      nix
-      cacert
-      coreutils
-      findutils
-      gawk
-      gcc
-      git
-      gnugrep
-      gnumake
-      gnused
-      gnutar
-      gzip
-      ninja
-      patch
-      pkg-config
-      shaderc
-      stdenv.cc.cc.lib
-      unzip
-      vulkan-headers
-      vulkan-loader
-      which
-      zlib
-    ]);
+  toolchainPkgs = [
+    androidNdkPkg
+    androidPlatformTools
+    cmake
+    pythonEnv
+  ]
+  ++ (with pkgs; [
+    bash
+    binutils
+    nix
+    cacert
+    coreutils
+    findutils
+    gawk
+    gcc
+    git
+    gnugrep
+    gnumake
+    gnused
+    gnutar
+    gzip
+    ninja
+    patch
+    pkg-config
+    shaderc
+    stdenv.cc.cc.lib
+    unzip
+    vulkan-headers
+    vulkan-loader
+    which
+    zlib
+  ]);
 
   envProfile = ''
     export SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt
@@ -96,26 +94,28 @@ let
     export ANDROID_NDK_API=${ndkApi}
     export PYTHON3=${pythonEnv}/bin/python3
     # Host glslc (shaderc) must precede the NDK copy, which lacks GL_EXT_integer_dot_product.
-    export PATH=${lib.makeBinPath [
-      androidPlatformTools
-      pkgs.shaderc
-      pythonEnv
-      cmake
-      pkgs.nix
-      pkgs.ninja
-      pkgs.git
-      pkgs.gcc
-      pkgs.gnumake
-      pkgs.coreutils
-      pkgs.findutils
-      pkgs.gnugrep
-      pkgs.gnused
-      pkgs.gawk
-      pkgs.gnutar
-      pkgs.gzip
-      pkgs.which
-      pkgs.bash
-    ]}:"$PATH"
+    export PATH=${
+      lib.makeBinPath [
+        androidPlatformTools
+        pkgs.shaderc
+        pythonEnv
+        cmake
+        pkgs.nix
+        pkgs.ninja
+        pkgs.git
+        pkgs.gcc
+        pkgs.gnumake
+        pkgs.coreutils
+        pkgs.findutils
+        pkgs.gnugrep
+        pkgs.gnused
+        pkgs.gawk
+        pkgs.gnutar
+        pkgs.gzip
+        pkgs.which
+        pkgs.bash
+      ]
+    }:"$PATH"
   '';
 
   depsEnv = pkgs.buildFHSEnv {

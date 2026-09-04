@@ -9,13 +9,13 @@
 let
   inherit (pkgs) lib;
 
-  version = "1.4.0";
+  version = "1.4.1";
 
   executorchSrc = pkgs.fetchFromGitHub {
     owner = "pytorch";
     repo = "executorch";
-    rev = "3dd7ccd1d863fad22639dd2d918ae34a41ce45f0"; # v1.4.0
-    hash = "sha256-l8Wpjbu+jcuGAlt0kEGvmRQ/Xh4+mrPzTOpChc8g5nA=";
+    rev = "e4d02f41f7909e8ed5bf4a14ffc520d733453d9f"; # v1.4.0
+    hash = "sha256-j43JX/3WLassyiyfwwIfSKO05ZmmS9wGUol4c+BZLEU=";
     fetchSubmodules = true;
   };
 
