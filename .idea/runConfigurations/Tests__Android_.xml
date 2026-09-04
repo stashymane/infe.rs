@@ -1,9 +1,11 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="Test Everything" type="CargoCommandRunConfiguration" factoryName="Cargo Command" folderName="Rust">
+  <configuration default="false" name="Tests (Android)" type="CargoCommandRunConfiguration" factoryName="Cargo Command" folderName="Rust">
     <option name="buildProfileId" value="test" />
-    <option name="command" value="test --workspace" />
+    <option name="command" value="ndk-test --target aarch64-linux-android --workspace" />
     <option name="workingDirectory" value="file://$PROJECT_DIR$" />
-    <envs />
+    <envs>
+      <env name="CARGO_NDK_PLATFORM" value="29" />
+    </envs>
     <option name="emulateTerminal" value="true" />
     <option name="channel" value="DEFAULT" />
     <option name="requiredFeatures" value="true" />

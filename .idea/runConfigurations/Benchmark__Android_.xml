@@ -3,7 +3,9 @@
     <option name="buildProfileId" value="release" />
     <option name="command" value="ndk bench --bench gpu_pipeline --bench cpu_pipeline --target aarch64-linux-android" />
     <option name="workingDirectory" value="file://$PROJECT_DIR$" />
-    <envs />
+    <envs>
+      <env name="CARGO_NDK_PLATFORM" value="29" />
+    </envs>
     <option name="emulateTerminal" value="true" />
     <option name="channel" value="DEFAULT" />
     <option name="requiredFeatures" value="true" />
