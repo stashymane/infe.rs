@@ -3,6 +3,7 @@ pub mod context;
 pub mod device;
 pub mod error;
 pub mod sampled_image;
+pub mod ycbcr;
 
 pub use buffer::{AllocatedBuffer, VulkanBufferHandle, buffer_barrier};
 pub use context::{VulkanContext, VulkanContextOptions};
@@ -12,6 +13,7 @@ pub use device::{
 };
 pub use error::GpuError;
 pub use sampled_image::{VulkanSampledImage, VulkanSampledImageParts};
+pub use ycbcr::{SharedYcbcrSampler, YcbcrConversionKey};
 
 pub use ash;
 pub use gpu_allocator;

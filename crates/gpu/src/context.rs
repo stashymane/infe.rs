@@ -1,9 +1,12 @@
 use crate::error::GpuError;
+use crate::ycbcr::{SharedYcbcrSampler, YcbcrConversionKey};
 use ash::vk;
 use gpu_allocator::vulkan::{Allocator, AllocatorCreateDesc};
 use infers_core::{DeviceInfo, DeviceKind};
 use parking_lot::Mutex;
+use std::collections::HashMap;
 use std::ffi::{CStr, c_char};
+use std::sync::Arc;
 
 /// Extra instance/device setup supplied by the app or a platform crate.
 #[derive(Clone, Default)]
@@ -43,6 +46,8 @@ pub struct VulkanContext {
     oneshot_cmd_pool: vk::CommandPool,
     oneshot_fence: vk::Fence,
     allocator: Mutex<Option<Allocator>>,
+    /// One YCbCr conversion+sampler per format key (camera frames reuse these).
+    ycbcr_samplers: Mutex<HashMap<YcbcrConversionKey, Arc<SharedYcbcrSampler>>>,
     owns_device: bool,
     info: DeviceInfo,
 }
@@ -146,9 +151,33 @@ impl VulkanContext {
             oneshot_cmd_pool,
             oneshot_fence,
             allocator: Mutex::new(Some(allocator)),
+            ycbcr_samplers: Mutex::new(HashMap::new()),
             owns_device: true,
             info: info.clone(),
         })
+    }
+
+    /// Return a cached YCbCr sampler for `key`, creating it with `create` on miss.
+    ///
+    /// `create` must return `(conversion, sampler)` owned by this device. The
+    /// shared handle is kept until the context is dropped so immutable-sampler
+    /// descriptor layouts remain valid across frames.
+    pub fn get_or_create_ycbcr_sampler<F>(
+        &self,
+        key: YcbcrConversionKey,
+        create: F,
+    ) -> Result<Arc<SharedYcbcrSampler>, GpuError>
+    where
+        F: FnOnce(&ash::Device) -> Result<(vk::SamplerYcbcrConversion, vk::Sampler), GpuError>,
+    {
+        let mut cache = self.ycbcr_samplers.lock();
+        if let Some(existing) = cache.get(&key) {
+            return Ok(Arc::clone(existing));
+        }
+        let (conversion, sampler) = create(&self.device)?;
+        let shared = SharedYcbcrSampler::new(self.device.clone(), conversion, sampler);
+        cache.insert(key, Arc::clone(&shared));
+        Ok(shared)
     }
 
     pub fn device_info(&self) -> &DeviceInfo {
@@ -269,6 +298,9 @@ impl Drop for VulkanContext {
         // SAFETY: waiting for idle before teardown ensures no queued work still
         // references the allocator's memory or the device itself.
         let _ = unsafe { self.device.device_wait_idle() };
+        // Drop cached YCbCr samplers before the device so their Drop can destroy
+        // conversion/sampler handles.
+        self.ycbcr_samplers.lock().clear();
         // The allocator must release its memory before the device is destroyed.
         drop(self.allocator.lock().take());
         if self.owns_device {

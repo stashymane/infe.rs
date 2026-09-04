@@ -7,10 +7,9 @@ use infers_core::{
 };
 use infers_gpu::{
     ash::vk,
-    ash::vk::Handle,
     gpu_allocator::MemoryLocation,
-    tensor_from_allocated, tensor_from_external, AllocatedBuffer, buffer_barrier, Vulkan,
-    VulkanBufferHandle, VulkanContext, VulkanImage, VulkanSampledImage,
+    tensor_from_allocated, tensor_from_external, AllocatedBuffer, buffer_barrier, SharedYcbcrSampler,
+    Vulkan, VulkanBufferHandle, VulkanContext, VulkanImage, VulkanSampledImage,
 };
 use parking_lot::Mutex;
 use std::collections::HashMap;
@@ -70,7 +69,6 @@ enum GpuProcessInput {
 struct SampledDispatchInfo {
     image: vk::Image,
     view: vk::ImageView,
-    sampler: vk::Sampler,
     is_ycbcr: bool,
     acquire_from_external: bool,
     current_layout: vk::ImageLayout,
@@ -116,7 +114,6 @@ impl From<&Arc<VulkanSampledImage>> for SampledDispatchInfo {
         Self {
             image: sampled.image(),
             view: sampled.view(),
-            sampler: sampled.sampler(),
             is_ycbcr: sampled.is_ycbcr(),
             acquire_from_external: sampled.acquire_from_external(),
             current_layout: sampled.current_layout(),
@@ -130,6 +127,8 @@ enum OutputDestination {
 }
 
 struct YcbcrPipeline {
+    /// Keeps the immutable sampler alive for `set_layout`.
+    _ycbcr: Arc<SharedYcbcrSampler>,
     set_layout: vk::DescriptorSetLayout,
     layout: vk::PipelineLayout,
     pipeline: vk::Pipeline,
@@ -308,16 +307,17 @@ impl GpuImageProcessor {
         let desc_pool = unsafe {
             vkd.create_descriptor_pool(
                 &vk::DescriptorPoolCreateInfo::default()
-                    .max_sets((slot_count * 2 + 8) as u32)
+                    // Base slots (ssbo+image) plus a few YCbCr format variants.
+                    .max_sets((slot_count * 2 + slot_count * 4 + 8) as u32)
                     .flags(vk::DescriptorPoolCreateFlags::FREE_DESCRIPTOR_SET)
                     .pool_sizes(&[
                         vk::DescriptorPoolSize {
                             ty: vk::DescriptorType::STORAGE_BUFFER,
-                            descriptor_count: (slot_count * 4 + 16) as u32,
+                            descriptor_count: (slot_count * 4 + slot_count * 4 + 16) as u32,
                         },
                         vk::DescriptorPoolSize {
                             ty: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
-                            descriptor_count: (slot_count * 2 + 8) as u32,
+                            descriptor_count: (slot_count * 2 + slot_count * 4 + 8) as u32,
                         },
                     ]),
                 None,
@@ -767,7 +767,7 @@ impl GpuImageProcessorInner {
         let mut dispatch = self.record_lock.lock();
         let slot_index = dispatch.slot_index;
         let dispatch_info = SampledDispatchInfo::from(sampled);
-        let binding = self.resolve_sampled_binding(&mut dispatch, dispatch_info, slot_index)?;
+        let binding = self.resolve_sampled_binding(&mut dispatch, sampled, slot_index)?;
         let slot = &mut dispatch.slots[slot_index];
 
         let options_bytes = write_options_bytes(options);
@@ -898,10 +898,10 @@ impl GpuImageProcessorInner {
     fn resolve_sampled_binding(
         &self,
         dispatch: &mut DispatchResources,
-        sampled: SampledDispatchInfo,
+        sampled: &Arc<VulkanSampledImage>,
         slot_index: usize,
     ) -> Result<SampledPipelineBinding, GpuError> {
-        if !sampled.is_ycbcr {
+        if !sampled.is_ycbcr() {
             return Ok(SampledPipelineBinding {
                 pipeline_layout: self.layout_image,
                 pipeline: self.pipeline_image,
@@ -909,13 +909,19 @@ impl GpuImageProcessorInner {
             });
         }
 
+        let ycbcr = sampled.shared_ycbcr().ok_or_else(|| {
+            GpuError::Other("YCbCr sampled image missing shared sampler".into())
+        })?;
         let ctx = self.context.as_ref();
         let vkd = ctx.device();
-        let key = sampled.sampler.as_raw();
+        let key = ycbcr.sampler_key();
         let slot_count = dispatch.slots.len();
 
         if let Some(cached) = dispatch.ycbcr_pipelines.get_mut(&key) {
             if cached.desc_sets.len() != slot_count {
+                unsafe {
+                    let _ = vkd.free_descriptor_sets(self.desc_pool, &cached.desc_sets);
+                }
                 cached.desc_sets = allocate_ycbcr_desc_sets(
                     vkd,
                     self.desc_pool,
@@ -930,7 +936,7 @@ impl GpuImageProcessorInner {
             });
         }
 
-        let immutable = [sampled.sampler];
+        let immutable = [ycbcr.sampler()];
         let bindings = [
             vk::DescriptorSetLayoutBinding::default()
                 .binding(0)
@@ -978,6 +984,7 @@ impl GpuImageProcessorInner {
         dispatch.ycbcr_pipelines.insert(
             key,
             YcbcrPipeline {
+                _ycbcr: Arc::clone(ycbcr),
                 set_layout,
                 layout: pipeline_layout,
                 pipeline,

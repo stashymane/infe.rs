@@ -1,4 +1,5 @@
 use crate::context::VulkanContext;
+use crate::ycbcr::SharedYcbcrSampler;
 use ash::vk;
 use infers_core::ImageFormat;
 use std::sync::Arc;
@@ -9,8 +10,10 @@ pub struct VulkanSampledImageParts {
     pub image: vk::Image,
     pub memory: vk::DeviceMemory,
     pub view: vk::ImageView,
+    /// Non-YCbCr sampler owned by this image, or null when [`ycbcr`] is set.
     pub sampler: vk::Sampler,
-    pub conversion: Option<vk::SamplerYcbcrConversion>,
+    /// Shared YCbCr conversion+sampler (camera / external formats).
+    pub ycbcr: Option<Arc<SharedYcbcrSampler>>,
     pub is_ycbcr: bool,
     pub acquire_from_external: bool,
     pub width: u32,
@@ -24,8 +27,9 @@ pub struct VulkanSampledImage {
     image: vk::Image,
     memory: vk::DeviceMemory,
     view: vk::ImageView,
-    pub(crate) sampler: vk::Sampler,
-    conversion: Option<vk::SamplerYcbcrConversion>,
+    /// Owned linear sampler when not YCbCr.
+    owned_sampler: vk::Sampler,
+    ycbcr: Option<Arc<SharedYcbcrSampler>>,
     is_ycbcr: bool,
     acquire_from_external: bool,
     width: u32,
@@ -41,8 +45,8 @@ impl VulkanSampledImage {
             image: parts.image,
             memory: parts.memory,
             view: parts.view,
-            sampler: parts.sampler,
-            conversion: parts.conversion,
+            owned_sampler: parts.sampler,
+            ycbcr: parts.ycbcr,
             is_ycbcr: parts.is_ycbcr,
             acquire_from_external: parts.acquire_from_external,
             width: parts.width,
@@ -73,7 +77,15 @@ impl VulkanSampledImage {
     }
 
     pub fn sampler(&self) -> vk::Sampler {
-        self.sampler
+        if let Some(ycbcr) = &self.ycbcr {
+            ycbcr.sampler()
+        } else {
+            self.owned_sampler
+        }
+    }
+
+    pub fn shared_ycbcr(&self) -> Option<&Arc<SharedYcbcrSampler>> {
+        self.ycbcr.as_ref()
     }
 
     pub fn is_ycbcr(&self) -> bool {
@@ -102,10 +114,11 @@ impl Drop for VulkanSampledImage {
         let device = self.context.device();
         unsafe {
             device.destroy_image_view(self.view, None);
-            device.destroy_sampler(self.sampler, None);
-            if let Some(conv) = self.conversion {
-                device.destroy_sampler_ycbcr_conversion(conv, None);
+            if self.owned_sampler != vk::Sampler::null() {
+                device.destroy_sampler(self.owned_sampler, None);
             }
+            // YCbCr conversion+sampler are owned by `SharedYcbcrSampler`.
+            self.ycbcr = None;
             device.destroy_image(self.image, None);
             device.free_memory(self.memory, None);
         }

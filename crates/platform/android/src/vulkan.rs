@@ -4,6 +4,7 @@ use infers_core::DeviceInfo;
 use infers_gpu::ash::vk;
 use infers_gpu::{
     VulkanContext, VulkanContextOptions, VulkanSampledImage, VulkanSampledImageParts,
+    YcbcrConversionKey,
 };
 use std::sync::Arc;
 
@@ -120,11 +121,11 @@ fn import_hardware_buffer(
     // Every handle created past this point is registered with the guard, so an
     // error on any later step destroys the partially-built image instead of
     // leaking it. Disarmed once ownership transfers to the `VulkanSampledImage`.
+    // YCbCr conversion+sampler are cached on the context and not guarded here.
     let mut guard = ImportGuard {
         device,
         image,
         memory: vk::DeviceMemory::null(),
-        conversion: None,
         sampler: vk::Sampler::null(),
         view: vk::ImageView::null(),
     };
@@ -158,55 +159,95 @@ fn import_hardware_buffer(
             .map_err(|err| AndroidPlatformError::VulkanImportError(err.to_string()))?;
     }
 
-    let mut conversion = None;
-    let mut ycbcr_sampler_info = vk::SamplerYcbcrConversionInfo::default();
-    let mut ycbcr_view_info = vk::SamplerYcbcrConversionInfo::default();
-    if is_ycbcr {
-        let mut conv_info = vk::SamplerYcbcrConversionCreateInfo::default()
-            .format(view_format)
-            .ycbcr_model(queried.suggested_ycbcr_model)
-            .ycbcr_range(queried.suggested_ycbcr_range)
-            .components(queried.sampler_ycbcr_conversion_components)
-            .x_chroma_offset(queried.suggested_x_chroma_offset)
-            .y_chroma_offset(queried.suggested_y_chroma_offset)
-            .chroma_filter(vk::Filter::LINEAR)
-            .force_explicit_reconstruction(false);
-        let mut conv_ext =
-            vk::ExternalFormatANDROID::default().external_format(queried.external_format);
-        if queried.external_format != 0 {
-            conv_info = conv_info.push_next(&mut conv_ext);
-        }
-        // SAFETY: `conv_info` is fully initialised and any `push_next` borrow
-        // (`conv_ext`) is alive until this call returns.
-        let conv = unsafe {
+    let shared_ycbcr = if is_ycbcr {
+        let key = YcbcrConversionKey::from_parts(
+            view_format,
+            queried.external_format,
+            queried.suggested_ycbcr_model,
+            queried.suggested_ycbcr_range,
+            queried.sampler_ycbcr_conversion_components,
+            queried.suggested_x_chroma_offset,
+            queried.suggested_y_chroma_offset,
+        );
+        let external_format = queried.external_format;
+        let model = queried.suggested_ycbcr_model;
+        let range = queried.suggested_ycbcr_range;
+        let components = queried.sampler_ycbcr_conversion_components;
+        let x_chroma = queried.suggested_x_chroma_offset;
+        let y_chroma = queried.suggested_y_chroma_offset;
+        Some(
+            context
+                .get_or_create_ycbcr_sampler(key, move |device| {
+                    let mut conv_info = vk::SamplerYcbcrConversionCreateInfo::default()
+                        .format(view_format)
+                        .ycbcr_model(model)
+                        .ycbcr_range(range)
+                        .components(components)
+                        .x_chroma_offset(x_chroma)
+                        .y_chroma_offset(y_chroma)
+                        .chroma_filter(vk::Filter::LINEAR)
+                        .force_explicit_reconstruction(false);
+                    let mut conv_ext =
+                        vk::ExternalFormatANDROID::default().external_format(external_format);
+                    if external_format != 0 {
+                        conv_info = conv_info.push_next(&mut conv_ext);
+                    }
+                    // SAFETY: `conv_info` is fully initialised and any `push_next`
+                    // borrow (`conv_ext`) is alive until this call returns.
+                    let conv = unsafe {
+                        device
+                            .create_sampler_ycbcr_conversion(&conv_info, None)?
+                    };
+                    let mut ycbcr_sampler_info =
+                        vk::SamplerYcbcrConversionInfo::default().conversion(conv);
+                    let sampler_info = vk::SamplerCreateInfo::default()
+                        .mag_filter(vk::Filter::LINEAR)
+                        .min_filter(vk::Filter::LINEAR)
+                        .mipmap_mode(vk::SamplerMipmapMode::NEAREST)
+                        .address_mode_u(vk::SamplerAddressMode::CLAMP_TO_EDGE)
+                        .address_mode_v(vk::SamplerAddressMode::CLAMP_TO_EDGE)
+                        .address_mode_w(vk::SamplerAddressMode::CLAMP_TO_EDGE)
+                        .push_next(&mut ycbcr_sampler_info);
+                    // SAFETY: `sampler_info` is fully initialised and borrows
+                    // `ycbcr_sampler_info` for the duration of this call. On
+                    // failure the conversion created above is destroyed so it
+                    // does not leak before the shared cache owns it.
+                    let sampler = match unsafe { device.create_sampler(&sampler_info, None) } {
+                        Ok(sampler) => sampler,
+                        Err(err) => {
+                            unsafe {
+                                device.destroy_sampler_ycbcr_conversion(conv, None);
+                            }
+                            return Err(err.into());
+                        }
+                    };
+                    Ok((conv, sampler))
+                })
+                .map_err(|err| AndroidPlatformError::VulkanImportError(err.to_string()))?,
+        )
+    } else {
+        None
+    };
+
+    let owned_sampler = if shared_ycbcr.is_some() {
+        // Immutable YCbCr sampler lives in the shared cache.
+        vk::Sampler::null()
+    } else {
+        let sampler_info = vk::SamplerCreateInfo::default()
+            .mag_filter(vk::Filter::LINEAR)
+            .min_filter(vk::Filter::LINEAR)
+            .mipmap_mode(vk::SamplerMipmapMode::NEAREST)
+            .address_mode_u(vk::SamplerAddressMode::CLAMP_TO_EDGE)
+            .address_mode_v(vk::SamplerAddressMode::CLAMP_TO_EDGE)
+            .address_mode_w(vk::SamplerAddressMode::CLAMP_TO_EDGE);
+        let sampler = unsafe {
             device
-                .create_sampler_ycbcr_conversion(&conv_info, None)
+                .create_sampler(&sampler_info, None)
                 .map_err(|err| AndroidPlatformError::VulkanImportError(err.to_string()))?
         };
-        guard.conversion = Some(conv);
-        conversion = Some(conv);
-        ycbcr_sampler_info = vk::SamplerYcbcrConversionInfo::default().conversion(conv);
-        ycbcr_view_info = vk::SamplerYcbcrConversionInfo::default().conversion(conv);
-    }
-
-    let mut sampler_info = vk::SamplerCreateInfo::default()
-        .mag_filter(vk::Filter::LINEAR)
-        .min_filter(vk::Filter::LINEAR)
-        .mipmap_mode(vk::SamplerMipmapMode::NEAREST)
-        .address_mode_u(vk::SamplerAddressMode::CLAMP_TO_EDGE)
-        .address_mode_v(vk::SamplerAddressMode::CLAMP_TO_EDGE)
-        .address_mode_w(vk::SamplerAddressMode::CLAMP_TO_EDGE);
-    if is_ycbcr {
-        sampler_info = sampler_info.push_next(&mut ycbcr_sampler_info);
-    }
-    // SAFETY: `sampler_info` is fully initialised and any `push_next` borrow
-    // (`ycbcr_sampler_info`) is alive until this call returns.
-    let sampler = unsafe {
-        device
-            .create_sampler(&sampler_info, None)
-            .map_err(|err| AndroidPlatformError::VulkanImportError(err.to_string()))?
+        guard.sampler = sampler;
+        sampler
     };
-    guard.sampler = sampler;
 
     let mut view_info = vk::ImageViewCreateInfo::default()
         .image(image)
@@ -219,7 +260,9 @@ fn import_hardware_buffer(
             base_array_layer: 0,
             layer_count: 1,
         });
-    if is_ycbcr {
+    let mut ycbcr_view_info = vk::SamplerYcbcrConversionInfo::default();
+    if let Some(ref ycbcr) = shared_ycbcr {
+        ycbcr_view_info = ycbcr_view_info.conversion(ycbcr.conversion());
         view_info = view_info.push_next(&mut ycbcr_view_info);
     }
     // SAFETY: `view_info` is fully initialised, names the image created above,
@@ -241,8 +284,8 @@ fn import_hardware_buffer(
             image,
             memory,
             view,
-            sampler,
-            conversion,
+            sampler: owned_sampler,
+            ycbcr: shared_ycbcr,
             is_ycbcr,
             acquire_from_external: true,
             width: src.width(),
@@ -309,7 +352,6 @@ struct ImportGuard<'a> {
     device: &'a ash::Device,
     image: vk::Image,
     memory: vk::DeviceMemory,
-    conversion: Option<vk::SamplerYcbcrConversion>,
     sampler: vk::Sampler,
     view: vk::ImageView,
 }
@@ -318,7 +360,6 @@ impl ImportGuard<'_> {
     fn disarm(mut self) {
         self.image = vk::Image::null();
         self.memory = vk::DeviceMemory::null();
-        self.conversion = None;
         self.sampler = vk::Sampler::null();
         self.view = vk::ImageView::null();
     }
@@ -337,10 +378,6 @@ impl Drop for ImportGuard<'_> {
             }
             if self.sampler != vk::Sampler::null() {
                 self.device.destroy_sampler(self.sampler, None);
-            }
-            if let Some(conversion) = self.conversion {
-                self.device
-                    .destroy_sampler_ycbcr_conversion(conversion, None);
             }
             if self.image != vk::Image::null() {
                 self.device.destroy_image(self.image, None);
