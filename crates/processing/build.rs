@@ -13,6 +13,8 @@ fn build_shaders() {
     println!("cargo:rerun-if-changed=shaders");
     println!("cargo:rerun-if-changed=shaders/src/lib.rs");
     println!("cargo:rerun-if-changed=core/src/options.rs");
+    println!("cargo:rerun-if-changed=core/src/convert.rs");
+    println!("cargo:rerun-if-changed=core/src/lib.rs");
 
     let out_dir = env::var_os("OUT_DIR").unwrap();
     let spirv_target = Path::new(&out_dir).join("spirv-builder");

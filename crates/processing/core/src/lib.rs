@@ -2,5 +2,8 @@
 
 #![no_std]
 
+mod convert;
 mod options;
+
+pub use convert::*;
 pub use options::*;

@@ -1,4 +1,4 @@
-use infers_core::{Cpu, DataType, Device, HardwareImage, ImageFormat, ProcessingOptions, Rotation, Tensor};
+use infers_core::{Cpu, DataType, HardwareImage, ImageFormat, ProcessingOptions, Rotation, Tensor};
 use processing_core::TensorLayout;
 #[cfg(feature = "vulkan")]
 use infers_gpu::{defer_hardware, Vulkan};
@@ -283,4 +283,158 @@ fn test_gpu_process_pooled_repeated_calls_match_cpu() {
             "pooled GPU output should be deterministic across calls"
         );
     }
+}
+
+#[test]
+fn test_cpu_identity_memcpy_stretch() {
+    let (data, input) = create_test_pattern_image(48, 32);
+    let processor = CpuImageProcessor::new();
+    let opts = ProcessingOptions {
+        src_w: 48,
+        src_h: 32,
+        dest_w: 48,
+        dest_h: 32,
+        dest_format: ImageFormat::Rgb888,
+        fit_mode: FitMode::Stretch,
+        rotation: Rotation::None,
+        ..Default::default()
+    };
+    let out = process_cpu(&processor, &input, &opts);
+    let host = out.read_to_host().unwrap();
+    assert_eq!(host.as_slice_u8().unwrap(), data.as_slice());
+}
+
+#[test]
+fn test_cpu_contain_letterbox_zeros() {
+    let (_, input) = create_test_pattern_image(100, 50);
+    let processor = CpuImageProcessor::new();
+    let opts = ProcessingOptions {
+        src_w: 100,
+        src_h: 50,
+        dest_w: 64,
+        dest_h: 64,
+        dest_format: ImageFormat::Rgb888,
+        fit_mode: FitMode::Contain,
+        rotation: Rotation::None,
+        ..Default::default()
+    };
+    let out = process_cpu(&processor, &input, &opts);
+    let host = out.read_to_host().unwrap();
+    let bytes = host.as_slice_u8().unwrap();
+    // Top letterbox row should be black.
+    assert!(bytes[..64 * 3].iter().all(|&b| b == 0));
+    assert!(bytes.iter().any(|&b| b > 0));
+}
+
+#[test]
+#[cfg(feature = "vulkan")]
+fn test_cpu_gpu_parity_storage_path() {
+    let (_, host_input) = create_test_pattern_image(80, 60);
+    let vulkan = match Vulkan::new(0) {
+        Ok(v) => v,
+        Err(err) => {
+            eprintln!("skipping CPU/GPU parity: {err}");
+            return;
+        }
+    };
+    let gpu_processor = match GpuImageProcessor::new(vulkan.clone()) {
+        Ok(p) => p,
+        Err(err) => {
+            eprintln!("skipping CPU/GPU parity: {err}");
+            return;
+        }
+    };
+    let cpu_processor = CpuImageProcessor::new();
+
+    let cases = [
+        ProcessingOptions {
+            src_w: 80,
+            src_h: 60,
+            crop_x: 10,
+            crop_y: 10,
+            crop_w: 40,
+            crop_h: 30,
+            dest_w: 32,
+            dest_h: 32,
+            dest_format: ImageFormat::Rgb888,
+            fit_mode: FitMode::Stretch,
+            rotation: Rotation::None,
+            ..Default::default()
+        },
+        ProcessingOptions {
+            src_w: 80,
+            src_h: 60,
+            dest_w: 32,
+            dest_h: 32,
+            dest_format: ImageFormat::Rgbf32,
+            dest_layout: TensorLayout::default_for_dest_format(ImageFormat::Rgbf32),
+            fit_mode: FitMode::Contain,
+            rotation: Rotation::Rot90,
+            ..Default::default()
+        },
+        ProcessingOptions {
+            src_w: 80,
+            src_h: 60,
+            dest_w: 32,
+            dest_h: 32,
+            dest_format: ImageFormat::Rgb888,
+            fit_mode: FitMode::Crop,
+            rotation: Rotation::Rot180,
+            ..Default::default()
+        },
+    ];
+
+    for opts in cases {
+        let cpu_bytes = process_cpu(&cpu_processor, &host_input, &opts)
+            .read_to_host()
+            .unwrap()
+            .as_bytes()
+            .to_vec();
+        let gpu_bytes = process_gpu(&gpu_processor, &vulkan, &host_input, &opts)
+            .read_to_host()
+            .unwrap()
+            .as_bytes()
+            .to_vec();
+        assert_eq!(
+            cpu_bytes.len(),
+            gpu_bytes.len(),
+            "byte length mismatch for {opts:?}"
+        );
+        // Shared convert math can still differ by 1 ULP of rounding between host f32
+        // and SPIR-V f32 (bilinear + round-to-u8), especially with Crop + rotation.
+        if opts.dest_format == ImageFormat::Rgb888 {
+            let mut max_diff = 0u8;
+            let mut mismatches = 0usize;
+            for (c, g) in cpu_bytes.iter().zip(gpu_bytes.iter()) {
+                let d = c.abs_diff(*g);
+                max_diff = max_diff.max(d);
+                if d > 0 {
+                    mismatches += 1;
+                }
+            }
+            assert!(
+                max_diff <= 1,
+                "RGB888 CPU/GPU max channel diff {max_diff} (mismatched {mismatches}/{}) for {opts:?}",
+                cpu_bytes.len()
+            );
+        } else {
+            let cpu_f = bytemuck_f32(&cpu_bytes);
+            let gpu_f = bytemuck_f32(&gpu_bytes);
+            for (i, (c, g)) in cpu_f.iter().zip(gpu_f.iter()).enumerate() {
+                let diff = (c - g).abs();
+                assert!(
+                    diff <= 1e-4,
+                    "f32 mismatch at {i}: cpu={c} gpu={g} diff={diff} opts={opts:?}"
+                );
+            }
+        }
+    }
+}
+
+fn bytemuck_f32(bytes: &[u8]) -> Vec<f32> {
+    assert!(bytes.len().is_multiple_of(4));
+    bytes
+        .chunks_exact(4)
+        .map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+        .collect()
 }

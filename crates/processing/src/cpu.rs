@@ -1,20 +1,33 @@
-use infers_core::CoreError;
-use fast_image_resize::images::{Image, ImageRef};
-use fast_image_resize::{FilterType, PixelType, ResizeAlg, ResizeOptions, Resizer};
-use image::imageops;
-use image::RgbImage;
 use infers_core::{
-    Cpu, CpuImage, HardwareImage, HostTensor, ImageFormat, MaterializeTarget, ProcessingOptions,
+    CoreError, Cpu, HardwareImage, HostBytes, ImageFormat, MaterializeTarget, ProcessingOptions,
     Rotation, Tensor, TensorShape,
 };
 use parking_lot::Mutex;
-use processing_core::{FitMode, TensorLayout};
+use processing_core::{
+    FitMode, TensorLayout, convert_storage, dest_buffer_bytes,
+};
 use std::sync::Arc;
 
-/// High-performance CPU image processor delegating to `fast_image_resize` (SIMD) and `image`.
+/// High-performance CPU image processor using the shared dest-centric convert kernel.
 #[derive(Clone)]
 pub struct CpuImageProcessor {
-    resizer: Arc<Mutex<Resizer>>,
+    pool: Arc<Mutex<DestPool>>,
+}
+
+struct DestPool {
+    slots: [Vec<u8>; 2],
+    next: usize,
+}
+
+impl DestPool {
+    fn acquire(&mut self, needed: usize) -> Vec<u8> {
+        let i = self.next & 1;
+        self.next ^= 1;
+        let mut buf = std::mem::replace(&mut self.slots[i], Vec::with_capacity(needed));
+        buf.clear();
+        buf.resize(needed, 0);
+        buf
+    }
 }
 
 impl Default for CpuImageProcessor {
@@ -27,7 +40,10 @@ impl CpuImageProcessor {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            resizer: Arc::new(Mutex::new(Resizer::new())),
+            pool: Arc::new(Mutex::new(DestPool {
+                slots: [Vec::new(), Vec::new()],
+                next: 0,
+            })),
         }
     }
 
@@ -45,169 +61,130 @@ impl CpuImageProcessor {
         input: &HardwareImage,
         options: &ProcessingOptions,
     ) -> Result<Tensor<Cpu>, CoreError> {
-        let src_bytes = input.as_bytes();
-        if input.format() != ImageFormat::Rgb888 {
-            return Err(CoreError::InvalidImageBuffer(
-                "CpuImageProcessor does not support YUV destination".into(),
-            ));
-        }
+        let mut params = *options;
+        params.src_format = input.format();
+        params.src_w = input.width();
+        params.src_h = input.height();
 
-        let src_w = input.width();
-        let src_h = input.height();
+        validate_params(input, &params)?;
 
-        let expected = ImageFormat::Rgb888.frame_bytes(src_w, src_h) as usize;
-        if src_bytes.len() < expected {
+        let (shape, dtype) = output_shape_dtype(&params)?;
+        let needed = dest_buffer_bytes(&params) as usize;
+        if needed != shape.byte_size(dtype) {
             return Err(CoreError::InvalidImageBuffer(format!(
-                "Input buffer holds {} bytes but {}x{} RGB888 needs {}",
-                src_bytes.len(),
-                src_w,
-                src_h,
-                expected
+                "Dest buffer size {needed} does not match tensor byte size {}",
+                shape.byte_size(dtype)
             )));
         }
 
-        let (crop_x, crop_y, crop_w, crop_h) = options.effective_crop();
+        let mut dst = self.pool.lock().acquire(needed);
+        let src = input.as_bytes();
 
-        if crop_w == 0 || crop_h == 0 {
-            return Err(CoreError::InvalidImageBuffer(
-                "Effective crop width and height must be greater than zero".into(),
-            ));
+        if can_identity_memcpy(&params) {
+            identity_memcpy_rgb888_nhwc(src, &mut dst, &params)?;
+        } else {
+            convert_storage(src, &mut dst, &params);
         }
 
-        let exceeds = crop_x.checked_add(crop_w).is_none_or(|r| r > src_w)
-            || crop_y.checked_add(crop_h).is_none_or(|b| b > src_h);
-        if exceeds {
-            return Err(CoreError::InvalidImageBuffer(format!(
-                "Crop region ({}, {}, {}, {}) exceeds source image dimensions ({}x{})",
-                crop_x, crop_y, crop_w, crop_h, src_w, src_h
-            )));
-        }
-
-        let mut cropped_img = RgbImage::new(crop_w, crop_h);
-        for y in 0..crop_h {
-            let src_row_start = ((crop_y + y) * src_w + crop_x) as usize * 3;
-            let src_row_end = src_row_start + (crop_w as usize * 3);
-            let dst_row_start = (y * crop_w) as usize * 3;
-            let dst_row_end = dst_row_start + (crop_w as usize * 3);
-            cropped_img.as_mut()[dst_row_start..dst_row_end]
-                .copy_from_slice(&src_bytes[src_row_start..src_row_end]);
-        }
-
-        let rotated_img = match options.rotation {
-            Rotation::None => cropped_img,
-            Rotation::Rot90 => imageops::rotate90(&cropped_img),
-            Rotation::Rot180 => imageops::rotate180(&cropped_img),
-            Rotation::Rot270 => imageops::rotate270(&cropped_img),
-        };
-
-        let (cur_w, cur_h) = (rotated_img.width(), rotated_img.height());
-        let (dest_w, dest_h) = (options.dest_w, options.dest_h);
-
-        if dest_w == 0 || dest_h == 0 {
-            return Err(CoreError::InvalidImageBuffer(
-                "Destination dimensions must be non-zero".into(),
-            ));
-        }
-
-        let dst_rgb_bytes = match options.fit_mode {
-            FitMode::Stretch => {
-                let src_ref = ImageRef::new(cur_w, cur_h, rotated_img.as_raw(), PixelType::U8x3)
-                    .map_err(|e| CoreError::ImageResizeFailed(e.to_string()))?;
-                let mut dst_image = Image::new(dest_w, dest_h, PixelType::U8x3);
-
-                let mut resizer = self.resizer.lock();
-                resizer
-                    .resize(
-                        &src_ref,
-                        &mut dst_image,
-                        &ResizeOptions::new().resize_alg(ResizeAlg::Convolution(FilterType::Bilinear)),
-                    )
-                    .map_err(|e| CoreError::ImageResizeFailed(e.to_string()))?;
-
-                dst_image.into_vec()
-            }
-            FitMode::Contain => {
-                let sx = dest_w as f64 / cur_w as f64;
-                let sy = dest_h as f64 / cur_h as f64;
-                let s = sx.min(sy);
-                let scaled_w = (cur_w as f64 * s).round().max(1.0) as u32;
-                let scaled_h = (cur_h as f64 * s).round().max(1.0) as u32;
-
-                let src_ref = ImageRef::new(cur_w, cur_h, rotated_img.as_raw(), PixelType::U8x3)
-                    .map_err(|e| CoreError::ImageResizeFailed(e.to_string()))?;
-                let mut scaled_image = Image::new(scaled_w, scaled_h, PixelType::U8x3);
-
-                let mut resizer = self.resizer.lock();
-                resizer
-                    .resize(
-                        &src_ref,
-                        &mut scaled_image,
-                        &ResizeOptions::new().resize_alg(ResizeAlg::Convolution(FilterType::Bilinear)),
-                    )
-                    .map_err(|e| CoreError::ImageResizeFailed(e.to_string()))?;
-
-                let scaled_bytes = scaled_image.into_vec();
-                let mut final_buf = vec![0u8; (dest_w * dest_h * 3) as usize];
-
-                let pad_x = (dest_w.saturating_sub(scaled_w)) / 2;
-                let pad_y = (dest_h.saturating_sub(scaled_h)) / 2;
-
-                for y in 0..scaled_h {
-                    let src_offset = (y * scaled_w * 3) as usize;
-                    let dst_offset = (((pad_y + y) * dest_w + pad_x) * 3) as usize;
-                    let row_len = (scaled_w * 3) as usize;
-                    final_buf[dst_offset..dst_offset + row_len]
-                        .copy_from_slice(&scaled_bytes[src_offset..src_offset + row_len]);
-                }
-
-                final_buf
-            }
-            FitMode::Crop => {
-                let sx = dest_w as f64 / cur_w as f64;
-                let sy = dest_h as f64 / cur_h as f64;
-                let s = sx.max(sy);
-                let scaled_w = (cur_w as f64 * s).round().max(1.0) as u32;
-                let scaled_h = (cur_h as f64 * s).round().max(1.0) as u32;
-
-                let src_ref = ImageRef::new(cur_w, cur_h, rotated_img.as_raw(), PixelType::U8x3)
-                    .map_err(|e| CoreError::ImageResizeFailed(e.to_string()))?;
-                let mut scaled_image = Image::new(scaled_w, scaled_h, PixelType::U8x3);
-
-                let mut resizer = self.resizer.lock();
-                resizer
-                    .resize(
-                        &src_ref,
-                        &mut scaled_image,
-                        &ResizeOptions::new().resize_alg(ResizeAlg::Convolution(FilterType::Bilinear)),
-                    )
-                    .map_err(|e| CoreError::ImageResizeFailed(e.to_string()))?;
-
-                let scaled_bytes = scaled_image.into_vec();
-                let mut final_buf = vec![0u8; (dest_w * dest_h * 3) as usize];
-
-                let crop_start_x = (scaled_w.saturating_sub(dest_w)) / 2;
-                let crop_start_y = (scaled_h.saturating_sub(dest_h)) / 2;
-
-                for y in 0..dest_h {
-                    let src_offset = (((crop_start_y + y) * scaled_w + crop_start_x) * 3) as usize;
-                    let dst_offset = (y * dest_w * 3) as usize;
-                    let row_len = (dest_w * 3) as usize;
-                    final_buf[dst_offset..dst_offset + row_len]
-                        .copy_from_slice(&scaled_bytes[src_offset..src_offset + row_len]);
-                }
-
-                final_buf
-            }
-        };
-
-        pack_rgb_tensor(
-            &dst_rgb_bytes,
-            dest_w,
-            dest_h,
-            options.dest_format,
-            options.dest_layout,
-        )
+        Ok(Tensor::from_storage(Cpu, shape, dtype, HostBytes(dst)))
     }
+}
+
+fn validate_params(input: &HardwareImage, params: &ProcessingOptions) -> Result<(), CoreError> {
+    match params.src_format {
+        ImageFormat::Rgb888 | ImageFormat::Nv12 | ImageFormat::I420 => {}
+        ImageFormat::Rgbf32 => {
+            return Err(CoreError::InvalidImageBuffer(
+                "CpuImageProcessor does not support RGBF32 source".into(),
+            ));
+        }
+    }
+
+    if params.dest_format.is_yuv() {
+        return Err(CoreError::InvalidImageBuffer(
+            "CpuImageProcessor does not support YUV destination".into(),
+        ));
+    }
+
+    if params.src_format.is_yuv()
+        && (!params.src_w.is_multiple_of(2) || !params.src_h.is_multiple_of(2))
+    {
+        return Err(CoreError::InvalidImageBuffer(
+            "YUV 4:2:0 input width and height must be even".into(),
+        ));
+    }
+
+    let expected = params.src_format.frame_bytes(params.src_w, params.src_h) as usize;
+    if input.as_bytes().len() < expected {
+        return Err(CoreError::InvalidImageBuffer(format!(
+            "Input buffer holds {} bytes but {}x{} {:?} needs {}",
+            input.as_bytes().len(),
+            params.src_w,
+            params.src_h,
+            params.src_format,
+            expected
+        )));
+    }
+
+    let (crop_x, crop_y, crop_w, crop_h) = params.effective_crop();
+    if crop_w == 0 || crop_h == 0 {
+        return Err(CoreError::InvalidImageBuffer(
+            "Effective crop width and height must be greater than zero".into(),
+        ));
+    }
+
+    let exceeds = crop_x.checked_add(crop_w).is_none_or(|r| r > params.src_w)
+        || crop_y.checked_add(crop_h).is_none_or(|b| b > params.src_h);
+    if exceeds {
+        return Err(CoreError::InvalidImageBuffer(format!(
+            "Crop region ({}, {}, {}, {}) exceeds source image dimensions ({}x{})",
+            crop_x, crop_y, crop_w, crop_h, params.src_w, params.src_h
+        )));
+    }
+
+    if params.dest_w == 0 || params.dest_h == 0 {
+        return Err(CoreError::InvalidImageBuffer(
+            "Destination dimensions must be non-zero".into(),
+        ));
+    }
+
+    Ok(())
+}
+
+fn can_identity_memcpy(params: &ProcessingOptions) -> bool {
+    if params.fit_mode != FitMode::Stretch
+        || params.rotation != Rotation::None
+        || params.src_format != ImageFormat::Rgb888
+        || params.dest_format != ImageFormat::Rgb888
+        || params.dest_layout != TensorLayout::Nhwc
+    {
+        return false;
+    }
+    let (_x, _y, crop_w, crop_h) = params.effective_crop();
+    crop_w == params.dest_w && crop_h == params.dest_h
+}
+
+fn identity_memcpy_rgb888_nhwc(
+    src: &[u8],
+    dst: &mut [u8],
+    params: &ProcessingOptions,
+) -> Result<(), CoreError> {
+    let (crop_x, crop_y, crop_w, crop_h) = params.effective_crop();
+    let src_w = params.src_w as usize;
+    let row_bytes = (crop_w as usize) * 3;
+    for y in 0..crop_h as usize {
+        let src_off = ((crop_y as usize + y) * src_w + crop_x as usize) * 3;
+        let dst_off = y * row_bytes;
+        let src_end = src_off + row_bytes;
+        let dst_end = dst_off + row_bytes;
+        if src_end > src.len() || dst_end > dst.len() {
+            return Err(CoreError::InvalidImageBuffer(
+                "Identity memcpy region exceeds buffer bounds".into(),
+            ));
+        }
+        dst[dst_off..dst_end].copy_from_slice(&src[src_off..src_end]);
+    }
+    Ok(())
 }
 
 pub(crate) fn output_shape_dtype(
@@ -215,12 +192,8 @@ pub(crate) fn output_shape_dtype(
 ) -> Result<(TensorShape, infers_core::DataType), CoreError> {
     let (dest_w, dest_h) = (options.dest_w, options.dest_h);
     let shape = match options.dest_layout {
-        TensorLayout::Nhwc => {
-            TensorShape::new(vec![1, dest_h as usize, dest_w as usize, 3])?
-        }
-        TensorLayout::Nchw => {
-            TensorShape::new(vec![1, 3, dest_h as usize, dest_w as usize])?
-        }
+        TensorLayout::Nhwc => TensorShape::new(vec![1, dest_h as usize, dest_w as usize, 3])?,
+        TensorLayout::Nchw => TensorShape::new(vec![1, 3, dest_h as usize, dest_w as usize])?,
     };
     let dtype = match options.dest_format {
         ImageFormat::Rgb888 => infers_core::DataType::U8,
@@ -232,66 +205,4 @@ pub(crate) fn output_shape_dtype(
         }
     };
     Ok((shape, dtype))
-}
-
-fn pack_rgb_tensor(
-    interleaved: &[u8],
-    dest_w: u32,
-    dest_h: u32,
-    dest_format: ImageFormat,
-    dest_layout: TensorLayout,
-) -> Result<Tensor<Cpu>, CoreError> {
-    let hw = (dest_h as usize) * (dest_w as usize);
-    let shape = match dest_layout {
-        TensorLayout::Nhwc => TensorShape::new([1, dest_h as usize, dest_w as usize, 3])?,
-        TensorLayout::Nchw => TensorShape::new([1, 3, dest_h as usize, dest_w as usize])?,
-    };
-
-    match dest_format {
-        ImageFormat::Rgb888 => {
-            if dest_layout == TensorLayout::Nhwc {
-                let host = HostTensor::from_u8(shape, interleaved.to_vec())?;
-                Tensor::from_host(&Cpu, &host)
-            } else {
-                let mut planar = vec![0u8; hw * 3];
-                for y in 0..dest_h as usize {
-                    for x in 0..dest_w as usize {
-                        let i = y * dest_w as usize + x;
-                        let base = i * 3;
-                        planar[i] = interleaved[base];
-                        planar[hw + i] = interleaved[base + 1];
-                        planar[2 * hw + i] = interleaved[base + 2];
-                    }
-                }
-                let host = HostTensor::from_u8(shape, planar)?;
-                Tensor::from_host(&Cpu, &host)
-            }
-        }
-        ImageFormat::Rgbf32 => {
-            if dest_layout == TensorLayout::Nhwc {
-                let mut f32_data = Vec::with_capacity(interleaved.len());
-                for &b in interleaved {
-                    f32_data.push((b as f32) / 255.0);
-                }
-                let host = HostTensor::from_f32(shape, f32_data)?;
-                Tensor::from_host(&Cpu, &host)
-            } else {
-                let mut planar = vec![0.0f32; hw * 3];
-                for y in 0..dest_h as usize {
-                    for x in 0..dest_w as usize {
-                        let i = y * dest_w as usize + x;
-                        let base = i * 3;
-                        planar[i] = interleaved[base] as f32 / 255.0;
-                        planar[hw + i] = interleaved[base + 1] as f32 / 255.0;
-                        planar[2 * hw + i] = interleaved[base + 2] as f32 / 255.0;
-                    }
-                }
-                let host = HostTensor::from_f32(shape, planar)?;
-                Tensor::from_host(&Cpu, &host)
-            }
-        }
-        ImageFormat::Nv12 | ImageFormat::I420 => Err(CoreError::InvalidImageBuffer(
-            "CpuImageProcessor does not support YUV destination".into(),
-        )),
-    }
 }

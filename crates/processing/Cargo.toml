@@ -16,8 +16,6 @@ processing-core = { path = "core" }
 infers-core = { path = "../core" }
 infers-gpu = { path = "../gpu", optional = true }
 ash = { workspace = true, optional = true }
-fast_image_resize = "5"
-image = { version = "0.25", default-features = false }
 parking_lot.workspace = true
 thiserror.workspace = true
 
