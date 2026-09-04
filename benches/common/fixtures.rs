@@ -1,26 +1,8 @@
-use std::path::{Path, PathBuf};
-
 use infers::{HardwareImage, ImageFormat, ProcessingOptions, Rotation, TensorLayout, TensorShape};
 use processing::FitMode;
 
 pub const FRAME_W: u32 = 1280;
 pub const FRAME_H: u32 = 720;
-
-pub fn model_path(rel: &str) -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("target/yolo26n-face")
-        .join(rel)
-}
-
-pub fn require_model(path: &Path) -> Vec<u8> {
-    std::fs::read(path).unwrap_or_else(|err| {
-        panic!(
-            "failed to read model '{}': {err}\n\
-             Build models first (see assets/yolo26n-face-manifest.yaml, output in target/yolo26n-face/).",
-            path.display()
-        )
-    })
-}
 
 pub fn camera_frame(width: u32, height: u32) -> HardwareImage {
     let mut data = Vec::with_capacity((width * height * 3) as usize);

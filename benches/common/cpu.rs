@@ -4,10 +4,11 @@ use infers::{
 };
 use processing::ImageProcessor;
 
-use super::fixtures::{
-    camera_frame, detector_options, imgsz_from_input_shape, model_path, require_model, FRAME_H,
-    FRAME_W,
+use super::fixtures::{FRAME_H, FRAME_W,
+                      camera_frame, detector_options, imgsz_from_input_shape,
 };
+
+const XNNPACK_MODEL: &[u8] = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/target/yolo26n-face/xnnpack/model.pte"));
 
 const XNNPACK_THREADS: usize = 2;
 
@@ -19,11 +20,10 @@ pub struct Bench {
 }
 
 pub fn setup() -> Bench {
-    let model_bytes = require_model(&model_path("xnnpack/model.pte"));
     let backend = ExecuTorchBackend::new();
     let session = backend
         .load_xnnpack(
-            &model_bytes,
+            XNNPACK_MODEL,
             XnnpackOptions {
                 num_threads: XNNPACK_THREADS,
                 method: None,

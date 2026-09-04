@@ -1,3 +1,6 @@
+#[path = "common/criterion_config.rs"]
+mod criterion_config;
+
 #[path = "common/fixtures.rs"]
 mod fixtures;
 
@@ -35,5 +38,9 @@ fn full_pass_bench(c: &mut Criterion) {
     });
 }
 
-criterion_group!(gpu_pipeline, preprocess_bench, inference_bench, full_pass_bench);
+criterion_group! {
+    name = gpu_pipeline;
+    config = criterion_config::configured();
+    targets = preprocess_bench, inference_bench, full_pass_bench
+}
 criterion_main!(gpu_pipeline);

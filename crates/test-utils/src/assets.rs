@@ -6,7 +6,7 @@ use crate::{cpu_tensor_f32, read_f32_output};
 
 /// Locate `target/yolo26n-face` by walking up from this crate's manifest dir.
 pub fn yolo26n_face_dir() -> Option<PathBuf> {
-    if let Ok(dir) = std::env::var("INFERS_YOLO26N_FACE_DIR") {
+    if let Ok(dir) = std::env::var("INFERS_MODEL_DIR") {
         let path = PathBuf::from(dir);
         if path.join("manifest.yaml").is_file() {
             return Some(path);

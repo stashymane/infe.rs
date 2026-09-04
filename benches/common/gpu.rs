@@ -1,13 +1,12 @@
+use super::fixtures::{FRAME_H, FRAME_W,
+                      camera_frame, detector_options, imgsz_from_input_shape,
+};
 use infers::{
     Cpu, ExecuTorchBackend, ExecuTorchSession, GpuImageProcessor, ProcessingOptions, Session,
     Vulkan, VulkanImage, VulkanOptions,
 };
-use processing::ImageProcessor;
 
-use super::fixtures::{
-    camera_frame, detector_options, imgsz_from_input_shape, model_path, require_model, FRAME_H,
-    FRAME_W,
-};
+const VULKAN_MODEL: &[u8] = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/target/yolo26n-face/vulkan/model.pte"));
 
 pub struct Bench {
     pub processor: GpuImageProcessor,
@@ -17,14 +16,13 @@ pub struct Bench {
 }
 
 pub fn setup() -> Bench {
-    let model_bytes = require_model(&model_path("vulkan/model.pte"));
     let vulkan = Vulkan::new(0).expect("Vulkan::new requires a GPU with Vulkan support");
     let processor = GpuImageProcessor::new(vulkan.clone()).expect("GpuImageProcessor::new");
 
     let backend = ExecuTorchBackend::new();
     let session = backend
         .load_vulkan(
-            &model_bytes,
+            VULKAN_MODEL,
             &vulkan,
             VulkanOptions { method: None },
         )
