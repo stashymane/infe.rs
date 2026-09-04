@@ -32,11 +32,11 @@ runs:
         test -f target/executorch/android-arm64/backends/vulkan/libinfers_et_vulkan_ffi.a
         find target/executorch -name '*.a' | head
 
-    - name: Install host Vulkan libs
+    - name: Install host build deps
       shell: bash
       run: |
         sudo apt-get update
-        sudo apt-get install -y --no-install-recommends libvulkan-dev
+        sudo apt-get install -y --no-install-recommends libvulkan-dev mold
 
     - name: Set up JDK ${{ inputs.jdk-version }}
       uses: actions/setup-java@v6

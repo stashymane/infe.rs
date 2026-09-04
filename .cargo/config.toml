@@ -8,6 +8,9 @@ EXECUTORCH_RS_EXECUTORCH_LIB_DIR = { value = "target/executorch", relative = tru
 CARGO_NDK_PLATFORM = "29"
 CARGO_NDK_TARGET = "arm64-v8a"
 
+[target.'cfg(target_os = "linux")']
+rustflags = ["-C", "link-arg=-fuse-ld=mold"]
+
 [target.aarch64-linux-android]
 runner = "cargo ndk-runner"
 
