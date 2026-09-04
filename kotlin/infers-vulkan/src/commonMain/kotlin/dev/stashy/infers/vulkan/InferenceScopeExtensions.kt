@@ -13,8 +13,7 @@ public suspend fun ModelSession<GpuDevice>.infer(pending: GpuPending): List<CpuT
 
 @OptIn(InfersInternalApi::class)
 context(scope: InferenceScope)
-public suspend fun ModelSession<GpuDevice>.infer(input: Tensor<GpuDevice>): List<CpuTensor> =
-    infer(listOf(input))
+public suspend fun ModelSession<GpuDevice>.infer(input: Tensor<GpuDevice>): List<CpuTensor> = infer(listOf(input))
 
 @OptIn(InfersInternalApi::class)
 context(scope: InferenceScope)

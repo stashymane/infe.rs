@@ -43,19 +43,19 @@ public class HardwareImage @InfersInternalApi constructor(
 
     public companion object {
         @InfersInternalApi
-        internal fun fromBytesInternal(bytes: ByteArray, width: UInt, height: UInt, format: ImageFormat): HardwareImage =
-            withFfiErrors {
-                HardwareImage(createHardwareImage(width, height, format.toFfi(), bytes))
-            }
-
-        @OptIn(InfersInternalApi::class)
-        context(scope: InferenceScope)
-        public fun fromBytes(
+        internal fun fromBytesInternal(
             bytes: ByteArray,
             width: UInt,
             height: UInt,
             format: ImageFormat,
-        ): HardwareImage = scope.register(fromBytesInternal(bytes, width, height, format))
+        ): HardwareImage = withFfiErrors {
+            HardwareImage(createHardwareImage(width, height, format.toFfi(), bytes))
+        }
+
+        @OptIn(InfersInternalApi::class)
+        context(scope: InferenceScope)
+        public fun fromBytes(bytes: ByteArray, width: UInt, height: UInt, format: ImageFormat): HardwareImage =
+            scope.register(fromBytesInternal(bytes, width, height, format))
     }
 }
 

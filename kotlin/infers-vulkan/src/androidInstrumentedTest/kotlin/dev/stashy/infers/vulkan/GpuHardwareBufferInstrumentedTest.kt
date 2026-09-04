@@ -23,8 +23,8 @@ class GpuHardwareBufferInstrumentedTest {
                 GpuImageProcessor(it).use { processor ->
                     inferenceScope {
                         val buffer = androidBuffer.toHardwareBuffer(it.info)
-                        val tensor = processor.processHardwareBuffer(buffer, options)
-                        assertEquals(TensorShape.of(1, 3, 2, 2), tensor.shape)
+                        val pending = buffer.on(it).process(processor, options)
+                        assertEquals(TensorShape.of(1, 3, 2, 2), pending.shape)
                     }
                 }
             }

@@ -32,13 +32,14 @@ pub fn create_vulkan_context(device: &DeviceInfo) -> Result<VulkanContext, Andro
 
 impl AndroidHardwareBufferHandle {
     /// Defer zero-copy Vulkan import until materialize/process time.
-    pub fn on(self, vulkan: &infers_gpu::Vulkan) -> infers_core::Deferred<infers_gpu::Vulkan> {
+    pub fn on(&self, vulkan: &infers_gpu::Vulkan) -> infers_core::Deferred<infers_gpu::Vulkan> {
         use infers_core::CoreError;
         use infers_gpu::VulkanImage;
         use std::sync::Arc;
 
+        let owned = self.clone();
         infers_core::Deferred::from_custom(vulkan.clone(), move |device| {
-            let sampled = self
+            let sampled = owned
                 .to_vulkan(Arc::clone(device.context()))
                 .map_err(|err| CoreError::Platform(err.to_string()))?;
             Ok(VulkanImage::Sampled(std::sync::Arc::new(sampled)))

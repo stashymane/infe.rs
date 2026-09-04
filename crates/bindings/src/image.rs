@@ -242,6 +242,30 @@ impl HardwareBufferHandle {
     }
 }
 
+/// Defer zero-copy Vulkan import of this buffer until materialize/process.
+#[cfg(feature = "vulkan")]
+#[uniffi::export]
+impl HardwareBufferHandle {
+    pub fn on(
+        self: Arc<Self>,
+        device: Arc<crate::gpu_device::GpuDevice>,
+    ) -> Result<Arc<crate::deferred::GpuDeferred>, InfersError> {
+        #[cfg(target_os = "android")]
+        {
+            Ok(Arc::new(crate::deferred::GpuDeferred::from_inner(
+                self.inner.on(device.vulkan()),
+            )))
+        }
+        #[cfg(not(target_os = "android"))]
+        {
+            let _ = (self, device);
+            Err(InfersError::PlatformError {
+                reason: "HardwareBuffer is only available on Android".into(),
+            })
+        }
+    }
+}
+
 #[uniffi::export]
 pub fn create_hardware_buffer_from_raw(
     ptr: u64,

@@ -14,16 +14,14 @@ public suspend fun CpuPending.materialize(): CpuTensor = scope.register(
 
 @OptIn(InfersInternalApi::class)
 context(scope: InferenceScope)
-public suspend fun CpuDeferred.process(
-    processor: CpuImageProcessor,
-    options: ProcessingOptions,
-): CpuPending = scope.register(
-    withFfiErrors {
-        ensureOpen()
-        processor.ensureOpen()
-        CpuPending(handle.process(processor.handle, options.toFfi()))
-    },
-)
+public suspend fun CpuDeferred.process(processor: CpuImageProcessor, options: ProcessingOptions): CpuPending =
+    scope.register(
+        withFfiErrors {
+            ensureOpen()
+            processor.ensureOpen()
+            CpuPending(handle.process(processor.handle, options.toFfi()))
+        },
+    )
 
 @OptIn(InfersInternalApi::class)
 context(scope: InferenceScope)
@@ -32,8 +30,7 @@ public suspend fun ModelSession<CpuDevice>.infer(pending: CpuPending): List<CpuT
 
 @OptIn(InfersInternalApi::class)
 context(scope: InferenceScope)
-public suspend fun ModelSession<CpuDevice>.infer(input: Tensor<CpuDevice>): List<CpuTensor> =
-    infer(listOf(input))
+public suspend fun ModelSession<CpuDevice>.infer(input: Tensor<CpuDevice>): List<CpuTensor> = infer(listOf(input))
 
 @OptIn(InfersInternalApi::class)
 context(scope: InferenceScope)

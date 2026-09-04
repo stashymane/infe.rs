@@ -1,6 +1,7 @@
 package dev.stashy.infers.vulkan
 
 import dev.stashy.infers.CpuTensor
+import dev.stashy.infers.Device
 import dev.stashy.infers.DeviceInfo
 import dev.stashy.infers.InfersInternalApi
 import dev.stashy.infers.internal.CloseGate

@@ -20,6 +20,20 @@ pub struct AndroidHardwareBufferHandle {
 unsafe impl Send for AndroidHardwareBufferHandle {}
 unsafe impl Sync for AndroidHardwareBufferHandle {}
 
+impl Clone for AndroidHardwareBufferHandle {
+    fn clone(&self) -> Self {
+        // SAFETY: `raw_ptr` is a live buffer owned by `self`; acquire adds a
+        // reference the clone will release on drop.
+        unsafe { AHardwareBuffer_acquire(self.raw_ptr) };
+        Self {
+            raw_ptr: self.raw_ptr,
+            desc: self.desc,
+            format: self.format,
+            device: self.device.clone(),
+        }
+    }
+}
+
 impl AndroidHardwareBufferHandle {
     /// Wrap an existing `AHardwareBuffer` pointer, incrementing its reference count.
     ///

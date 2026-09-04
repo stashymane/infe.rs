@@ -2,6 +2,7 @@ package dev.stashy.infers.vulkan
 
 import dev.stashy.infers.CpuTensor
 import dev.stashy.infers.DeviceInfo
+import dev.stashy.infers.InfersInternalApi
 import dev.stashy.infers.Tensor
 import dev.stashy.infers.TensorShape
 import dev.stashy.infers.internal.CloseGate
@@ -60,6 +61,9 @@ public class GpuTensor internal constructor(
             CpuTensor.fromFfi(handle.download())
         }
     }
+
+    @InfersInternalApi
+    internal fun ensureOpen(): Unit = gate.ensureOpen()
 
     override fun close() {
         if (gate.markClosed()) {

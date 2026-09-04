@@ -1,10 +1,17 @@
 package dev.stashy.infers.vulkan
 
+import dev.stashy.infers.DataType
+import dev.stashy.infers.Deferred
+import dev.stashy.infers.DeviceInfo
 import dev.stashy.infers.HardwareImage
+import dev.stashy.infers.InferenceScope
+import dev.stashy.infers.InfersInternalApi
+import dev.stashy.infers.Pending
 import dev.stashy.infers.ProcessingOptions
-import dev.stashy.infers.internal.toFfi
+import dev.stashy.infers.TensorShape
 import dev.stashy.infers.internal.CloseGate
 import dev.stashy.infers.internal.fromFfi
+import dev.stashy.infers.internal.toFfi
 import dev.stashy.infers.internal.withFfiErrors
 import dev.stashy.infers.ffi.GpuDeferred as FfiGpuDeferred
 import dev.stashy.infers.ffi.GpuPending as FfiGpuPending
@@ -60,7 +67,7 @@ public class GpuPending @InfersInternalApi constructor(
 }
 
 @OptIn(InfersInternalApi::class)
-context(scope: dev.stashy.infers.InferenceScope)
+context(scope: InferenceScope)
 public suspend fun GpuDeferred.materialize(): GpuImage = scope.register(
     withFfiErrors {
         ensureOpen()
@@ -69,7 +76,7 @@ public suspend fun GpuDeferred.materialize(): GpuImage = scope.register(
 )
 
 @OptIn(InfersInternalApi::class)
-context(scope: dev.stashy.infers.InferenceScope)
+context(scope: InferenceScope)
 public suspend fun GpuPending.materialize(): GpuTensor = scope.register(
     withFfiErrors {
         ensureOpen()
@@ -78,21 +85,19 @@ public suspend fun GpuPending.materialize(): GpuTensor = scope.register(
 )
 
 @OptIn(InfersInternalApi::class)
-context(scope: dev.stashy.infers.InferenceScope)
-public suspend fun GpuDeferred.process(
-    processor: GpuImageProcessor,
-    options: dev.stashy.infers.ProcessingOptions,
-): GpuPending = scope.register(
-    withFfiErrors {
-        ensureOpen()
-        processor.ensureOpen()
-        GpuPending(handle.process(processor.handle, options.toFfi()))
-    },
-)
+context(scope: InferenceScope)
+public suspend fun GpuDeferred.process(processor: GpuImageProcessor, options: ProcessingOptions): GpuPending =
+    scope.register(
+        withFfiErrors {
+            ensureOpen()
+            processor.ensureOpen()
+            GpuPending(handle.process(processor.handle, options.toFfi()))
+        },
+    )
 
 @OptIn(InfersInternalApi::class)
-context(scope: dev.stashy.infers.InferenceScope)
-public suspend fun dev.stashy.infers.HardwareImage.on(device: GpuDevice): GpuDeferred = scope.register(
+context(scope: InferenceScope)
+public suspend fun HardwareImage.on(device: GpuDevice): GpuDeferred = scope.register(
     withFfiErrors {
         ensureOpen()
         device.ensureOpen()

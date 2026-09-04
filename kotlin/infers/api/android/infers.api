@@ -5,6 +5,11 @@ public final class dev/stashy/infers/Backend : java/lang/AutoCloseable {
 	public final fun getHandle ()Ldev/stashy/infers/ffi/FfiBackend;
 }
 
+public final class dev/stashy/infers/CpuDeferred : dev/stashy/infers/Deferred {
+	public fun <init> (Ldev/stashy/infers/ffi/CpuDeferred;)V
+	public fun close ()V
+}
+
 public final class dev/stashy/infers/CpuDevice : dev/stashy/infers/Device {
 	public static final field INSTANCE Ldev/stashy/infers/CpuDevice;
 	public fun getInfo ()Ldev/stashy/infers/DeviceInfo;
@@ -18,6 +23,13 @@ public final class dev/stashy/infers/CpuImageProcessor : dev/stashy/infers/Image
 	public fun processInternal (Ldev/stashy/infers/DeviceImage;Ldev/stashy/infers/ProcessingOptions;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
 
+public final class dev/stashy/infers/CpuPending : dev/stashy/infers/Pending {
+	public fun <init> (Ldev/stashy/infers/ffi/CpuPending;)V
+	public fun close ()V
+	public fun getDtype ()Ldev/stashy/infers/DataType;
+	public fun getShape ()Ldev/stashy/infers/TensorShape;
+}
+
 public final class dev/stashy/infers/CpuSession : dev/stashy/infers/ModelSession {
 	public fun <init> (Ldev/stashy/infers/ffi/CpuSession;Lkotlinx/coroutines/CoroutineDispatcher;)V
 	public synthetic fun <init> (Ldev/stashy/infers/ffi/CpuSession;Lkotlinx/coroutines/CoroutineDispatcher;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
@@ -25,6 +37,7 @@ public final class dev/stashy/infers/CpuSession : dev/stashy/infers/ModelSession
 	public fun getDeviceInfo ()Ldev/stashy/infers/DeviceInfo;
 	public fun getInputShapes ()Ljava/util/List;
 	public fun getOutputShapes ()Ljava/util/List;
+	public fun inferPendingInternal (Ldev/stashy/infers/Pending;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun runInternal (Ljava/util/List;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
 
@@ -60,6 +73,9 @@ public final class dev/stashy/infers/DataType : java/lang/Enum {
 	public static fun getEntries ()Lkotlin/enums/EnumEntries;
 	public static fun valueOf (Ljava/lang/String;)Ldev/stashy/infers/DataType;
 	public static fun values ()[Ldev/stashy/infers/DataType;
+}
+
+public abstract interface class dev/stashy/infers/Deferred : java/lang/AutoCloseable {
 }
 
 public abstract interface class dev/stashy/infers/Device {
@@ -124,19 +140,23 @@ public final class dev/stashy/infers/HardwareBuffer : java/lang/AutoCloseable {
 public final class dev/stashy/infers/HardwareBuffer$Companion {
 }
 
-public final class dev/stashy/infers/HostImage : dev/stashy/infers/DeviceImage {
-	public static final field Companion Ldev/stashy/infers/HostImage$Companion;
-	public fun <init> (Ldev/stashy/infers/ffi/HostImage;)V
+public final class dev/stashy/infers/HardwareImage : java/lang/AutoCloseable {
+	public static final field Companion Ldev/stashy/infers/HardwareImage$Companion;
+	public fun <init> (Ldev/stashy/infers/ffi/HardwareImage;)V
 	public fun close ()V
 	public final fun ensureOpen ()V
-	public fun getFormat ()Ldev/stashy/infers/ImageFormat;
-	public final fun getHandle ()Ldev/stashy/infers/ffi/HostImage;
-	public fun getHeight-pVg5ArA ()I
-	public fun getWidth-pVg5ArA ()I
+	public final fun getFormat ()Ldev/stashy/infers/ImageFormat;
+	public final fun getHandle ()Ldev/stashy/infers/ffi/HardwareImage;
+	public final fun getHeight-pVg5ArA ()I
+	public final fun getWidth-pVg5ArA ()I
 }
 
-public final class dev/stashy/infers/HostImage$Companion {
-	public final fun fromBytes-yOCu0fQ (Ldev/stashy/infers/InferenceScope;[BIILdev/stashy/infers/ImageFormat;)Ldev/stashy/infers/DeviceImage;
+public final class dev/stashy/infers/HardwareImage$Companion {
+	public final fun fromBytes-yOCu0fQ (Ldev/stashy/infers/InferenceScope;[BIILdev/stashy/infers/ImageFormat;)Ldev/stashy/infers/HardwareImage;
+}
+
+public final class dev/stashy/infers/HardwareImageKt {
+	public static final fun onCpu (Ldev/stashy/infers/InferenceScope;Ldev/stashy/infers/HardwareImage;)Ldev/stashy/infers/CpuDeferred;
 }
 
 public final class dev/stashy/infers/ImageFormat : java/lang/Enum {
@@ -163,10 +183,11 @@ public final class dev/stashy/infers/InferenceScope {
 }
 
 public final class dev/stashy/infers/InferenceScopeExtensionsKt {
+	public static final fun infer (Ldev/stashy/infers/InferenceScope;Ldev/stashy/infers/ModelSession;Ldev/stashy/infers/CpuPending;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static final fun infer (Ldev/stashy/infers/InferenceScope;Ldev/stashy/infers/ModelSession;Ldev/stashy/infers/Tensor;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static final fun infer (Ldev/stashy/infers/InferenceScope;Ldev/stashy/infers/ModelSession;Ljava/util/List;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public static final fun process (Ldev/stashy/infers/InferenceScope;Ldev/stashy/infers/ImageProcessor;Ldev/stashy/infers/DeviceImage;Ldev/stashy/infers/ProcessingOptions;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public static final fun process (Ldev/stashy/infers/InferenceScope;Ldev/stashy/infers/ImageProcessor;Ldev/stashy/infers/DeviceImage;Lkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static final fun materialize (Ldev/stashy/infers/InferenceScope;Ldev/stashy/infers/CpuPending;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static final fun process (Ldev/stashy/infers/InferenceScope;Ldev/stashy/infers/CpuDeferred;Ldev/stashy/infers/CpuImageProcessor;Ldev/stashy/infers/ProcessingOptions;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
 
 public final class dev/stashy/infers/InferenceScopeKt {
@@ -183,6 +204,13 @@ public abstract interface annotation class dev/stashy/infers/InfersDsl : java/la
 public abstract class dev/stashy/infers/InfersException : java/lang/Exception {
 	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/Throwable;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public abstract fun getReason ()Ljava/lang/String;
+}
+
+public final class dev/stashy/infers/InfersException$AlreadyConsumed : dev/stashy/infers/InfersException {
+	public fun <init> ()V
+	public fun <init> (Ljava/lang/String;)V
+	public synthetic fun <init> (Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun getReason ()Ljava/lang/String;
 }
 
 public final class dev/stashy/infers/InfersException$BufferAllocationFailed : dev/stashy/infers/InfersException {
@@ -239,7 +267,13 @@ public abstract interface class dev/stashy/infers/ModelSession : java/lang/AutoC
 	public abstract fun getDeviceInfo ()Ldev/stashy/infers/DeviceInfo;
 	public abstract fun getInputShapes ()Ljava/util/List;
 	public abstract fun getOutputShapes ()Ljava/util/List;
+	public abstract fun inferPendingInternal (Ldev/stashy/infers/Pending;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public abstract fun runInternal (Ljava/util/List;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public abstract interface class dev/stashy/infers/Pending : java/lang/AutoCloseable {
+	public abstract fun getDtype ()Ldev/stashy/infers/DataType;
+	public abstract fun getShape ()Ldev/stashy/infers/TensorShape;
 }
 
 public final class dev/stashy/infers/ProcessingOptions {
@@ -280,6 +314,8 @@ public final class dev/stashy/infers/ProcessingOptions {
 }
 
 public final class dev/stashy/infers/ProcessingOptions$Companion {
+	public final fun forModelInput (Ldev/stashy/infers/ModelSession;Lkotlin/jvm/functions/Function1;)Ldev/stashy/infers/ProcessingOptions;
+	public static synthetic fun forModelInput$default (Ldev/stashy/infers/ProcessingOptions$Companion;Ldev/stashy/infers/ModelSession;Lkotlin/jvm/functions/Function1;ILjava/lang/Object;)Ldev/stashy/infers/ProcessingOptions;
 	public final fun invoke (Lkotlin/jvm/functions/Function1;)Ldev/stashy/infers/ProcessingOptions;
 }
 

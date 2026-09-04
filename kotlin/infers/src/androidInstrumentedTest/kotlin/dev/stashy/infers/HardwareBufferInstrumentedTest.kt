@@ -1,6 +1,5 @@
 package dev.stashy.infers
 
-import dev.stashy.infers.hostImageFromBytes
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -33,10 +32,15 @@ class HardwareBufferInstrumentedTest {
                 inferenceScope {
                     val buffer = androidBuffer.toHardwareBuffer(CpuDevice.info)
                     val bytes = buffer.lockCpu()
-                    val image = hostImageFromBytes(bytes, buffer.width, buffer.height, ImageFormat.Rgb888)
-                    val tensor = processor.process(image, options)
-                    assertEquals(TensorShape.of(1, 3, 2, 2), tensor.shape)
-                    assertTrue(tensor.readFloats().isNotEmpty())
+                    val hardware = HardwareImage.fromBytes(
+                        bytes,
+                        buffer.width,
+                        buffer.height,
+                        ImageFormat.Rgb888,
+                    )
+                    val pending = hardware.onCpu().process(processor, options)
+                    assertEquals(TensorShape.of(1, 3, 2, 2), pending.shape)
+                    assertTrue(pending.materialize().readFloats().isNotEmpty())
                 }
             }
         }
