@@ -20,29 +20,19 @@ pub struct AndroidHardwareBufferHandle {
 unsafe impl Send for AndroidHardwareBufferHandle {}
 unsafe impl Sync for AndroidHardwareBufferHandle {}
 
-impl Clone for AndroidHardwareBufferHandle {
-    fn clone(&self) -> Self {
-        // SAFETY: `raw_ptr` is a live buffer owned by `self`; acquire adds a
-        // reference the clone will release on drop.
-        unsafe { AHardwareBuffer_acquire(self.raw_ptr) };
-        Self {
-            raw_ptr: self.raw_ptr,
-            desc: self.desc,
-            format: self.format,
-            device: self.device.clone(),
-        }
-    }
-}
-
 impl AndroidHardwareBufferHandle {
-    /// Wrap an existing `AHardwareBuffer` pointer, incrementing its reference count.
+    /// Wrap a borrowed `AHardwareBuffer` pointer by acquiring an independent +1.
+    ///
+    /// Use this for `AHardwareBuffer_fromHardwareBuffer`, which (per NDK) does
+    /// **not** add a reference. On describe/format error the acquired reference
+    /// is released so it does not leak.
     ///
     /// # Safety-relevant preconditions
     ///
     /// `raw_ptr` must be either null or a currently-live `AHardwareBuffer`
     /// obtained from the platform. A dangling or foreign pointer cannot be
     /// detected here and results in undefined behaviour.
-    pub fn from_raw(
+    pub fn from_borrowed(
         raw_ptr: *mut AHardwareBuffer,
         device: DeviceInfo,
     ) -> Result<Self, AndroidPlatformError> {
@@ -58,8 +48,6 @@ impl AndroidHardwareBufferHandle {
         match unsafe { Self::from_acquired(raw_ptr, device) } {
             Ok(handle) => Ok(handle),
             Err(err) => {
-                // Release the reference acquired above so a rejected buffer does
-                // not leak.
                 // SAFETY: the acquire above succeeded and no handle owns it.
                 unsafe { AHardwareBuffer_release(raw_ptr) };
                 Err(err)
@@ -67,11 +55,39 @@ impl AndroidHardwareBufferHandle {
         }
     }
 
+    /// Take ownership of an existing `AHardwareBuffer` reference (no extra acquire).
+    ///
+    /// Use this for pointers from `AHardwareBuffer_allocate` or any other API that
+    /// already handed the caller a +1 reference. On error that reference is
+    /// released so it does not leak.
+    ///
+    /// Do **not** use this with `AHardwareBuffer_fromHardwareBuffer` — that API
+    /// returns a borrowed pointer; use [`Self::from_borrowed`] instead.
+    ///
+    /// # Safety-relevant preconditions
+    ///
+    /// `raw_ptr` must be either null or a currently-live `AHardwareBuffer` for which
+    /// the caller transfers exactly one reference. A dangling or foreign pointer
+    /// cannot be detected here and results in undefined behaviour.
+    pub fn from_owned(
+        raw_ptr: *mut AHardwareBuffer,
+        device: DeviceInfo,
+    ) -> Result<Self, AndroidPlatformError> {
+        Self::take_owned(raw_ptr, device)
+    }
+
     /// Take ownership of a pointer returned by `AHardwareBuffer_allocate` (no extra acquire).
     ///
     /// On error the buffer is released, since this call takes ownership of the
     /// caller's reference.
     pub fn from_allocated(
+        raw_ptr: *mut AHardwareBuffer,
+        device: DeviceInfo,
+    ) -> Result<Self, AndroidPlatformError> {
+        Self::take_owned(raw_ptr, device)
+    }
+
+    fn take_owned(
         raw_ptr: *mut AHardwareBuffer,
         device: DeviceInfo,
     ) -> Result<Self, AndroidPlatformError> {

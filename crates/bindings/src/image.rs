@@ -9,6 +9,9 @@ use processing_core::{
 };
 use std::sync::Arc;
 
+#[cfg(target_os = "android")]
+use parking_lot::Mutex;
+
 #[cfg(feature = "vulkan")]
 use infers_gpu::VulkanImage;
 #[cfg(feature = "vulkan")]
@@ -148,10 +151,14 @@ pub fn create_hardware_image(
 /// UniFFI-exported handle. Instantiable only on Android; off-Android the
 /// `_unsupported: Infallible` field makes construction impossible so method
 /// bodies that `match` on it are unreachable.
+///
+/// On Android the native AHB reference is uniquely owned inside a
+/// `Mutex<Option<_>>` so `on()` can move it into Deferred without a second
+/// acquire, and a later `close` / drop is a no-op once consumed.
 #[derive(uniffi::Object)]
 pub struct HardwareBufferHandle {
     #[cfg(target_os = "android")]
-    inner: Arc<CoreHardwareBuffer>,
+    inner: Mutex<Option<CoreHardwareBuffer>>,
     #[cfg(not(target_os = "android"))]
     _unsupported: std::convert::Infallible,
 }
@@ -160,10 +167,18 @@ impl std::fmt::Debug for HardwareBufferHandle {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         #[cfg(target_os = "android")]
         {
-            f.debug_struct("HardwareBufferHandle")
-                .field("width", &self.inner.width())
-                .field("height", &self.inner.height())
-                .finish()
+            let guard = self.inner.lock();
+            match guard.as_ref() {
+                Some(buf) => f
+                    .debug_struct("HardwareBufferHandle")
+                    .field("width", &buf.width())
+                    .field("height", &buf.height())
+                    .finish(),
+                None => f
+                    .debug_struct("HardwareBufferHandle")
+                    .field("consumed", &true)
+                    .finish(),
+            }
         }
         #[cfg(not(target_os = "android"))]
         {
@@ -175,21 +190,32 @@ impl std::fmt::Debug for HardwareBufferHandle {
 
 #[cfg(target_os = "android")]
 impl HardwareBufferHandle {
-    pub fn new(inner: Arc<CoreHardwareBuffer>) -> Self {
-        Self { inner }
+    pub fn new(inner: CoreHardwareBuffer) -> Self {
+        Self {
+            inner: Mutex::new(Some(inner)),
+        }
     }
 
-    pub fn inner(&self) -> &CoreHardwareBuffer {
-        &self.inner
+    fn with_inner<R>(
+        &self,
+        f: impl FnOnce(&CoreHardwareBuffer) -> R,
+    ) -> Result<R, InfersError> {
+        let guard = self.inner.lock();
+        let buf = guard.as_ref().ok_or(InfersError::AlreadyConsumed)?;
+        Ok(f(buf))
+    }
+
+    fn take_inner(&self) -> Result<CoreHardwareBuffer, InfersError> {
+        self.inner.lock().take().ok_or(InfersError::AlreadyConsumed)
     }
 }
 
 #[uniffi::export]
 impl HardwareBufferHandle {
-    pub fn width(&self) -> u32 {
+    pub fn width(&self) -> Result<u32, InfersError> {
         #[cfg(target_os = "android")]
         {
-            self.inner.width()
+            self.with_inner(|buf| buf.width())
         }
         #[cfg(not(target_os = "android"))]
         {
@@ -197,10 +223,10 @@ impl HardwareBufferHandle {
         }
     }
 
-    pub fn height(&self) -> u32 {
+    pub fn height(&self) -> Result<u32, InfersError> {
         #[cfg(target_os = "android")]
         {
-            self.inner.height()
+            self.with_inner(|buf| buf.height())
         }
         #[cfg(not(target_os = "android"))]
         {
@@ -208,10 +234,10 @@ impl HardwareBufferHandle {
         }
     }
 
-    pub fn format(&self) -> u32 {
+    pub fn format(&self) -> Result<u32, InfersError> {
         #[cfg(target_os = "android")]
         {
-            self.inner.desc().format
+            self.with_inner(|buf| buf.desc().format)
         }
         #[cfg(not(target_os = "android"))]
         {
@@ -219,10 +245,10 @@ impl HardwareBufferHandle {
         }
     }
 
-    pub fn raw_pointer(&self) -> u64 {
+    pub fn raw_pointer(&self) -> Result<u64, InfersError> {
         #[cfg(target_os = "android")]
         {
-            self.inner.raw_ptr() as u64
+            self.with_inner(|buf| buf.raw_ptr() as u64)
         }
         #[cfg(not(target_os = "android"))]
         {
@@ -233,7 +259,8 @@ impl HardwareBufferHandle {
     pub fn lock_cpu(&self) -> Result<Vec<u8>, InfersError> {
         #[cfg(target_os = "android")]
         {
-            self.inner.copy_cpu_packed().map_err(InfersError::from)
+            self.with_inner(|buf| buf.copy_cpu_packed())?
+                .map_err(InfersError::from)
         }
         #[cfg(not(target_os = "android"))]
         {
@@ -243,6 +270,9 @@ impl HardwareBufferHandle {
 }
 
 /// Defer zero-copy Vulkan import of this buffer until Pending materialize.
+///
+/// Consumes the owned AHB reference; subsequent use of this handle fails with
+/// [`InfersError::AlreadyConsumed`].
 #[cfg(feature = "vulkan")]
 #[uniffi::export]
 impl HardwareBufferHandle {
@@ -252,8 +282,9 @@ impl HardwareBufferHandle {
     ) -> Result<Arc<crate::deferred::GpuDeferred>, InfersError> {
         #[cfg(target_os = "android")]
         {
+            let owned = self.take_inner()?;
             Ok(Arc::new(crate::deferred::GpuDeferred::from_inner(
-                self.inner.on(device.vulkan()),
+                owned.on(device.vulkan()),
             )))
         }
         #[cfg(not(target_os = "android"))]
@@ -266,8 +297,12 @@ impl HardwareBufferHandle {
     }
 }
 
+/// Wrap a borrowed `AHardwareBuffer*` from `AHardwareBuffer_fromHardwareBuffer`.
+///
+/// Acquires an independent +1 so Rust owns a reference separate from the Java
+/// `HardwareBuffer`. Does not release the Java object's reference.
 #[uniffi::export]
-pub fn create_hardware_buffer_from_raw(
+pub fn create_hardware_buffer_from_java(
     ptr: u64,
     device: DeviceInfo,
 ) -> Result<Arc<HardwareBufferHandle>, InfersError> {
@@ -276,8 +311,32 @@ pub fn create_hardware_buffer_from_raw(
         let raw_ptr = ptr as *mut platform_android::ffi::AHardwareBuffer;
         let info: infers_core::DeviceInfo = device.into();
         let handle =
-            CoreHardwareBuffer::from_raw(raw_ptr, info).map_err(InfersError::from)?;
-        Ok(Arc::new(HardwareBufferHandle::new(Arc::new(handle))))
+            CoreHardwareBuffer::from_borrowed(raw_ptr, info).map_err(InfersError::from)?;
+        Ok(Arc::new(HardwareBufferHandle::new(handle)))
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = (ptr, device);
+        Err(InfersError::PlatformError {
+            reason: "HardwareBuffer is only available on Android".into(),
+        })
+    }
+}
+
+/// Take ownership of an `AHardwareBuffer*` that already carries a +1 reference
+/// (for example from `AHardwareBuffer_allocate`). Does not acquire.
+#[uniffi::export]
+pub fn create_hardware_buffer_from_owned(
+    ptr: u64,
+    device: DeviceInfo,
+) -> Result<Arc<HardwareBufferHandle>, InfersError> {
+    #[cfg(target_os = "android")]
+    {
+        let raw_ptr = ptr as *mut platform_android::ffi::AHardwareBuffer;
+        let info: infers_core::DeviceInfo = device.into();
+        let handle =
+            CoreHardwareBuffer::from_owned(raw_ptr, info).map_err(InfersError::from)?;
+        Ok(Arc::new(HardwareBufferHandle::new(handle)))
     }
     #[cfg(not(target_os = "android"))]
     {

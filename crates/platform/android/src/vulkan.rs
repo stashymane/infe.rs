@@ -34,14 +34,16 @@ pub fn create_vulkan_context(device: &DeviceInfo) -> Result<VulkanContext, Andro
 
 impl AndroidHardwareBufferHandle {
     /// Defer zero-copy Vulkan import until Pending materialize time.
-    pub fn on(&self, vulkan: &infers_gpu::Vulkan) -> infers_core::Deferred<infers_gpu::Vulkan> {
+    ///
+    /// Consumes `self`: the AHB reference is released automatically after the
+    /// deferred import succeeds (Vulkan retains its own acquire on the memory).
+    pub fn on(self, vulkan: &infers_gpu::Vulkan) -> infers_core::Deferred<infers_gpu::Vulkan> {
         use infers_core::CoreError;
         use infers_gpu::VulkanImage;
         use std::sync::Arc;
 
-        let owned = self.clone();
         infers_core::Deferred::from_custom(vulkan.clone(), move |device| {
-            let sampled = owned
+            let sampled = self
                 .to_vulkan(Arc::clone(device.context()))
                 .map_err(|err| CoreError::Platform(err.to_string()))?;
             Ok(VulkanImage::Sampled(std::sync::Arc::new(sampled)))
@@ -49,11 +51,15 @@ impl AndroidHardwareBufferHandle {
     }
 
     /// Import this hardware buffer as a sampled Vulkan image on `context`.
+    ///
+    /// Consumes `self`. On success Vulkan has acquired its own AHB reference, so
+    /// dropping this handle only releases ours. On failure the handle is dropped
+    /// without Vulkan retaining a reference.
     pub fn to_vulkan(
-        &self,
+        self,
         context: Arc<VulkanContext>,
     ) -> Result<VulkanSampledImage, AndroidPlatformError> {
-        import_hardware_buffer(context, self)
+        import_hardware_buffer(context, &self)
     }
 }
 

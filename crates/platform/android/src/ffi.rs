@@ -66,9 +66,12 @@ unsafe extern "C" {
 
     pub fn AHardwareBuffer_unlock(buffer: *mut AHardwareBuffer, fence: *mut i32) -> i32;
 
-    /// Convert a Java `android.hardware.HardwareBuffer` into an `AHardwareBuffer*`.
-    /// The returned pointer has its reference count incremented; the caller must
-    /// eventually call `AHardwareBuffer_release`.
+    /// Return the `AHardwareBuffer` wrapped by a Java `HardwareBuffer`.
+    ///
+    /// Per NDK docs this does **not** acquire an additional reference. The
+    /// pointer stays valid only while the Java object keeps the buffer alive;
+    /// call `AHardwareBuffer_acquire` before the Java object is closed if the
+    /// native side needs independent ownership.
     pub fn AHardwareBuffer_fromHardwareBuffer(
         env: *mut c_void,
         hardwareBuffer: *mut c_void,

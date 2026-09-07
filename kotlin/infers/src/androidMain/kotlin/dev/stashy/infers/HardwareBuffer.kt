@@ -5,6 +5,12 @@ import dev.stashy.infers.internal.withFfiErrors
 
 /**
  * Thin wrapper around an Android [AHardwareBuffer][android.hardware.HardwareBuffer].
+ *
+ * Owns an independent native +1 acquired when wrapping a Java
+ * [android.hardware.HardwareBuffer] (NDK `fromHardwareBuffer` does not acquire).
+ * The Java object remains caller-owned (e.g. camera `Image.close()`).
+ * Calling [dev.stashy.infers.vulkan.on] transfers Rust ownership into deferred
+ * Vulkan import and closes this wrapper.
  */
 public class HardwareBuffer
 @InfersInternalApi
@@ -15,27 +21,27 @@ constructor(
     private val gate = dev.stashy.infers.internal.CloseGate("HardwareBuffer")
 
     public val width: UInt
-        get() {
+        get() = withFfiErrors {
             gate.ensureOpen()
-            return handle.width()
+            handle.width()
         }
 
     public val height: UInt
-        get() {
+        get() = withFfiErrors {
             gate.ensureOpen()
-            return handle.height()
+            handle.height()
         }
 
     public val format: UInt
-        get() {
+        get() = withFfiErrors {
             gate.ensureOpen()
-            return handle.format()
+            handle.format()
         }
 
     public val rawPointer: ULong
-        get() {
+        get() = withFfiErrors {
             gate.ensureOpen()
-            return handle.rawPointer()
+            handle.rawPointer()
         }
 
     public fun lockCpu(): ByteArray = withFfiErrors {
@@ -53,7 +59,8 @@ constructor(
         @InfersInternalApi
         internal fun fromPointer(ptr: ULong, deviceInfo: DeviceInfo): HardwareBuffer = withFfiErrors {
             HardwareBuffer(
-                dev.stashy.infers.ffi.createHardwareBufferFromRaw(ptr, deviceInfo.toFfi()),
+                // Caller transfers an existing +1 (e.g. from allocate).
+                dev.stashy.infers.ffi.createHardwareBufferFromOwned(ptr, deviceInfo.toFfi()),
             )
         }
 
@@ -61,9 +68,10 @@ constructor(
         internal fun from(buffer: android.hardware.HardwareBuffer, deviceInfo: DeviceInfo): HardwareBuffer {
             val ptr = HardwareBufferBridge.nativePointer(buffer)
             check(ptr != 0L) { "AHardwareBuffer_fromHardwareBuffer returned null" }
+            // Borrowed pointer: acquire an independent +1 inside from_java.
             return withFfiErrors {
                 HardwareBuffer(
-                    dev.stashy.infers.ffi.createHardwareBufferFromRaw(ptr.toULong(), deviceInfo.toFfi()),
+                    dev.stashy.infers.ffi.createHardwareBufferFromJava(ptr.toULong(), deviceInfo.toFfi()),
                 )
             }
         }
@@ -80,6 +88,4 @@ internal object HardwareBufferBridge {
     }
 
     external fun nativePointer(buffer: android.hardware.HardwareBuffer): Long
-
-    external fun nativeRelease(ptr: Long)
 }

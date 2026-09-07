@@ -9,8 +9,8 @@ use platform_android::{
     AHARDWAREBUFFER_USAGE_CPU_WRITE_OFTEN, AHARDWAREBUFFER_USAGE_GPU_SAMPLED_IMAGE,
 };
 use processing::{
-    CpuImageProcessor, DeferredCpuProcessExt, FitMode, GpuImageProcessor, TensorLayout, Vulkan,
-    VulkanImage,
+    CpuImageProcessor, DeferredCpuProcessExt, DeferredVulkanProcessExt, FitMode,
+    GpuImageProcessor, TensorLayout, Vulkan, VulkanImage,
 };
 use std::sync::Arc;
 
@@ -65,6 +65,130 @@ fn test_android_hardware_buffer_metadata() {
 
     let locked = handle.lock_cpu_read().unwrap();
     assert!(!locked.as_slice().is_empty());
+}
+
+#[test]
+fn test_from_owned_takes_allocate_reference() {
+    let device = gpu0_info();
+    let desc = AHardwareBuffer_Desc {
+        width: 8,
+        height: 8,
+        layers: 1,
+        format: AHARDWAREBUFFER_FORMAT_R8G8B8_UNORM,
+        usage: AHARDWAREBUFFER_USAGE_CPU_READ_OFTEN | AHARDWAREBUFFER_USAGE_CPU_WRITE_OFTEN,
+        stride: 0,
+        rfu0: 0,
+        rfu1: 0,
+    };
+    let handle = unsafe {
+        let mut ptr = std::ptr::null_mut();
+        let status = AHardwareBuffer_allocate(&desc, &mut ptr);
+        assert_eq!(status, 0, "AHardwareBuffer_allocate failed: {status}");
+        // from_owned must not acquire again; dropping the handle releases the
+        // allocate +1 exactly once.
+        AndroidHardwareBufferHandle::from_owned(ptr, device).expect("from_owned")
+    };
+    assert_eq!(handle.width(), 8);
+    assert_eq!(handle.height(), 8);
+}
+
+#[test]
+fn test_from_borrowed_acquires_independent_reference() {
+    let device = gpu0_info();
+    let allocated = allocate_rgb888_buffer(8, 8, device.clone());
+    let ptr = allocated.raw_ptr();
+    // Simulate a borrowed view (as fromHardwareBuffer): acquire a second +1.
+    let borrowed = AndroidHardwareBufferHandle::from_borrowed(ptr, device).expect("from_borrowed");
+    assert_eq!(borrowed.width(), 8);
+    // Dropping `borrowed` releases only the acquired +1; `allocated` still owns
+    // the allocate reference.
+    drop(borrowed);
+    assert_eq!(allocated.width(), 8);
+}
+
+#[test]
+fn test_from_owned_null_pointer() {
+    let err = AndroidHardwareBufferHandle::from_owned(std::ptr::null_mut(), gpu0_info())
+        .expect_err("null pointer must fail");
+    assert!(matches!(
+        err,
+        platform_android::AndroidPlatformError::NullBufferPointer
+    ));
+}
+
+#[test]
+fn test_from_borrowed_null_pointer() {
+    let err = AndroidHardwareBufferHandle::from_borrowed(std::ptr::null_mut(), gpu0_info())
+        .expect_err("null pointer must fail");
+    assert!(matches!(
+        err,
+        platform_android::AndroidPlatformError::NullBufferPointer
+    ));
+}
+
+#[test]
+fn test_to_vulkan_consumes_handle_and_keeps_sampled_image() {
+    let device = gpu0_info();
+    let handle = allocate_rgb888_buffer(16, 16, device.clone());
+    let context = match platform_android::create_vulkan_context(&device) {
+        Ok(ctx) => Arc::new(ctx),
+        Err(err) => {
+            eprintln!("skipping Android GPU import ownership test: {err}");
+            return;
+        }
+    };
+    let sampled = match handle.to_vulkan(Arc::clone(&context)) {
+        Ok(img) => img,
+        Err(err) => {
+            eprintln!("skipping Android GPU import ownership test: {err}");
+            return;
+        }
+    };
+    // `handle` was moved into to_vulkan and dropped after Vulkan acquired its
+    // own AHB reference; the sampled image must still be usable.
+    assert_eq!(sampled.width(), 16);
+    assert_eq!(sampled.height(), 16);
+    drop(sampled);
+}
+
+#[test]
+fn test_on_moves_into_deferred_import() {
+    let device = gpu0_info();
+    let handle = allocate_rgb888_buffer(16, 16, device.clone());
+    let context = match platform_android::create_vulkan_context(&device) {
+        Ok(ctx) => Arc::new(ctx),
+        Err(err) => {
+            eprintln!("skipping Android deferred import test: {err}");
+            return;
+        }
+    };
+    let vulkan = Vulkan::from_context(context);
+    let gpu_proc = match GpuImageProcessor::new(vulkan.clone()) {
+        Ok(proc) => proc,
+        Err(err) => {
+            eprintln!("skipping Android deferred import test: {err}");
+            return;
+        }
+    };
+    let opts = ProcessingOptions {
+        src_w: 16,
+        src_h: 16,
+        dest_w: 8,
+        dest_h: 8,
+        dest_format: ImageFormat::Rgbf32,
+        dest_layout: TensorLayout::default_for_dest_format(ImageFormat::Rgbf32),
+        fit_mode: FitMode::Stretch,
+        rotation: Rotation::None,
+        ..Default::default()
+    };
+    // Consumes `handle` into Deferred; import + AHB release happen at materialize.
+    let out = handle
+        .on(&vulkan)
+        .process(&gpu_proc, &opts)
+        .unwrap()
+        .materialize()
+        .unwrap();
+    assert_eq!(out.shape().dims(), &[1, 3, 8, 8]);
 }
 
 #[test]
