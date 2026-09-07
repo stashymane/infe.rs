@@ -1,7 +1,7 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="Benchmark (Android)" type="CargoCommandRunConfiguration" factoryName="Cargo Command" folderName="Rust">
+  <configuration default="false" name="Benchmark (Android GPU)" type="CargoCommandRunConfiguration" factoryName="Cargo Command" folderName="Rust">
     <option name="buildProfileId" value="release" />
-    <option name="command" value="ndk bench --bench gpu_pipeline --bench cpu_pipeline --target aarch64-linux-android" />
+    <option name="command" value="ndk bench --bench gpu_pipeline --target aarch64-linux-android" />
     <option name="workingDirectory" value="file://$PROJECT_DIR$" />
     <envs>
       <env name="CARGO_NDK_PLATFORM" value="29" />
