@@ -1,11 +1,19 @@
 package dev.stashy.infers.vulkan
 
+import dev.stashy.infers.ByteTensorView
 import dev.stashy.infers.CpuTensor
 import dev.stashy.infers.DeviceInfo
+import dev.stashy.infers.FloatTensorView
 import dev.stashy.infers.InfersInternalApi
+import dev.stashy.infers.IntTensorView
+import dev.stashy.infers.LongTensorView
 import dev.stashy.infers.Tensor
 import dev.stashy.infers.TensorShape
 import dev.stashy.infers.internal.CloseGate
+import dev.stashy.infers.internal.createByteTensorView
+import dev.stashy.infers.internal.createFloatTensorView
+import dev.stashy.infers.internal.createIntTensorView
+import dev.stashy.infers.internal.createLongTensorView
 import dev.stashy.infers.internal.fromFfi
 import dev.stashy.infers.internal.withFfiErrors
 import kotlinx.coroutines.Dispatchers
@@ -42,18 +50,45 @@ public class GpuTensor internal constructor(
             return handle.byteSize()
         }
 
-    override suspend fun readBytes(): ByteArray = withContext(Dispatchers.Default) {
-        withFfiErrors {
-            gate.ensureOpen()
-            handle.readBytes()
+    override suspend fun floats(): FloatTensorView = withContext(Dispatchers.Default) {
+        val cpu = download()
+        try {
+            createFloatTensorView(cpu.handle, cpu, closeKeepAlive = true)
+        } catch (t: Throwable) {
+            cpu.close()
+            throw t
         }
     }
 
-    override suspend fun readFloats(): FloatArray = dev.stashy.infers.internal.TensorCodec.decodeFloats(readBytes())
+    override suspend fun ints(): IntTensorView = withContext(Dispatchers.Default) {
+        val cpu = download()
+        try {
+            createIntTensorView(cpu.handle, cpu, closeKeepAlive = true)
+        } catch (t: Throwable) {
+            cpu.close()
+            throw t
+        }
+    }
 
-    override suspend fun readInts(): IntArray = dev.stashy.infers.internal.TensorCodec.decodeInts(readBytes())
+    override suspend fun longs(): LongTensorView = withContext(Dispatchers.Default) {
+        val cpu = download()
+        try {
+            createLongTensorView(cpu.handle, cpu, closeKeepAlive = true)
+        } catch (t: Throwable) {
+            cpu.close()
+            throw t
+        }
+    }
 
-    override suspend fun readLongs(): LongArray = dev.stashy.infers.internal.TensorCodec.decodeLongs(readBytes())
+    override suspend fun bytes(): ByteTensorView = withContext(Dispatchers.Default) {
+        val cpu = download()
+        try {
+            createByteTensorView(cpu.handle, cpu, closeKeepAlive = true)
+        } catch (t: Throwable) {
+            cpu.close()
+            throw t
+        }
+    }
 
     public suspend fun download(): CpuTensor = withContext(Dispatchers.Default) {
         withFfiErrors {

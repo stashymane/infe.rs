@@ -18,7 +18,7 @@ class InferenceScopeTest {
                 cpuTensorOf(TensorShape.of(1), floatArrayOf(2f))
             }
         assertFailsWith<IllegalStateException> {
-            escaped.readBytes()
+            escaped.bytes()
         }
     }
 
@@ -29,7 +29,7 @@ class InferenceScopeTest {
                 cpuTensorOf(TensorShape.of(2), floatArrayOf(1f, 2f))
             }
         assertFailsWith<IllegalStateException> {
-            tensor.readFloats()
+            tensor.floats()
         }
     }
 }

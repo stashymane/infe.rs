@@ -41,11 +41,10 @@ internal class GpuPipeline private constructor(
         val pending = hardware.on(device).process(processor, processingOptions)
         val outputs = session.infer(pending)
         val primary = outputs.firstOrNull()
-        val preview = primary
-            ?.readFloats()
-            ?.take(PREVIEW_FLOAT_COUNT)
-            .orEmpty()
-            .toFloatArray()
+        val preview = primary?.floats()?.use { view ->
+            val n = minOf(PREVIEW_FLOAT_COUNT, view.size)
+            FloatArray(n).also { view.copyInto(it, endIndex = n) }
+        } ?: floatArrayOf()
 
         GpuPipelineOutput(
             frameIndex = frame.index,

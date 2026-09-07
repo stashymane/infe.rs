@@ -192,5 +192,5 @@ pub fn evalue_to_cpu_tensor(
     let shape = TensorShape::new(sizes.iter().map(|&d| d as usize).collect::<Vec<_>>())?;
     let dtype = scalar_type_to_data_type(tensor.scalar_type())?;
     let host = HostTensor::new(shape, dtype, bytes)?;
-    Tensor::from_host(&Cpu, &host).map_err(ExecuTorchError::from)
+    Ok(Tensor::adopt_host(&host))
 }

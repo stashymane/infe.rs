@@ -86,7 +86,7 @@ impl CpuImageProcessor {
             convert_storage(src, &mut dst, &params);
         }
 
-        Ok(Tensor::from_storage(Cpu, shape, dtype, HostBytes(dst)))
+        Ok(Tensor::from_storage(Cpu, shape, dtype, HostBytes::from_vec(dst)))
     }
 }
 

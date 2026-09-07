@@ -3,6 +3,10 @@ package dev.stashy.infers
 import dev.stashy.infers.ffi.createCpuTensorFromBytes
 import dev.stashy.infers.internal.CloseGate
 import dev.stashy.infers.internal.TensorCodec
+import dev.stashy.infers.internal.createByteTensorView
+import dev.stashy.infers.internal.createFloatTensorView
+import dev.stashy.infers.internal.createIntTensorView
+import dev.stashy.infers.internal.createLongTensorView
 import dev.stashy.infers.internal.fromFfi
 import dev.stashy.infers.internal.toFfi
 import dev.stashy.infers.internal.withFfiErrors
@@ -14,8 +18,8 @@ import dev.stashy.infers.ffi.CpuTensor as FfiCpuTensor
  * Device-resident tensor on execution device [D]. Prefer creating tensors inside
  * [inferenceScope] so they are closed automatically when the scope exits.
  *
- * Readbacks are main-safe suspend functions. Native calls are not interruptible —
- * cancellation is observed between stages, not mid-readback.
+ * Read results via [floats] / [ints] / [longs] / [bytes] views. Native calls are not
+ * interruptible — cancellation is observed between stages, not mid-readback.
  */
 public interface Tensor<D : Device> : AutoCloseable {
     public val shape: TensorShape
@@ -23,13 +27,17 @@ public interface Tensor<D : Device> : AutoCloseable {
     public val deviceInfo: DeviceInfo
     public val byteSize: ULong
 
-    public suspend fun readBytes(): ByteArray
+    /** Typed float view over host storage (no full-tensor allocation). */
+    public suspend fun floats(): FloatTensorView
 
-    public suspend fun readFloats(): FloatArray
+    /** Typed int view over host storage (no full-tensor allocation). */
+    public suspend fun ints(): IntTensorView
 
-    public suspend fun readInts(): IntArray
+    /** Typed long view over host storage (no full-tensor allocation). */
+    public suspend fun longs(): LongTensorView
 
-    public suspend fun readLongs(): LongArray
+    /** Byte view over host storage (no full-tensor allocation). */
+    public suspend fun bytes(): ByteTensorView
 }
 
 /** Host-resident CPU tensor. */
@@ -59,18 +67,33 @@ public class CpuTensor @InfersInternalApi constructor(
             return handle.byteSize()
         }
 
-    override suspend fun readBytes(): ByteArray = withContext(Dispatchers.Default) {
+    override suspend fun floats(): FloatTensorView = withContext(Dispatchers.Default) {
         withFfiErrors {
             gate.ensureOpen()
-            handle.readBytes()
+            createFloatTensorView(handle, this@CpuTensor)
         }
     }
 
-    override suspend fun readFloats(): FloatArray = TensorCodec.decodeFloats(readBytes())
+    override suspend fun ints(): IntTensorView = withContext(Dispatchers.Default) {
+        withFfiErrors {
+            gate.ensureOpen()
+            createIntTensorView(handle, this@CpuTensor)
+        }
+    }
 
-    override suspend fun readInts(): IntArray = TensorCodec.decodeInts(readBytes())
+    override suspend fun longs(): LongTensorView = withContext(Dispatchers.Default) {
+        withFfiErrors {
+            gate.ensureOpen()
+            createLongTensorView(handle, this@CpuTensor)
+        }
+    }
 
-    override suspend fun readLongs(): LongArray = TensorCodec.decodeLongs(readBytes())
+    override suspend fun bytes(): ByteTensorView = withContext(Dispatchers.Default) {
+        withFfiErrors {
+            gate.ensureOpen()
+            createByteTensorView(handle, this@CpuTensor)
+        }
+    }
 
     @InfersInternalApi
     public fun ensureOpen(): Unit = gate.ensureOpen()

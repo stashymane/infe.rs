@@ -44,9 +44,12 @@ class XnnpackE2eTest {
                         val outputs = session.infer(pending)
                         assertTrue(outputs.isNotEmpty())
                         for (out in outputs) {
-                            val floats = out.readFloats()
-                            assertTrue(floats.isNotEmpty())
-                            assertTrue(floats.all { v -> v.isFinite() })
+                            out.floats().use { view ->
+                                assertTrue(view.size > 0)
+                                for (element in view) {
+                                    assertTrue(element.isFinite())
+                                }
+                            }
                         }
                     }
                 }

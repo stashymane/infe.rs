@@ -51,16 +51,16 @@ public final class dev/stashy/infers/vulkan/GpuSession : dev/stashy/infers/Model
 }
 
 public final class dev/stashy/infers/vulkan/GpuTensor : dev/stashy/infers/Tensor {
+	public fun bytes (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun close ()V
 	public final fun download (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun floats (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun getByteSize-s-VKNKU ()J
 	public fun getDeviceInfo ()Ldev/stashy/infers/DeviceInfo;
 	public fun getDtype ()Ldev/stashy/infers/DataType;
 	public fun getShape ()Ldev/stashy/infers/TensorShape;
-	public fun readBytes (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public fun readFloats (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public fun readInts (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public fun readLongs (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun ints (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun longs (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
 
 public final class dev/stashy/infers/vulkan/InferenceScopeExtensionsKt {

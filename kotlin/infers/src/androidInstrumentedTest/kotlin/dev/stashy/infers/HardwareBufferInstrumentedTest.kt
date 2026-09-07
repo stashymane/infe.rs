@@ -40,7 +40,7 @@ class HardwareBufferInstrumentedTest {
                     )
                     val pending = hardware.onCpu().process(processor, options)
                     assertEquals(TensorShape.of(1, 3, 2, 2), pending.shape)
-                    assertTrue(pending.materialize().readFloats().isNotEmpty())
+                    assertTrue(pending.materialize().floats().use { it.size > 0 })
                 }
             }
         }

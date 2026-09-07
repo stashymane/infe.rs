@@ -88,7 +88,7 @@ impl Device for Cpu {
                 bytes.len()
             )));
         }
-        Ok(crate::tensor::HostBytes(bytes.to_vec()))
+        Ok(crate::tensor::HostBytes::from_vec(bytes.to_vec()))
     }
 
     fn load(
@@ -97,7 +97,7 @@ impl Device for Cpu {
         shape: &crate::TensorShape,
         dtype: crate::DataType,
     ) -> Result<crate::HostTensor, crate::CoreError> {
-        crate::HostTensor::new(shape.clone(), dtype, storage.0.clone())
+        crate::HostTensor::new(shape.clone(), dtype, storage.arc())
     }
 
     fn materialize_deferred(

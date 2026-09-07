@@ -80,8 +80,54 @@ impl CpuTensor {
     }
 
     pub fn read_bytes(&self) -> Result<Vec<u8>, InfersError> {
-        Ok(self.inner.read_to_host()?.as_bytes().to_vec())
+        self.copy_bytes(0, self.inner.byte_size() as u64)
     }
+
+    /// Copy a byte range `[byte_offset, byte_offset + len)`.
+    pub fn copy_bytes(&self, byte_offset: u64, len: u64) -> Result<Vec<u8>, InfersError> {
+        let host = self.inner.read_to_host().map_err(InfersError::from)?;
+        host.copy_bytes_range(byte_offset as usize, len as usize)
+            .map_err(InfersError::from)
+    }
+
+    /// Copy `len` f32 elements starting at `start_elem`.
+    pub fn copy_f32(&self, start_elem: u64, len: u64) -> Result<Vec<f32>, InfersError> {
+        let host = self.inner.read_to_host().map_err(InfersError::from)?;
+        host.copy_f32_range(start_elem as usize, len as usize)
+            .map_err(InfersError::from)
+    }
+
+    /// Copy `len` i32 elements starting at `start_elem`.
+    pub fn copy_i32(&self, start_elem: u64, len: u64) -> Result<Vec<i32>, InfersError> {
+        let host = self.inner.read_to_host().map_err(InfersError::from)?;
+        host.copy_i32_range(start_elem as usize, len as usize)
+            .map_err(InfersError::from)
+    }
+
+    /// Copy `len` i64 elements starting at `start_elem`.
+    pub fn copy_i64(&self, start_elem: u64, len: u64) -> Result<Vec<i64>, InfersError> {
+        let host = self.inner.read_to_host().map_err(InfersError::from)?;
+        host.copy_i64_range(start_elem as usize, len as usize)
+            .map_err(InfersError::from)
+    }
+
+    /// Host data pointer as `u64` for JNI DirectByteBuffer mapping.
+    ///
+    /// Valid only while this [`CpuTensor`] handle is alive. Returns `(ptr, nbytes)`.
+    pub fn host_data_ptr(&self) -> Result<HostDataPtr, InfersError> {
+        let (ptr, len) = self.inner.host_ptr_len();
+        Ok(HostDataPtr {
+            ptr: ptr as u64,
+            nbytes: len as u64,
+        })
+    }
+}
+
+/// Opaque host buffer address for DirectByteBuffer bridging.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct HostDataPtr {
+    pub ptr: u64,
+    pub nbytes: u64,
 }
 
 /// Construct a CPU tensor from little-endian raw bytes matching [dtype].
@@ -113,7 +159,7 @@ pub fn create_cpu_tensor_from_bytes(
             });
         }
     };
-    let tensor = Tensor::from_host(&Cpu, &host).map_err(InfersError::from)?;
+    let tensor = Tensor::adopt_host(&host);
     Ok(Arc::new(CpuTensor::from_inner(tensor)))
 }
 
@@ -158,7 +204,31 @@ impl GpuTensor {
     }
 
     pub fn read_bytes(&self) -> Result<Vec<u8>, InfersError> {
-        Ok(self.inner.read_to_host()?.as_bytes().to_vec())
+        self.copy_bytes(0, self.inner.byte_size() as u64)
+    }
+
+    pub fn copy_bytes(&self, byte_offset: u64, len: u64) -> Result<Vec<u8>, InfersError> {
+        let host = self.inner.read_to_host().map_err(InfersError::from)?;
+        host.copy_bytes_range(byte_offset as usize, len as usize)
+            .map_err(InfersError::from)
+    }
+
+    pub fn copy_f32(&self, start_elem: u64, len: u64) -> Result<Vec<f32>, InfersError> {
+        let host = self.inner.read_to_host().map_err(InfersError::from)?;
+        host.copy_f32_range(start_elem as usize, len as usize)
+            .map_err(InfersError::from)
+    }
+
+    pub fn copy_i32(&self, start_elem: u64, len: u64) -> Result<Vec<i32>, InfersError> {
+        let host = self.inner.read_to_host().map_err(InfersError::from)?;
+        host.copy_i32_range(start_elem as usize, len as usize)
+            .map_err(InfersError::from)
+    }
+
+    pub fn copy_i64(&self, start_elem: u64, len: u64) -> Result<Vec<i64>, InfersError> {
+        let host = self.inner.read_to_host().map_err(InfersError::from)?;
+        host.copy_i64_range(start_elem as usize, len as usize)
+            .map_err(InfersError::from)
     }
 
     pub fn download(&self) -> Result<Arc<CpuTensor>, InfersError> {

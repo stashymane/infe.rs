@@ -12,7 +12,7 @@ class MapInferenceTest {
         val results =
             flowOf(1, 2, 3)
                 .mapInference { n ->
-                    cpuTensorOf(TensorShape.of(1), floatArrayOf(n.toFloat())).readFloats()[0]
+                    cpuTensorOf(TensorShape.of(1), floatArrayOf(n.toFloat())).floats().use { it[0] }
                 }.toList()
         assertEquals(listOf(1f, 2f, 3f), results)
     }

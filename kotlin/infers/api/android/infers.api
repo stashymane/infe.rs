@@ -5,6 +5,18 @@ public final class dev/stashy/infers/Backend : java/lang/AutoCloseable {
 	public final fun getHandle ()Ldev/stashy/infers/ffi/FfiBackend;
 }
 
+public abstract interface class dev/stashy/infers/ByteTensorView : dev/stashy/infers/TensorView, java/lang/Iterable, kotlin/jvm/internal/markers/KMappedMarker {
+	public abstract fun copyInto ([BIII)V
+	public static synthetic fun copyInto$default (Ldev/stashy/infers/ByteTensorView;[BIIIILjava/lang/Object;)V
+	public abstract fun get (I)B
+	public fun iterator ()Ljava/util/Iterator;
+}
+
+public final class dev/stashy/infers/ByteTensorView$DefaultImpls {
+	public static synthetic fun copyInto$default (Ldev/stashy/infers/ByteTensorView;[BIIIILjava/lang/Object;)V
+	public static fun iterator (Ldev/stashy/infers/ByteTensorView;)Ljava/util/Iterator;
+}
+
 public final class dev/stashy/infers/CpuDeferred : dev/stashy/infers/Deferred {
 	public fun <init> (Ldev/stashy/infers/ffi/CpuDeferred;)V
 	public fun close ()V
@@ -44,17 +56,17 @@ public final class dev/stashy/infers/CpuSession : dev/stashy/infers/ModelSession
 public final class dev/stashy/infers/CpuTensor : dev/stashy/infers/Tensor {
 	public static final field Companion Ldev/stashy/infers/CpuTensor$Companion;
 	public fun <init> (Ldev/stashy/infers/ffi/CpuTensor;)V
+	public fun bytes (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun close ()V
 	public final fun ensureOpen ()V
+	public fun floats (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun getByteSize-s-VKNKU ()J
 	public fun getDeviceInfo ()Ldev/stashy/infers/DeviceInfo;
 	public fun getDtype ()Ldev/stashy/infers/DataType;
 	public final fun getHandle ()Ldev/stashy/infers/ffi/CpuTensor;
 	public fun getShape ()Ldev/stashy/infers/TensorShape;
-	public fun readBytes (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public fun readFloats (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public fun readInts (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public fun readLongs (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun ints (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun longs (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
 
 public final class dev/stashy/infers/CpuTensor$Companion {
@@ -119,6 +131,18 @@ public final class dev/stashy/infers/FitMode : java/lang/Enum {
 	public static fun getEntries ()Lkotlin/enums/EnumEntries;
 	public static fun valueOf (Ljava/lang/String;)Ldev/stashy/infers/FitMode;
 	public static fun values ()[Ldev/stashy/infers/FitMode;
+}
+
+public abstract interface class dev/stashy/infers/FloatTensorView : dev/stashy/infers/TensorView, java/lang/Iterable, kotlin/jvm/internal/markers/KMappedMarker {
+	public abstract fun copyInto ([FIII)V
+	public static synthetic fun copyInto$default (Ldev/stashy/infers/FloatTensorView;[FIIIILjava/lang/Object;)V
+	public abstract fun get (I)F
+	public fun iterator ()Ljava/util/Iterator;
+}
+
+public final class dev/stashy/infers/FloatTensorView$DefaultImpls {
+	public static synthetic fun copyInto$default (Ldev/stashy/infers/FloatTensorView;[FIIIILjava/lang/Object;)V
+	public static fun iterator (Ldev/stashy/infers/FloatTensorView;)Ljava/util/Iterator;
 }
 
 public final class dev/stashy/infers/FlowsKt {
@@ -263,6 +287,30 @@ public final class dev/stashy/infers/InfersException$UnsupportedType : dev/stash
 public abstract interface annotation class dev/stashy/infers/InfersInternalApi : java/lang/annotation/Annotation {
 }
 
+public abstract interface class dev/stashy/infers/IntTensorView : dev/stashy/infers/TensorView, java/lang/Iterable, kotlin/jvm/internal/markers/KMappedMarker {
+	public abstract fun copyInto ([IIII)V
+	public static synthetic fun copyInto$default (Ldev/stashy/infers/IntTensorView;[IIIIILjava/lang/Object;)V
+	public abstract fun get (I)I
+	public fun iterator ()Ljava/util/Iterator;
+}
+
+public final class dev/stashy/infers/IntTensorView$DefaultImpls {
+	public static synthetic fun copyInto$default (Ldev/stashy/infers/IntTensorView;[IIIIILjava/lang/Object;)V
+	public static fun iterator (Ldev/stashy/infers/IntTensorView;)Ljava/util/Iterator;
+}
+
+public abstract interface class dev/stashy/infers/LongTensorView : dev/stashy/infers/TensorView, java/lang/Iterable, kotlin/jvm/internal/markers/KMappedMarker {
+	public abstract fun copyInto ([JIII)V
+	public static synthetic fun copyInto$default (Ldev/stashy/infers/LongTensorView;[JIIIILjava/lang/Object;)V
+	public abstract fun get (I)J
+	public fun iterator ()Ljava/util/Iterator;
+}
+
+public final class dev/stashy/infers/LongTensorView$DefaultImpls {
+	public static synthetic fun copyInto$default (Ldev/stashy/infers/LongTensorView;[JIIIILjava/lang/Object;)V
+	public static fun iterator (Ldev/stashy/infers/LongTensorView;)Ljava/util/Iterator;
+}
+
 public abstract interface class dev/stashy/infers/ModelSession : java/lang/AutoCloseable {
 	public abstract fun getDeviceInfo ()Ldev/stashy/infers/DeviceInfo;
 	public abstract fun getInputShapes ()Ljava/util/List;
@@ -356,14 +404,14 @@ public final class dev/stashy/infers/Rotation : java/lang/Enum {
 }
 
 public abstract interface class dev/stashy/infers/Tensor : java/lang/AutoCloseable {
+	public abstract fun bytes (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun floats (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public abstract fun getByteSize-s-VKNKU ()J
 	public abstract fun getDeviceInfo ()Ldev/stashy/infers/DeviceInfo;
 	public abstract fun getDtype ()Ldev/stashy/infers/DataType;
 	public abstract fun getShape ()Ldev/stashy/infers/TensorShape;
-	public abstract fun readBytes (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public abstract fun readFloats (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public abstract fun readInts (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public abstract fun readLongs (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun ints (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun longs (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
 
 public final class dev/stashy/infers/TensorLayout : java/lang/Enum {
@@ -390,6 +438,17 @@ public final class dev/stashy/infers/TensorShape$Companion {
 	public final fun of ([J)Ldev/stashy/infers/TensorShape;
 }
 
+public abstract interface class dev/stashy/infers/TensorView : java/lang/AutoCloseable {
+	public abstract fun getSize ()I
+}
+
+public final class dev/stashy/infers/TensorViewBuffersKt {
+	public static final fun asBuffer (Ldev/stashy/infers/ByteTensorView;)Ljava/nio/ByteBuffer;
+	public static final fun asBuffer (Ldev/stashy/infers/FloatTensorView;)Ljava/nio/FloatBuffer;
+	public static final fun asBuffer (Ldev/stashy/infers/IntTensorView;)Ljava/nio/IntBuffer;
+	public static final fun asBuffer (Ldev/stashy/infers/LongTensorView;)Ljava/nio/LongBuffer;
+}
+
 public final class dev/stashy/infers/internal/BridgeKt {
 	public static final fun fromFfi (Ldev/stashy/infers/ffi/DataType;)Ldev/stashy/infers/DataType;
 	public static final fun fromFfi (Ldev/stashy/infers/ffi/DeviceInfo;)Ldev/stashy/infers/DeviceInfo;
@@ -413,6 +472,17 @@ public final class dev/stashy/infers/internal/CloseGate {
 	public fun <init> (Ljava/lang/String;)V
 	public final fun ensureOpen ()V
 	public final fun markClosed ()Z
+}
+
+public final class dev/stashy/infers/internal/CreateHostViews_androidKt {
+	public static final fun createByteTensorView (Ldev/stashy/infers/ffi/CpuTensor;Ljava/lang/AutoCloseable;Z)Ldev/stashy/infers/ByteTensorView;
+	public static synthetic fun createByteTensorView$default (Ldev/stashy/infers/ffi/CpuTensor;Ljava/lang/AutoCloseable;ZILjava/lang/Object;)Ldev/stashy/infers/ByteTensorView;
+	public static final fun createFloatTensorView (Ldev/stashy/infers/ffi/CpuTensor;Ljava/lang/AutoCloseable;Z)Ldev/stashy/infers/FloatTensorView;
+	public static synthetic fun createFloatTensorView$default (Ldev/stashy/infers/ffi/CpuTensor;Ljava/lang/AutoCloseable;ZILjava/lang/Object;)Ldev/stashy/infers/FloatTensorView;
+	public static final fun createIntTensorView (Ldev/stashy/infers/ffi/CpuTensor;Ljava/lang/AutoCloseable;Z)Ldev/stashy/infers/IntTensorView;
+	public static synthetic fun createIntTensorView$default (Ldev/stashy/infers/ffi/CpuTensor;Ljava/lang/AutoCloseable;ZILjava/lang/Object;)Ldev/stashy/infers/IntTensorView;
+	public static final fun createLongTensorView (Ldev/stashy/infers/ffi/CpuTensor;Ljava/lang/AutoCloseable;Z)Ldev/stashy/infers/LongTensorView;
+	public static synthetic fun createLongTensorView$default (Ldev/stashy/infers/ffi/CpuTensor;Ljava/lang/AutoCloseable;ZILjava/lang/Object;)Ldev/stashy/infers/LongTensorView;
 }
 
 public final class dev/stashy/infers/internal/TensorCodec {

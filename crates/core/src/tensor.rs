@@ -1,5 +1,6 @@
 use crate::device::{Cpu, Device};
 use crate::error::CoreError;
+use std::sync::Arc;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum DataType {
@@ -80,15 +81,23 @@ impl TryFrom<Vec<usize>> for TensorShape {
 }
 
 /// Owned host tensor payload (dtype-tagged bytes).
+///
+/// Bytes are reference-counted so CPU tensors and host views can share storage
+/// without copying the payload.
 #[derive(Clone, Debug, PartialEq)]
 pub struct HostTensor {
     shape: TensorShape,
     dtype: DataType,
-    bytes: Vec<u8>,
+    bytes: Arc<[u8]>,
 }
 
 impl HostTensor {
-    pub fn new(shape: TensorShape, dtype: DataType, bytes: Vec<u8>) -> Result<Self, CoreError> {
+    pub fn new(
+        shape: TensorShape,
+        dtype: DataType,
+        bytes: impl Into<Arc<[u8]>>,
+    ) -> Result<Self, CoreError> {
+        let bytes = bytes.into();
         if bytes.len() != shape.byte_size(dtype) {
             return Err(CoreError::InvalidShape(format!(
                 "Byte size mismatch: shape requires {} bytes, got {}",
@@ -137,6 +146,11 @@ impl HostTensor {
         &self.bytes
     }
 
+    #[inline]
+    pub fn arc_bytes(&self) -> Arc<[u8]> {
+        Arc::clone(&self.bytes)
+    }
+
     pub fn as_slice_f32(&self) -> Result<&[f32], CoreError> {
         if self.dtype != DataType::F32 {
             return Err(CoreError::InvalidDataType {
@@ -176,6 +190,51 @@ impl HostTensor {
         }
         crate::bytes::cast_bytes(&self.bytes)
     }
+
+    /// Copy a byte range `[byte_offset, byte_offset + len)`.
+    pub fn copy_bytes_range(&self, byte_offset: usize, len: usize) -> Result<Vec<u8>, CoreError> {
+        let end = byte_offset.checked_add(len).ok_or_else(|| {
+            CoreError::InvalidArgument("byte range overflow".into())
+        })?;
+        if end > self.bytes.len() {
+            return Err(CoreError::InvalidArgument(format!(
+                "byte range [{byte_offset}, {end}) exceeds tensor byte size {}",
+                self.bytes.len()
+            )));
+        }
+        Ok(self.bytes[byte_offset..end].to_vec())
+    }
+
+    /// Copy `len` f32 elements starting at `start_elem`.
+    pub fn copy_f32_range(&self, start_elem: usize, len: usize) -> Result<Vec<f32>, CoreError> {
+        let slice = self.as_slice_f32()?;
+        copy_elem_range(slice, start_elem, len)
+    }
+
+    /// Copy `len` i32 elements starting at `start_elem`.
+    pub fn copy_i32_range(&self, start_elem: usize, len: usize) -> Result<Vec<i32>, CoreError> {
+        let slice = self.as_slice_i32()?;
+        copy_elem_range(slice, start_elem, len)
+    }
+
+    /// Copy `len` i64 elements starting at `start_elem`.
+    pub fn copy_i64_range(&self, start_elem: usize, len: usize) -> Result<Vec<i64>, CoreError> {
+        let slice = self.as_slice_i64()?;
+        copy_elem_range(slice, start_elem, len)
+    }
+}
+
+fn copy_elem_range<T: Copy>(slice: &[T], start: usize, len: usize) -> Result<Vec<T>, CoreError> {
+    let end = start.checked_add(len).ok_or_else(|| {
+        CoreError::InvalidArgument("element range overflow".into())
+    })?;
+    if end > slice.len() {
+        return Err(CoreError::InvalidArgument(format!(
+            "element range [{start}, {end}) exceeds tensor element count {}",
+            slice.len()
+        )));
+    }
+    Ok(slice[start..end].to_vec())
 }
 
 /// Device-resident tensor. The device type parameter prevents cross-device misuse at compile time.
@@ -250,6 +309,24 @@ impl<D: Device> Tensor<D> {
     }
 }
 
+impl Tensor<Cpu> {
+    /// Adopt a host tensor by cloning the shared [`Arc`] payload (no byte copy).
+    pub fn adopt_host(host: &HostTensor) -> Self {
+        Self::from_storage(
+            Cpu,
+            host.shape().clone(),
+            host.dtype(),
+            HostBytes(host.arc_bytes()),
+        )
+    }
+
+    /// Pointer and length of the underlying host bytes (valid while this tensor lives).
+    pub fn host_ptr_len(&self) -> (*const u8, usize) {
+        let slice = self.storage.as_slice();
+        (slice.as_ptr(), slice.len())
+    }
+}
+
 /// Optional fast-path adoption of a tensor already on an equivalent device handle.
 pub trait TensorAdopt: Device {
     fn try_adopt_tensor<S: Device>(&self, tensor: &Tensor<S>) -> Option<Tensor<Self>>;
@@ -271,6 +348,35 @@ impl TensorAdopt for Cpu {
     }
 }
 
-/// CPU tensor storage is host bytes.
+/// CPU tensor storage is shared host bytes.
 #[derive(Clone, Debug, PartialEq)]
-pub struct HostBytes(pub Vec<u8>);
+pub struct HostBytes(pub Arc<[u8]>);
+
+impl HostBytes {
+    #[inline]
+    pub fn from_vec(bytes: Vec<u8>) -> Self {
+        Self(bytes.into())
+    }
+
+    #[inline]
+    pub fn as_slice(&self) -> &[u8] {
+        &self.0
+    }
+
+    #[inline]
+    pub fn arc(&self) -> Arc<[u8]> {
+        Arc::clone(&self.0)
+    }
+}
+
+impl From<Vec<u8>> for HostBytes {
+    fn from(bytes: Vec<u8>) -> Self {
+        Self::from_vec(bytes)
+    }
+}
+
+impl From<Arc<[u8]>> for HostBytes {
+    fn from(bytes: Arc<[u8]>) -> Self {
+        Self(bytes)
+    }
+}

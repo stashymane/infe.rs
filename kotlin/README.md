@@ -26,7 +26,12 @@ cameraSource.forEach { frame ->
         val image = HostImage.fromBytes(frame.bytes, frame.width, frame.height, frame.format)
         val input = processor.process(image, options)
         val outputs = session.infer(input)
-        outputFlow.emit(outputs.first().readFloats())
+        // Read via views: copy only what you need (or asBuffer() for zero-copy on JVM/Android).
+        outputs.first().floats().use { view ->
+            val preview = FloatArray(minOf(8, view.size))
+            view.copyInto(preview, endIndex = preview.size)
+            outputFlow.emit(preview)
+        }
     }
 }
 

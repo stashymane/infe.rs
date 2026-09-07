@@ -47,7 +47,7 @@ class VulkanPipelineTest {
                         val pending = hardware.on(it).process(gpu, options)
                         val out = pending.materialize()
                         assertEquals(cpuShape, out.shape)
-                        assertEquals(12, out.readFloats().size)
+                        assertEquals(12, out.floats().use { it.size })
                     }
                 }
             }

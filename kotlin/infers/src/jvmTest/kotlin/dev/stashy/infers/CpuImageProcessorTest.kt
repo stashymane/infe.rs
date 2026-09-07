@@ -17,7 +17,7 @@ class CpuImageProcessorTest {
                 val out = pending.materialize()
                 assertEquals(TensorShape.of(1, 3, 2, 2), out.shape)
                 assertEquals(DataType.F32, out.dtype)
-                assertEquals(12, out.readFloats().size)
+                assertEquals(12, out.floats().use { it.size })
             }
         }
     }
