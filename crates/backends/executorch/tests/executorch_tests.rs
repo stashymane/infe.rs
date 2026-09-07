@@ -295,7 +295,7 @@ fn test_prepare_gpu_inputs_accepts_vulkan_tensors() {
     let gpu = gpu_tensor_f32(&vulkan, shape, &[0.0; 64 * 64 * 3]).expect("gpu tensor");
 
     let plan = gpu_input::prepare_inputs(&[&gpu], vulkan.context(), None).expect("prepare_inputs");
-    assert_eq!(plan.tensor_ptrs.len(), 1);
+    assert_eq!(plan.evalues().len(), 1);
     assert_eq!(plan.skip_staging_mask, 0);
 }
 

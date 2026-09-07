@@ -45,3 +45,37 @@ index ff62d4f..208c2ae 100644
        } else if (compute_graph->val_is_symint(iref)) {
          VK_CHECK_COND(
              args[i]->isTensor(),
+diff --git a/runtime/executor/method.cpp b/runtime/executor/method.cpp
+--- a/runtime/executor/method.cpp
++++ b/runtime/executor/method.cpp
+@@ -33,6 +33,15 @@
+ #include <executorch/runtime/platform/profiler.h>
+ #include <executorch/schema/program_generated.h>
+ 
++extern "C" {
++// Weak stub so XNNPACK-only links succeed; libinfers_et_vulkan_ffi.a overrides
++// this when the Vulkan GPU-input path is linked.
++__attribute__((weak)) int infers_et_vulkan_should_skip_staging_copy(
++    uint32_t /*input_index*/) {
++  return 0;
++}
++}
++
+ namespace executorch {
+ namespace ET_RUNTIME_NAMESPACE {
+ 
+@@ -1159,6 +1168,14 @@
+       input_idx,
+       inputs_size());
+ 
++  // GPU staging already holds this input (see vulkan-gpu-input skip mask).
++  // Skip host memcpy / share; Module::execute may pass a dummy EValue.
++  if (infers_et_vulkan_should_skip_staging_copy(
++          static_cast<uint32_t>(input_idx))) {
++    input_set_[input_idx] = true;
++    return Error::Ok;
++  }
++
+   const auto& e = get_value(get_input_index(input_idx));
+ 
+   if (!(e.isNone() || e.isTensor() || e.isScalar() || e.isString())) {

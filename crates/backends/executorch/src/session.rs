@@ -298,7 +298,7 @@ impl Session<Vulkan> for ExecuTorchSession<Vulkan> {
 
         let plan = gpu_input::prepare_inputs(&[&tensor], &extra.context, extra.vulkan_graph)?;
         gpu_input::set_skip_staging_copy_mask(plan.skip_staging_mask);
-        let evalues: Vec<_> = plan.tensor_ptrs.iter().map(|p| p.as_evalue()).collect();
+        let evalues = plan.evalues();
         let outputs = module
             .execute(&self.method_name, &evalues)
             .map_err(|e| CoreError::InferenceFailed(format!("ExecuTorch execute failed: {e:?}")));

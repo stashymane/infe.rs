@@ -2,6 +2,7 @@
 
 use crate::error::ExecuTorchError;
 pub use crate::tensor_ptr::{evalue_to_cpu_tensor, OwnedTensorPtr};
+use executorch::evalue::EValue;
 use executorch::tensor::{TensorPtrBuilder, View};
 use infers_core::{CoreError, DataType, Tensor, TensorShape};
 use infers_gpu::{VulkanBufferHandle, VulkanContext};
@@ -194,16 +195,23 @@ impl HostVisibleInput {
     }
 }
 
-/// Tell the patched Vulkan delegate which inputs already have their staging
-/// they borrow from.
+/// Per-input slot for [`GpuInputPlan::evalues`].
+enum PreparedInput {
+    /// Staging already filled; patched `Method::set_input` ignores this evalue.
+    SkipStaging,
+    /// Host-visible fallback tensor (index into `GpuInputPlan::owned_ptrs`).
+    Owned { owned_index: usize },
+}
+
+/// Prepared GPU inputs for one `Module::execute`.
 ///
-/// `tensor_ptrs` may contain raw pointers into `host_fallback`'s mapped memory
-/// (see [`HostVisibleInput::tensor_ptr`]), typed `'static` because ExecuTorch
-/// cannot express the borrow. The [`Drop`] impl releases the tensor pointers
-/// before the buffers they point into, so the ordering does not silently depend
-/// on field declaration order.
+/// Skip-staging slots use [`EValue::none`] — the patched runtime marks the
+/// input set without copying, and the Vulkan delegate reads GPU staging.
+/// Owned host-visible pointers may alias `host_fallback`'s mapped memory; the
+/// [`Drop`] impl releases those pointers before the buffers they point into.
 pub struct GpuInputPlan {
-    pub tensor_ptrs: Vec<OwnedTensorPtr>,
+    prepared: Vec<PreparedInput>,
+    owned_ptrs: Vec<OwnedTensorPtr>,
     pub skip_staging_mask: u64,
     host_fallback: Vec<HostVisibleInput>,
     _gpu_pins: Vec<Tensor<Vulkan>>,
@@ -213,8 +221,24 @@ impl Drop for GpuInputPlan {
     fn drop(&mut self) {
         // Drop the tensor pointers first: some alias `host_fallback`'s mappings,
         // which are unmapped when those buffers are freed.
-        self.tensor_ptrs.clear();
+        self.owned_ptrs.clear();
         self.host_fallback.clear();
+    }
+}
+
+impl GpuInputPlan {
+    /// Build ExecuTorch evalues for `execute`.
+    ///
+    /// Skip-staging inputs become [`EValue::none`]; the skip mask must already
+    /// be installed so `Method::set_input` does not read them.
+    pub fn evalues(&self) -> Vec<EValue<'_>> {
+        self.prepared
+            .iter()
+            .map(|prep| match *prep {
+                PreparedInput::SkipStaging => EValue::none(),
+                PreparedInput::Owned { owned_index } => self.owned_ptrs[owned_index].as_evalue(),
+            })
+            .collect()
     }
 }
 
@@ -223,7 +247,8 @@ pub fn prepare_inputs(
     context: &Arc<VulkanContext>,
     vulkan_graph: Option<VulkanComputeGraph>,
 ) -> Result<GpuInputPlan, CoreError> {
-    let mut tensor_ptrs = Vec::with_capacity(inputs.len());
+    let mut prepared = Vec::with_capacity(inputs.len());
+    let mut owned_ptrs = Vec::new();
     let mut skip_staging_mask = 0u64;
     let mut host_fallback = Vec::new();
     let mut gpu_pins = Vec::new();
@@ -256,31 +281,41 @@ pub fn prepare_inputs(
                 staging_size,
                 &format!("input {index} ET-VK staging"),
             )?;
-            context
-                .copy_buffer(src.buffer, src.offset, dst.buffer, dst.offset, needed)
-                .map_err(|err| CoreError::BufferTransferFailed(err.to_string()))?;
+            // Preprocess with `MaterializeTarget::SessionInput` already wrote
+            // into this staging buffer; a self-copy is redundant and overlapping
+            // `vkCmdCopyBuffer` regions are undefined.
+            let already_in_staging =
+                src.buffer == dst.buffer && src.offset == dst.offset;
+            if !already_in_staging {
+                context
+                    .copy_buffer(src.buffer, src.offset, dst.buffer, dst.offset, needed)
+                    .map_err(|err| CoreError::BufferTransferFailed(err.to_string()))?;
+            }
             skip_staging_mask |= 1u64 << index;
-            tensor_ptrs.push(placeholder_tensor_ptr(input.shape(), input.dtype())?);
+            prepared.push(PreparedInput::SkipStaging);
             continue;
         }
 
         let host = HostVisibleInput::new(context, input.shape().clone(), input.dtype())?;
         host.copy_from_gpu(context, src)
             .map_err(|err| CoreError::BufferTransferFailed(err.to_string()))?;
-        tensor_ptrs.push(host.tensor_ptr()?);
+        let owned_index = owned_ptrs.len();
+        owned_ptrs.push(host.tensor_ptr()?);
         host_fallback.push(host);
+        prepared.push(PreparedInput::Owned { owned_index });
     }
 
     Ok(GpuInputPlan {
-        tensor_ptrs,
+        prepared,
+        owned_ptrs,
         skip_staging_mask,
         host_fallback,
         _gpu_pins: gpu_pins,
     })
 }
 
-/// Tell the patched Vulkan delegate which inputs already have their staging
-/// buffers filled, so it skips its own host-to-staging copy.
+/// Tell the patched Vulkan delegate / `Method::set_input` which inputs already
+/// have their staging buffers filled, so both skip their host copies.
 ///
 /// The mask is thread-local on the C++ side, so this must be called on the same
 /// thread that goes on to run `execute`.
@@ -288,45 +323,6 @@ pub fn set_skip_staging_copy_mask(mask: u64) {
     // SAFETY: the callee only stores `mask` in a thread-local and cannot fail or
     // unwind.
     unsafe { infers_et_vulkan_set_skip_staging_copy_mask(mask) };
-}
-
-/// Placeholder tensor for skip-staging inputs. The patched Vulkan delegate
-/// reads GPU staging memory instead of this buffer, but ExecuTorch's runtime
-/// still copies `numel * elem_size` bytes in `Method::set_input` before the
-/// delegate runs. The backing storage must therefore cover the full tensor.
-fn placeholder_tensor_ptr(
-    shape: &TensorShape,
-    dtype: DataType,
-) -> Result<OwnedTensorPtr, CoreError> {
-    let dims: Vec<i32> = shape.dims().iter().map(|&d| d as i32).collect();
-    let numel = shape.element_count();
-    match dtype {
-        DataType::F32 => {
-            let ptr = unsafe {
-                TensorPtrBuilder::<View<f32>>::from_vec(vec![0.0f32; numel])
-                    .sizes(dims.iter().copied())
-                    .build()
-                    .map_err(|e| {
-                        CoreError::InferenceFailed(format!("TensorPtr build failed: {e:?}"))
-                    })?
-            };
-            Ok(OwnedTensorPtr::F32(ptr))
-        }
-        DataType::U8 => {
-            let ptr = unsafe {
-                TensorPtrBuilder::<View<u8>>::from_vec(vec![0u8; numel])
-                    .sizes(dims.iter().copied())
-                    .build()
-                    .map_err(|e| {
-                        CoreError::InferenceFailed(format!("TensorPtr build failed: {e:?}"))
-                    })?
-            };
-            Ok(OwnedTensorPtr::U8(ptr))
-        }
-        other => Err(CoreError::InferenceFailed(format!(
-            "Unsupported placeholder dtype: {other:?}"
-        ))),
-    }
 }
 
 fn require_transfer_bytes(

@@ -1,8 +1,9 @@
 //! GPU input staging helpers for ExecuTorch Vulkan delegate integration.
 //!
 //! Requires patched ExecuTorch sources (see `nix/patches/vulkan-gpu-input.patch`).
-//! The Vulkan backend registers its `ComputeGraph` at init and honors a per-input
-//! skip mask after GPU copies into delegate staging buffers.
+//! The Vulkan backend registers its `ComputeGraph` at init. A per-input skip mask
+//! suppresses both `Method::set_input` host memcpy and the delegate's host-to-
+//! staging copy after GPU work has already filled staging.
 
 #include <atomic>
 #include <cstdint>
