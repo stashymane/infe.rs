@@ -24,13 +24,6 @@ public enum class FitMode {
     Crop,
 }
 
-public enum class Rotation {
-    None,
-    Rot90,
-    Rot180,
-    Rot270,
-}
-
 public enum class TensorLayout {
     Nhwc,
     Nchw,
@@ -56,7 +49,8 @@ public data class ProcessingOptions(
     public val srcFormat: ImageFormat,
     public val destFormat: ImageFormat,
     public val fitMode: FitMode = FitMode.Stretch,
-    public val rotation: Rotation = Rotation.None,
+    /** Clockwise rotation in degrees (y-down image space). `0f` is identity. */
+    public val rotationDegrees: Float = 0f,
     public val destLayout: TensorLayout = destFormat.defaultLayout(),
 ) {
     public companion object {
@@ -130,7 +124,8 @@ public class ProcessingOptionsBuilder {
 
     public var fitMode: FitMode = FitMode.Stretch
 
-    public var rotation: Rotation = Rotation.None
+    /** Clockwise rotation in degrees (y-down image space). `0f` is identity. */
+    public var rotationDegrees: Float = 0f
 
     public var destLayout: TensorLayout? = null
 
@@ -161,7 +156,7 @@ public class ProcessingOptionsBuilder {
             srcFormat = srcFormat,
             destFormat = destFormat,
             fitMode = fitMode,
-            rotation = rotation,
+            rotationDegrees = rotationDegrees,
             destLayout = destLayout ?: destFormat.defaultLayout(),
         )
     }

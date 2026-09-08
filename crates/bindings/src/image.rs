@@ -4,8 +4,7 @@ use infers_core::HardwareImage as CoreHardwareImage;
 use processing::CpuImageProcessor as CoreCpuImageProcessor;
 use processing_core::{
     FitMode as CoreFitMode, ImageFormat as CoreImageFormat,
-    ProcessingOptions as CoreProcessingOptions, Rotation as CoreRotation,
-    TensorLayout as CoreTensorLayout,
+    ProcessingOptions as CoreProcessingOptions, TensorLayout as CoreTensorLayout,
 };
 use std::sync::Arc;
 
@@ -46,19 +45,6 @@ uniffi_mirror! {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, uniffi::Enum)]
-pub enum Rotation {
-    None,
-    Rot90,
-    Rot180,
-    Rot270,
-}
-
-uniffi_mirror! {
-    Rotation <=> CoreRotation,
-    [None, Rot90, Rot180, Rot270]
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, uniffi::Enum)]
 pub enum TensorLayout {
     Nhwc,
     Nchw,
@@ -69,7 +55,7 @@ uniffi_mirror! {
     [Nhwc, Nchw]
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
 pub struct ProcessingOptions {
     pub src_w: u32,
     pub src_h: u32,
@@ -82,7 +68,7 @@ pub struct ProcessingOptions {
     pub src_format: ImageFormat,
     pub dest_format: ImageFormat,
     pub fit_mode: FitMode,
-    pub rotation: Rotation,
+    pub rotation_degrees: f32,
     pub dest_layout: TensorLayout,
 }
 
@@ -100,7 +86,7 @@ impl From<ProcessingOptions> for CoreProcessingOptions {
             src_format: opts.src_format.into(),
             dest_format: opts.dest_format.into(),
             fit_mode: opts.fit_mode.into(),
-            rotation: opts.rotation.into(),
+            rotation_degrees: opts.rotation_degrees,
             dest_layout: opts.dest_layout.into(),
         }
     }

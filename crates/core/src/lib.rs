@@ -20,7 +20,7 @@ pub use deferred::Deferred;
 pub use device::{Cpu, Device, DeviceInfo, DeviceKind};
 pub use error::CoreError;
 pub use image::{
-    CpuImage, FitMode, HardwareImage, Image, ImageFormat, ProcessingOptions, Rotation, TensorLayout,
+    CpuImage, FitMode, HardwareImage, Image, ImageFormat, ProcessingOptions, TensorLayout,
 };
 pub use infer_input::{prepare_infer, InferInput};
 pub use layout::{shape_for, shape_nchw, shape_nhwc};

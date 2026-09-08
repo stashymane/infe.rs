@@ -1,4 +1,4 @@
-use infers_core::{Cpu, DataType, HardwareImage, ImageFormat, ProcessingOptions, Rotation, Tensor};
+use infers_core::{Cpu, DataType, HardwareImage, ImageFormat, ProcessingOptions, Tensor};
 use processing_core::TensorLayout;
 #[cfg(feature = "vulkan")]
 use infers_gpu::{defer_hardware, Vulkan};
@@ -69,7 +69,7 @@ fn test_cpu_processor_stretch_rgb888() {
         dest_h: 32,
         dest_format: ImageFormat::Rgb888,
         fit_mode: FitMode::Stretch,
-        rotation: Rotation::None,
+        rotation_degrees: 0.0,
         ..Default::default()
     };
 
@@ -96,7 +96,7 @@ fn test_cpu_processor_contain_rgbf32() {
         dest_format: ImageFormat::Rgbf32,
         dest_layout: TensorLayout::default_for_dest_format(ImageFormat::Rgbf32),
         fit_mode: FitMode::Contain,
-        rotation: Rotation::None,
+        rotation_degrees: 0.0,
         ..Default::default()
     };
 
@@ -118,12 +118,7 @@ fn test_cpu_processor_rotations() {
     let (_, input) = create_test_pattern_image(60, 40);
     let processor = CpuImageProcessor::new();
 
-    for rot in [
-        Rotation::None,
-        Rotation::Rot90,
-        Rotation::Rot180,
-        Rotation::Rot270,
-    ] {
+    for degrees in [0.0, 90.0, 180.0, 270.0, 15.0, 45.0] {
         let opts = ProcessingOptions {
             src_w: 60,
             src_h: 40,
@@ -131,7 +126,7 @@ fn test_cpu_processor_rotations() {
             dest_h: 48,
             dest_format: ImageFormat::Rgb888,
             fit_mode: FitMode::Stretch,
-            rotation: rot,
+            rotation_degrees: degrees,
             ..Default::default()
         };
 
@@ -174,7 +169,7 @@ fn test_gpu_process_outputs() {
             dest_h: 32,
             dest_format: ImageFormat::Rgb888,
             fit_mode: FitMode::Stretch,
-            rotation: Rotation::None,
+            rotation_degrees: 0.0,
             ..Default::default()
         },
         ProcessingOptions {
@@ -189,7 +184,7 @@ fn test_gpu_process_outputs() {
             dest_format: ImageFormat::Rgbf32,
             dest_layout: TensorLayout::default_for_dest_format(ImageFormat::Rgbf32),
             fit_mode: FitMode::Contain,
-            rotation: Rotation::Rot90,
+            rotation_degrees: 90.0,
             ..Default::default()
         },
         ProcessingOptions {
@@ -203,7 +198,7 @@ fn test_gpu_process_outputs() {
             dest_h: 32,
             dest_format: ImageFormat::Rgb888,
             fit_mode: FitMode::Crop,
-            rotation: Rotation::Rot180,
+            rotation_degrees: 180.0,
             ..Default::default()
         },
     ];
@@ -260,7 +255,7 @@ fn test_gpu_process_pooled_repeated_calls_match_cpu() {
         dest_format: ImageFormat::Rgbf32,
         dest_layout: TensorLayout::default_for_dest_format(ImageFormat::Rgbf32),
         fit_mode: FitMode::Stretch,
-        rotation: Rotation::None,
+        rotation_degrees: 0.0,
         ..Default::default()
     };
 
@@ -296,7 +291,7 @@ fn test_cpu_identity_memcpy_stretch() {
         dest_h: 32,
         dest_format: ImageFormat::Rgb888,
         fit_mode: FitMode::Stretch,
-        rotation: Rotation::None,
+        rotation_degrees: 0.0,
         ..Default::default()
     };
     let out = process_cpu(&processor, &input, &opts);
@@ -315,7 +310,7 @@ fn test_cpu_contain_letterbox_zeros() {
         dest_h: 64,
         dest_format: ImageFormat::Rgb888,
         fit_mode: FitMode::Contain,
-        rotation: Rotation::None,
+        rotation_degrees: 0.0,
         ..Default::default()
     };
     let out = process_cpu(&processor, &input, &opts);
@@ -358,7 +353,7 @@ fn test_cpu_gpu_parity_storage_path() {
             dest_h: 32,
             dest_format: ImageFormat::Rgb888,
             fit_mode: FitMode::Stretch,
-            rotation: Rotation::None,
+            rotation_degrees: 0.0,
             ..Default::default()
         },
         ProcessingOptions {
@@ -369,7 +364,7 @@ fn test_cpu_gpu_parity_storage_path() {
             dest_format: ImageFormat::Rgbf32,
             dest_layout: TensorLayout::default_for_dest_format(ImageFormat::Rgbf32),
             fit_mode: FitMode::Contain,
-            rotation: Rotation::Rot90,
+            rotation_degrees: 90.0,
             ..Default::default()
         },
         ProcessingOptions {
@@ -379,7 +374,7 @@ fn test_cpu_gpu_parity_storage_path() {
             dest_h: 32,
             dest_format: ImageFormat::Rgb888,
             fit_mode: FitMode::Crop,
-            rotation: Rotation::Rot180,
+            rotation_degrees: 180.0,
             ..Default::default()
         },
     ];

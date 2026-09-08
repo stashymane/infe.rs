@@ -1,6 +1,6 @@
 //! Dest-centric image convert shared by CPU and GPU (storage-buffer) paths.
 
-use crate::{FitMode, ImageFormat, ProcessingOptions, Rotation, TensorLayout};
+use crate::{FitMode, ImageFormat, ProcessingOptions, TensorLayout};
 
 #[inline(always)]
 fn floor_f32(x: f32) -> f32 {
@@ -178,18 +178,25 @@ pub fn sample_src(src: &[u8], params: &ProcessingOptions, fx: f32, fy: f32) -> (
     }
 }
 
-/// Map a destination pixel center to source coordinates. `valid` is false in letterbox padding.
+/// Axis-aligned bounding box of a `w`×`h` rectangle rotated clockwise by `(cos, sin)`.
 #[inline(always)]
+fn rotated_aabb(w: f32, h: f32, cos_t: f32, sin_t: f32) -> (f32, f32) {
+    let abs_c = if cos_t < 0.0 { -cos_t } else { cos_t };
+    let abs_s = if sin_t < 0.0 { -sin_t } else { sin_t };
+    (w * abs_c + h * abs_s, w * abs_s + h * abs_c)
+}
+
+/// Map a destination pixel to source coordinates. `valid` is false in letterbox padding.
 pub fn map_dst_to_src(params: &ProcessingOptions, dx: f32, dy: f32) -> (f32, f32, bool) {
     let (crop_x, crop_y, crop_w, crop_h) = {
         let (x, y, w, h) = params.effective_crop();
         (x as f32, y as f32, w as f32, h as f32)
     };
 
-    let (rot_w, rot_h) = match params.rotation {
-        Rotation::None | Rotation::Rot180 => (crop_w, crop_h),
-        Rotation::Rot90 | Rotation::Rot270 => (crop_h, crop_w),
-    };
+    let rad = params.rotation_degrees * (core::f32::consts::PI / 180.0);
+    let cos_t = libm::cosf(rad);
+    let sin_t = libm::sinf(rad);
+    let (rot_w, rot_h) = rotated_aabb(crop_w, crop_h, cos_t, sin_t);
 
     let dst_w = params.dest_w as f32;
     let dst_h = params.dest_h as f32;
@@ -225,12 +232,16 @@ pub fn map_dst_to_src(params: &ProcessingOptions, dx: f32, dy: f32) -> (f32, f32
     let rx = if rx < 0.0 { 0.0 } else { rx };
     let ry = if ry < 0.0 { 0.0 } else { ry };
 
-    let (cx, cy) = match params.rotation {
-        Rotation::None => (rx, ry),
-        Rotation::Rot90 => (ry, crop_h - (rx + 1.0)),
-        Rotation::Rot180 => (crop_w - (rx + 1.0), crop_h - (ry + 1.0)),
-        Rotation::Rot270 => (crop_w - (ry + 1.0), rx),
-    };
+    // Inverse clockwise rotation about the crop center (y-down image space).
+    let ox = rx - rot_w * 0.5;
+    let oy = ry - rot_h * 0.5;
+    let cx = cos_t * ox + sin_t * oy + crop_w * 0.5;
+    let cy = -sin_t * ox + cos_t * oy + crop_h * 0.5;
+
+    // AABB fit can sample outside the rotated rectangle; treat as letterbox.
+    if cx < -eps || cy < -eps || cx >= crop_w + eps || cy >= crop_h + eps {
+        return (0.0, 0.0, false);
+    }
 
     // Clamp rather than reject: rust-gpu rotation can land 1 ulp past the last source row.
     let max_x = (params.src_w as f32 - 1.0).max(0.0);

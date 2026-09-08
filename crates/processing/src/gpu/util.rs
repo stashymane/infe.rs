@@ -32,7 +32,7 @@ pub(crate) fn write_options_bytes(options: &ProcessingOptions) -> [u8; PUSH_CONS
         options.src_format as u32,
         options.dest_format as u32,
         options.fit_mode as u32,
-        options.rotation as u32,
+        options.rotation_degrees.to_bits(),
         options.dest_layout as u32,
     ];
 

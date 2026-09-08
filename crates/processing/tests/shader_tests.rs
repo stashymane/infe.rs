@@ -1,7 +1,7 @@
 #![cfg(feature = "vulkan")]
 
 use infers_gpu::Vulkan;
-use processing::{FitMode, GpuImageProcessor, ImageFormat, ProcessingOptions, Rotation};
+use processing::{FitMode, GpuImageProcessor, ImageFormat, ProcessingOptions};
 
 #[test]
 fn test_gpu_image_processor_loads_shaders() {
@@ -22,11 +22,6 @@ fn test_processing_options_enums() {
     assert_eq!(ImageFormat::Rgbf32 as u32, 1);
     assert_eq!(ImageFormat::Nv12 as u32, 2);
     assert_eq!(ImageFormat::I420 as u32, 3);
-
-    assert_eq!(Rotation::None as u32, 0);
-    assert_eq!(Rotation::Rot90 as u32, 1);
-    assert_eq!(Rotation::Rot180 as u32, 2);
-    assert_eq!(Rotation::Rot270 as u32, 3);
 }
 
 #[test]
@@ -42,7 +37,7 @@ fn test_processing_options_crop() {
         dest_h: 224,
         dest_format: ImageFormat::Rgbf32,
         fit_mode: FitMode::Contain,
-        rotation: Rotation::None,
+        rotation_degrees: 0.0,
         ..Default::default()
     };
 
@@ -59,7 +54,7 @@ fn test_processing_options_crop() {
         dest_h: 224,
         dest_format: ImageFormat::Rgb888,
         fit_mode: FitMode::Crop,
-        rotation: Rotation::Rot90,
+        rotation_degrees: 90.0,
         ..Default::default()
     };
 

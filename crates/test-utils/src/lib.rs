@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use infers_core::{
     CoreError, Cpu, FitMode, HardwareImage, HostTensor, ImageFormat, InferInput, Pending,
-    ProcessingOptions, Rotation, Session, SessionInputSink, Tensor, TensorLayout, TensorShape,
+    ProcessingOptions, Session, SessionInputSink, Tensor, TensorLayout, TensorShape,
     prepare_infer,
 };
 
@@ -231,7 +231,7 @@ pub fn detector_preprocess_options(dest: u32) -> ProcessingOptions {
         src_format: ImageFormat::Rgb888,
         dest_format: ImageFormat::Rgbf32,
         fit_mode: FitMode::Contain,
-        rotation: Rotation::None,
+        rotation_degrees: 0.0,
         dest_layout: TensorLayout::Nchw,
     }
 }
@@ -255,7 +255,7 @@ pub fn landmarker_preprocess_options(
         src_format: ImageFormat::Rgb888,
         dest_format: ImageFormat::Rgbf32,
         fit_mode: FitMode::Stretch,
-        rotation: Rotation::None,
+        rotation_degrees: 0.0,
         dest_layout: TensorLayout::Nchw,
     }
 }

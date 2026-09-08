@@ -8,6 +8,7 @@ homepage.workspace = true
 description.workspace = true
 
 [dependencies]
+libm = "0.2"
 
 [lints]
 workspace = true

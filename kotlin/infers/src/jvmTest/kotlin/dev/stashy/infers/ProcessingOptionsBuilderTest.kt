@@ -12,9 +12,9 @@ class ProcessingOptionsBuilderTest {
             srcFormat = ImageFormat.Rgb888
             destFormat = ImageFormat.Rgbf32
             fitMode = FitMode.Contain
-            rotation = Rotation.Rot90
+            rotationDegrees = 90f
         }
-        
+
         assertEquals(1920u, options.srcW)
         assertEquals(1080u, options.srcH)
         assertEquals(0u, options.cropX)
@@ -26,7 +26,7 @@ class ProcessingOptionsBuilderTest {
         assertEquals(ImageFormat.Rgb888, options.srcFormat)
         assertEquals(ImageFormat.Rgbf32, options.destFormat)
         assertEquals(FitMode.Contain, options.fitMode)
-        assertEquals(Rotation.Rot90, options.rotation)
+        assertEquals(90f, options.rotationDegrees)
     }
 
     @Test

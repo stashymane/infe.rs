@@ -50,6 +50,9 @@ dependencies = [
 [[package]]
 name = "processing-core"
 version = "0.0.0-dev"
+dependencies = [
+ "libm",
+]
 
 [[package]]
 name = "processing-shaders"

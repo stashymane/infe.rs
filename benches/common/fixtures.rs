@@ -1,4 +1,4 @@
-use infers::{HardwareImage, ImageFormat, ProcessingOptions, Rotation, TensorLayout, TensorShape};
+use infers::{HardwareImage, ImageFormat, ProcessingOptions, TensorLayout, TensorShape};
 use processing::FitMode;
 
 pub const FRAME_W: u32 = 1280;
@@ -30,7 +30,7 @@ pub fn detector_options(src_w: u32, src_h: u32, imgsz: u32) -> ProcessingOptions
         src_format: ImageFormat::Rgb888,
         dest_format,
         fit_mode: FitMode::Contain,
-        rotation: Rotation::None,
+        rotation_degrees: 0.0,
         dest_layout: TensorLayout::default_for_dest_format(dest_format),
     }
 }

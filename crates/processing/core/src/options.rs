@@ -17,7 +17,7 @@ impl TensorLayout {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ProcessingOptions {
     pub src_w: u32,
     pub src_h: u32,
@@ -30,7 +30,7 @@ pub struct ProcessingOptions {
     pub src_format: ImageFormat,
     pub dest_format: ImageFormat,
     pub fit_mode: FitMode,
-    pub rotation: Rotation,
+    pub rotation_degrees: f32,
     pub dest_layout: TensorLayout,
 }
 
@@ -49,7 +49,7 @@ impl Default for ProcessingOptions {
             src_format: ImageFormat::default(),
             dest_format,
             fit_mode: FitMode::default(),
-            rotation: Rotation::default(),
+            rotation_degrees: 0.0,
             dest_layout: TensorLayout::default_for_dest_format(dest_format),
         }
     }
@@ -114,14 +114,4 @@ impl ImageFormat {
             }
         }
     }
-}
-
-#[repr(u32)]
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Default)]
-pub enum Rotation {
-    #[default]
-    None = 0,
-    Rot90 = 1,
-    Rot180 = 2,
-    Rot270 = 3,
 }

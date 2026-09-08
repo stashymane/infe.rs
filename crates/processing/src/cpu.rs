@@ -1,6 +1,6 @@
 use infers_core::{
     CoreError, Cpu, HardwareImage, HostBytes, ImageFormat, MaterializeTarget, ProcessingOptions,
-    Rotation, Tensor, TensorShape,
+    Tensor, TensorShape,
 };
 use parking_lot::Mutex;
 use processing_core::{
@@ -153,7 +153,7 @@ fn validate_params(input: &HardwareImage, params: &ProcessingOptions) -> Result<
 
 fn can_identity_memcpy(params: &ProcessingOptions) -> bool {
     if params.fit_mode != FitMode::Stretch
-        || params.rotation != Rotation::None
+        || params.rotation_degrees != 0.0
         || params.src_format != ImageFormat::Rgb888
         || params.dest_format != ImageFormat::Rgb888
         || params.dest_layout != TensorLayout::Nhwc

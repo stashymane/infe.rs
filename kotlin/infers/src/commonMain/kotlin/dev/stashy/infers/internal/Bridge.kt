@@ -8,7 +8,6 @@ import dev.stashy.infers.ImageFormat
 import dev.stashy.infers.InfersException
 import dev.stashy.infers.InfersInternalApi
 import dev.stashy.infers.ProcessingOptions
-import dev.stashy.infers.Rotation
 import dev.stashy.infers.TensorLayout
 import dev.stashy.infers.TensorShape
 import dev.stashy.infers.ffi.DataType as FfiDataType
@@ -18,7 +17,6 @@ import dev.stashy.infers.ffi.FitMode as FfiFitMode
 import dev.stashy.infers.ffi.ImageFormat as FfiImageFormat
 import dev.stashy.infers.ffi.InfersException as FfiInfersException
 import dev.stashy.infers.ffi.ProcessingOptions as FfiProcessingOptions
-import dev.stashy.infers.ffi.Rotation as FfiRotation
 import dev.stashy.infers.ffi.TensorLayout as FfiTensorLayout
 import dev.stashy.infers.ffi.TensorShape as FfiTensorShape
 
@@ -98,14 +96,6 @@ public fun FitMode.toFfi(): FfiFitMode = when (this) {
 }
 
 @InfersInternalApi
-public fun Rotation.toFfi(): FfiRotation = when (this) {
-    Rotation.None -> FfiRotation.NONE
-    Rotation.Rot90 -> FfiRotation.ROT90
-    Rotation.Rot180 -> FfiRotation.ROT180
-    Rotation.Rot270 -> FfiRotation.ROT270
-}
-
-@InfersInternalApi
 public fun TensorLayout.toFfi(): FfiTensorLayout = when (this) {
     TensorLayout.Nhwc -> FfiTensorLayout.NHWC
     TensorLayout.Nchw -> FfiTensorLayout.NCHW
@@ -130,7 +120,7 @@ public fun ProcessingOptions.toFfi(): FfiProcessingOptions = FfiProcessingOption
     srcFormat = srcFormat.toFfi(),
     destFormat = destFormat.toFfi(),
     fitMode = fitMode.toFfi(),
-    rotation = rotation.toFfi(),
+    rotationDegrees = rotationDegrees,
     destLayout = destLayout.toFfi(),
 )
 

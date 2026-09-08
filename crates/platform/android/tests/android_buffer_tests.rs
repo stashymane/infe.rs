@@ -1,7 +1,7 @@
 #![cfg(target_os = "android")]
 
 use infers_core::{
-    DeviceInfo, DeviceKind, HardwareImage, ImageFormat, ProcessingOptions, Rotation,
+    DeviceInfo, DeviceKind, HardwareImage, ImageFormat, ProcessingOptions,
 };
 use platform_android::{
     AndroidHardwareBufferHandle, AHardwareBuffer_Desc, AHardwareBuffer_allocate,
@@ -178,7 +178,7 @@ fn test_on_moves_into_deferred_import() {
         dest_format: ImageFormat::Rgbf32,
         dest_layout: TensorLayout::default_for_dest_format(ImageFormat::Rgbf32),
         fit_mode: FitMode::Stretch,
-        rotation: Rotation::None,
+        rotation_degrees: 0.0,
         ..Default::default()
     };
     // Consumes `handle` into Deferred; import + AHB release happen at materialize.
@@ -211,7 +211,7 @@ fn test_android_hardware_buffer_with_image_processors() {
         dest_format: ImageFormat::Rgbf32,
         dest_layout: TensorLayout::default_for_dest_format(ImageFormat::Rgbf32),
         fit_mode: FitMode::Stretch,
-        rotation: Rotation::None,
+        rotation_degrees: 0.0,
         ..Default::default()
     };
 

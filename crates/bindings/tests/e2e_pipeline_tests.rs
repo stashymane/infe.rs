@@ -17,7 +17,7 @@ fn bindings_processing_options(
         src_format: opts.src_format.into(),
         dest_format: opts.dest_format.into(),
         fit_mode: opts.fit_mode.into(),
-        rotation: opts.rotation.into(),
+        rotation_degrees: opts.rotation_degrees,
         dest_layout: opts.dest_layout.into(),
     }
 }

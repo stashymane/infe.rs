@@ -61,7 +61,7 @@ fn test_cpu_image_processor() {
         src_format: ImageFormat::Rgb888,
         dest_format: ImageFormat::Rgbf32,
         fit_mode: FitMode::Stretch,
-        rotation: Rotation::None,
+        rotation_degrees: 0.0,
         dest_layout: TensorLayout::Nchw,
     };
 

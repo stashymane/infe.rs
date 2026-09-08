@@ -1008,26 +1008,6 @@ public final class dev/stashy/infers/ffi/FfiConverterTypeProcessingOptions : dev
 	public synthetic fun write-OHYOuyI (Ljava/lang/Object;Ljava/nio/ByteBuffer;)V
 }
 
-public final class dev/stashy/infers/ffi/FfiConverterTypeRotation : dev/stashy/infers/ffi/FfiConverterRustBuffer {
-	public static final field INSTANCE Ldev/stashy/infers/ffi/FfiConverterTypeRotation;
-	public fun allocationSize-I7RO_PI (Ldev/stashy/infers/ffi/Rotation;)J
-	public synthetic fun allocationSize-I7RO_PI (Ljava/lang/Object;)J
-	public fun lift (Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;)Ldev/stashy/infers/ffi/Rotation;
-	public synthetic fun lift (Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;)Ljava/lang/Object;
-	public synthetic fun lift (Ljava/lang/Object;)Ljava/lang/Object;
-	public fun liftFromRustBuffer (Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;)Ldev/stashy/infers/ffi/Rotation;
-	public synthetic fun liftFromRustBuffer (Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;)Ljava/lang/Object;
-	public fun lower (Ldev/stashy/infers/ffi/Rotation;)Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;
-	public synthetic fun lower (Ljava/lang/Object;)Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;
-	public synthetic fun lower (Ljava/lang/Object;)Ljava/lang/Object;
-	public fun lowerIntoRustBuffer (Ldev/stashy/infers/ffi/Rotation;)Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;
-	public synthetic fun lowerIntoRustBuffer (Ljava/lang/Object;)Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;
-	public fun read-JPGhLiY (Ljava/nio/ByteBuffer;)Ldev/stashy/infers/ffi/Rotation;
-	public synthetic fun read-JPGhLiY (Ljava/nio/ByteBuffer;)Ljava/lang/Object;
-	public fun write-OHYOuyI (Ldev/stashy/infers/ffi/Rotation;Ljava/nio/ByteBuffer;)V
-	public synthetic fun write-OHYOuyI (Ljava/lang/Object;Ljava/nio/ByteBuffer;)V
-}
-
 public final class dev/stashy/infers/ffi/FfiConverterTypeTensorLayout : dev/stashy/infers/ffi/FfiConverterRustBuffer {
 	public static final field INSTANCE Ldev/stashy/infers/ffi/FfiConverterTypeTensorLayout;
 	public fun allocationSize-I7RO_PI (Ldev/stashy/infers/ffi/TensorLayout;)J
@@ -1552,11 +1532,11 @@ public final class dev/stashy/infers/ffi/NoPointer {
 
 public final class dev/stashy/infers/ffi/ProcessingOptions {
 	public static final field Companion Ldev/stashy/infers/ffi/ProcessingOptions$Companion;
-	public synthetic fun <init> (IIIIIIIILdev/stashy/infers/ffi/ImageFormat;Ldev/stashy/infers/ffi/ImageFormat;Ldev/stashy/infers/ffi/FitMode;Ldev/stashy/infers/ffi/Rotation;Ldev/stashy/infers/ffi/TensorLayout;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (IIIIIIIILdev/stashy/infers/ffi/ImageFormat;Ldev/stashy/infers/ffi/ImageFormat;Ldev/stashy/infers/ffi/FitMode;FLdev/stashy/infers/ffi/TensorLayout;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun component1-pVg5ArA ()I
 	public final fun component10 ()Ldev/stashy/infers/ffi/ImageFormat;
 	public final fun component11 ()Ldev/stashy/infers/ffi/FitMode;
-	public final fun component12 ()Ldev/stashy/infers/ffi/Rotation;
+	public final fun component12 ()F
 	public final fun component13 ()Ldev/stashy/infers/ffi/TensorLayout;
 	public final fun component2-pVg5ArA ()I
 	public final fun component3-pVg5ArA ()I
@@ -1566,8 +1546,8 @@ public final class dev/stashy/infers/ffi/ProcessingOptions {
 	public final fun component7-pVg5ArA ()I
 	public final fun component8-pVg5ArA ()I
 	public final fun component9 ()Ldev/stashy/infers/ffi/ImageFormat;
-	public final fun copy-qZslCsc (IIIIIIIILdev/stashy/infers/ffi/ImageFormat;Ldev/stashy/infers/ffi/ImageFormat;Ldev/stashy/infers/ffi/FitMode;Ldev/stashy/infers/ffi/Rotation;Ldev/stashy/infers/ffi/TensorLayout;)Ldev/stashy/infers/ffi/ProcessingOptions;
-	public static synthetic fun copy-qZslCsc$default (Ldev/stashy/infers/ffi/ProcessingOptions;IIIIIIIILdev/stashy/infers/ffi/ImageFormat;Ldev/stashy/infers/ffi/ImageFormat;Ldev/stashy/infers/ffi/FitMode;Ldev/stashy/infers/ffi/Rotation;Ldev/stashy/infers/ffi/TensorLayout;ILjava/lang/Object;)Ldev/stashy/infers/ffi/ProcessingOptions;
+	public final fun copy-qZslCsc (IIIIIIIILdev/stashy/infers/ffi/ImageFormat;Ldev/stashy/infers/ffi/ImageFormat;Ldev/stashy/infers/ffi/FitMode;FLdev/stashy/infers/ffi/TensorLayout;)Ldev/stashy/infers/ffi/ProcessingOptions;
+	public static synthetic fun copy-qZslCsc$default (Ldev/stashy/infers/ffi/ProcessingOptions;IIIIIIIILdev/stashy/infers/ffi/ImageFormat;Ldev/stashy/infers/ffi/ImageFormat;Ldev/stashy/infers/ffi/FitMode;FLdev/stashy/infers/ffi/TensorLayout;ILjava/lang/Object;)Ldev/stashy/infers/ffi/ProcessingOptions;
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getCropH-pVg5ArA ()I
 	public final fun getCropW-pVg5ArA ()I
@@ -1578,7 +1558,7 @@ public final class dev/stashy/infers/ffi/ProcessingOptions {
 	public final fun getDestLayout ()Ldev/stashy/infers/ffi/TensorLayout;
 	public final fun getDestW-pVg5ArA ()I
 	public final fun getFitMode ()Ldev/stashy/infers/ffi/FitMode;
-	public final fun getRotation ()Ldev/stashy/infers/ffi/Rotation;
+	public final fun getRotationDegrees ()F
 	public final fun getSrcFormat ()Ldev/stashy/infers/ffi/ImageFormat;
 	public final fun getSrcH-pVg5ArA ()I
 	public final fun getSrcW-pVg5ArA ()I
@@ -1592,7 +1572,7 @@ public final class dev/stashy/infers/ffi/ProcessingOptions {
 	public final fun setDestLayout (Ldev/stashy/infers/ffi/TensorLayout;)V
 	public final fun setDestW-WZ4Q5Ns (I)V
 	public final fun setFitMode (Ldev/stashy/infers/ffi/FitMode;)V
-	public final fun setRotation (Ldev/stashy/infers/ffi/Rotation;)V
+	public final fun setRotationDegrees (F)V
 	public final fun setSrcFormat (Ldev/stashy/infers/ffi/ImageFormat;)V
 	public final fun setSrcH-WZ4Q5Ns (I)V
 	public final fun setSrcW-WZ4Q5Ns (I)V
@@ -1600,20 +1580,6 @@ public final class dev/stashy/infers/ffi/ProcessingOptions {
 }
 
 public final class dev/stashy/infers/ffi/ProcessingOptions$Companion {
-}
-
-public final class dev/stashy/infers/ffi/Rotation : java/lang/Enum {
-	public static final field Companion Ldev/stashy/infers/ffi/Rotation$Companion;
-	public static final field NONE Ldev/stashy/infers/ffi/Rotation;
-	public static final field ROT180 Ldev/stashy/infers/ffi/Rotation;
-	public static final field ROT270 Ldev/stashy/infers/ffi/Rotation;
-	public static final field ROT90 Ldev/stashy/infers/ffi/Rotation;
-	public static fun getEntries ()Lkotlin/enums/EnumEntries;
-	public static fun valueOf (Ljava/lang/String;)Ldev/stashy/infers/ffi/Rotation;
-	public static fun values ()[Ldev/stashy/infers/ffi/Rotation;
-}
-
-public final class dev/stashy/infers/ffi/Rotation$Companion {
 }
 
 public class dev/stashy/infers/ffi/RustBufferStruct : com/sun/jna/Structure {
