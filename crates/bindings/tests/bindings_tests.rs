@@ -73,6 +73,38 @@ fn test_cpu_image_processor() {
 }
 
 #[test]
+fn test_hardware_image_empty_write_roundtrip() {
+    let hardware =
+        create_hardware_image_empty(2, 2, ImageFormat::Rgb888).expect("empty hardware image");
+    let filled: Vec<u8> = (0..12).map(|v| (v * 3) as u8).collect();
+    hardware.write_bytes(filled.clone()).expect("write");
+
+    let processor = CpuImageProcessor::new();
+    let options = ProcessingOptions {
+        src_w: 2,
+        src_h: 2,
+        crop_x: 0,
+        crop_y: 0,
+        crop_w: 2,
+        crop_h: 2,
+        dest_w: 2,
+        dest_h: 2,
+        src_format: ImageFormat::Rgb888,
+        dest_format: ImageFormat::Rgbf32,
+        fit_mode: FitMode::Stretch,
+        rotation_degrees: 0.0,
+        dest_layout: TensorLayout::Nchw,
+    };
+    let out = hardware
+        .on_cpu()
+        .process(processor, options)
+        .expect("process")
+        .materialize()
+        .expect("materialize");
+    assert_eq!(out.shape().dims, vec![1, 3, 2, 2]);
+}
+
+#[test]
 fn test_ffi_backend_construct() {
     let _backend = FfiBackend::new();
 }

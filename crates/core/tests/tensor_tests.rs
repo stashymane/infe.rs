@@ -39,6 +39,19 @@ fn test_host_image_validation() {
 }
 
 #[test]
+fn test_host_image_empty_write() {
+    let mut img = HardwareImage::empty(2, 2, ImageFormat::Rgb888).unwrap();
+    assert_eq!(img.as_bytes().len(), 12);
+    assert!(img.as_bytes().iter().all(|&b| b == 0));
+
+    let filled: Vec<u8> = (0..12).map(|v| v as u8).collect();
+    img.write_bytes(&filled).unwrap();
+    assert_eq!(img.as_bytes(), filled.as_slice());
+
+    assert!(img.write_bytes(&[1, 2, 3]).is_err());
+}
+
+#[test]
 fn test_cpu_to_cpu_adopt() {
     let shape = TensorShape::new(vec![4]).unwrap();
     let host = HostTensor::from_f32(shape, vec![1.0, 2.0, 3.0, 4.0]).unwrap();

@@ -65,6 +65,30 @@ impl HardwareImage {
         })
     }
 
+    /// Allocate a reusable host image filled with zeros.
+    pub fn empty(width: u32, height: u32, format: ImageFormat) -> Result<Self, CoreError> {
+        let expected_bytes = format.frame_bytes(width, height) as usize;
+        Ok(Self {
+            width,
+            height,
+            format,
+            data: vec![0u8; expected_bytes],
+        })
+    }
+
+    /// Overwrite pixel bytes in place. Length must match the allocated frame size.
+    pub fn write_bytes(&mut self, data: &[u8]) -> Result<(), CoreError> {
+        if data.len() != self.data.len() {
+            return Err(CoreError::InvalidArgument(format!(
+                "Image data size mismatch: expected {} bytes, got {}",
+                self.data.len(),
+                data.len()
+            )));
+        }
+        self.data.copy_from_slice(data);
+        Ok(())
+    }
+
     #[inline]
     pub fn width(&self) -> u32 {
         self.width

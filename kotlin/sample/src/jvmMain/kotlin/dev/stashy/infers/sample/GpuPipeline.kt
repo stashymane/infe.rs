@@ -22,12 +22,21 @@ internal data class GpuPipelineOutput(
     val firstOutputPreview: FloatArray,
 )
 
+private class PipelineBuffers(
+    device: GpuDevice,
+    width: UInt,
+    height: UInt,
+) : BufferSet() {
+    val frame by buffer(device, width, height, ImageFormat.Rgb888)
+}
+
 /**
  * GPU preprocess → Vulkan ExecuTorch inference, driven by a [Flow] of [CameraFrame]s.
  *
- * Long-lived handles ([GpuDevice], session, processor) stay open for the pipeline lifetime.
- * Per-frame tensors and images are owned by a fresh [dev.stashy.infers.inferenceScope] inside
- * [mapInference].
+ * Long-lived handles ([GpuDevice], session, processor, [BufferPool]) stay open for
+ * the pipeline lifetime. Per-frame tensors are owned by a fresh
+ * [dev.stashy.infers.inferenceScope] inside [mapInference]; frame bytes reuse a
+ * pooled [FrameBuffer].
  */
 internal class GpuPipeline private constructor(
     private val device: GpuDevice,
@@ -35,10 +44,12 @@ internal class GpuPipeline private constructor(
     private val session: GpuSession,
     private val processor: GpuImageProcessor,
     private val processingOptions: ProcessingOptions,
+    private val buffers: BufferPool<PipelineBuffers>,
 ) : AutoCloseable {
     fun processFrames(frames: Flow<CameraFrame>): Flow<GpuPipelineOutput> = frames.mapInference { frame ->
-        val hardware = HardwareImage.fromBytes(frame.bytes, frame.width, frame.height, ImageFormat.Rgb888)
-        val pending = hardware.on(device).process(processor, processingOptions)
+        val slotted = buffers.checkout()
+        slotted.frame.write(frame.bytes)
+        val pending = slotted.frame.on().process(processor, processingOptions)
         val outputs = session.infer(pending)
         val primary = outputs.firstOrNull()
         val preview = primary?.floats()?.use { view ->
@@ -55,6 +66,7 @@ internal class GpuPipeline private constructor(
     }
 
     override fun close() {
+        buffers.close()
         processor.close()
         session.close()
         backend.close()
@@ -63,6 +75,7 @@ internal class GpuPipeline private constructor(
 
     companion object {
         private const val PREVIEW_FLOAT_COUNT = 8
+        private const val BUFFER_POOL_CAPACITY = 2
 
         fun open(modelPath: Path, frameWidth: UInt, frameHeight: UInt): GpuPipeline? {
             val device = runCatching { GpuDevice(0u) }.getOrNull() ?: return null
@@ -76,20 +89,16 @@ internal class GpuPipeline private constructor(
                     source = frameWidth.toInt() to frameHeight.toInt()
                     srcFormat = ImageFormat.Rgb888
                 }
-                GpuPipeline(device, backend, session, processor, options)
+                val buffers =
+                    BufferPool(BUFFER_POOL_CAPACITY) {
+                        PipelineBuffers(device, frameWidth, frameHeight)
+                    }
+                GpuPipeline(device, backend, session, processor, options, buffers)
             } catch (_: Throwable) {
                 backend.close()
                 device.close()
                 null
             }
-        }
-
-        private fun imgszFromInputShape(shape: TensorShape): Int {
-            val dims = shape.dims.map { it.toInt() }
-            require(dims.size == 4 && dims[0] == 1 && dims[1] == 3 && dims[2] == dims[3]) {
-                "expected square NCHW input [1, 3, H, H], got $dims"
-            }
-            return dims[2]
         }
     }
 }

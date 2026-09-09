@@ -226,13 +226,13 @@ impl GpuPending {
 #[uniffi::export]
 impl HardwareImage {
     pub fn on_cpu(self: Arc<Self>) -> Arc<CpuDeferred> {
-        let hardware = Arc::new(self.inner().clone());
+        let hardware = Arc::new(self.clone_inner());
         Arc::new(CpuDeferred::from_inner(Deferred::from_hardware(Cpu, hardware)))
     }
 
     #[cfg(feature = "vulkan")]
     pub fn on(self: Arc<Self>, device: Arc<GpuDevice>) -> Arc<GpuDeferred> {
-        let hardware = self.inner().clone();
+        let hardware = self.clone_inner();
         Arc::new(GpuDeferred::from_inner(defer_hardware(
             device.vulkan(),
             hardware,

@@ -9,6 +9,7 @@ public final class dev/stashy/infers/vulkan/GpuDevice : dev/stashy/infers/Device
 	public synthetic fun <init> (JILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public synthetic fun <init> (JLkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public fun close ()V
+	public fun deferFrameInternal (Ldev/stashy/infers/FrameBuffer;)Ldev/stashy/infers/Deferred;
 	public fun deferHardwareInternal (Ldev/stashy/infers/HardwareImage;)Ldev/stashy/infers/Deferred;
 	public fun getInfo ()Ldev/stashy/infers/DeviceInfo;
 }

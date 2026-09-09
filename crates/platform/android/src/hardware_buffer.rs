@@ -171,6 +171,19 @@ impl AndroidHardwareBufferHandle {
         (self.desc.usage & AHARDWAREBUFFER_USAGE_GPU_SAMPLED_IMAGE) != 0
     }
 
+    /// Acquire an additional platform reference so the returned handle can be
+    /// moved into Deferred while this handle stays alive.
+    pub fn retain(&self) -> Self {
+        // SAFETY: `raw_ptr` is live for `&self`; acquire adds an independent +1.
+        unsafe { AHardwareBuffer_acquire(self.raw_ptr) };
+        Self {
+            raw_ptr: self.raw_ptr,
+            desc: self.desc,
+            format: self.format,
+            device: self.device.clone(),
+        }
+    }
+
     /// Lock the buffer for CPU reading (RAII unlock on drop).
     ///
     /// Only formats with a single densely-packed plane can be mapped this way.

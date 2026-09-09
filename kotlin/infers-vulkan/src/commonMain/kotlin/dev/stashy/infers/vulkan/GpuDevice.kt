@@ -4,6 +4,7 @@ import dev.stashy.infers.CpuTensor
 import dev.stashy.infers.Deferred
 import dev.stashy.infers.Device
 import dev.stashy.infers.DeviceInfo
+import dev.stashy.infers.FrameBuffer
 import dev.stashy.infers.HardwareImage
 import dev.stashy.infers.InfersInternalApi
 import dev.stashy.infers.internal.CloseGate
@@ -40,6 +41,8 @@ public class GpuDevice private constructor(
         return withFfiErrors { GpuDeferred(hardware.handle.on(handle)) }
     }
 
+    override fun deferFrameInternal(frame: FrameBuffer<GpuDevice>): Deferred<GpuDevice> = deferFrameInternalImpl(frame)
+
     @InfersInternalApi
     internal suspend fun uploadTensorInternal(tensor: CpuTensor): GpuTensor = withContext(Dispatchers.Default) {
         withFfiErrors {
@@ -55,3 +58,6 @@ public class GpuDevice private constructor(
         }
     }
 }
+
+/** Platform-specific FrameBuffer deferral (AHB zero-copy on Android). */
+internal expect fun GpuDevice.deferFrameInternalImpl(frame: FrameBuffer<GpuDevice>): Deferred<GpuDevice>

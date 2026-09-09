@@ -1,6 +1,7 @@
 package dev.stashy.infers
 
 import dev.stashy.infers.ffi.createHardwareImage
+import dev.stashy.infers.ffi.createHardwareImageEmpty
 import dev.stashy.infers.internal.CloseGate
 import dev.stashy.infers.internal.fromFfi
 import dev.stashy.infers.internal.toFfi
@@ -35,6 +36,12 @@ public class HardwareImage @InfersInternalApi constructor(
     @InfersInternalApi
     public fun ensureOpen(): Unit = gate.ensureOpen()
 
+    /** Overwrite pixel bytes in place. Length must match the allocated frame size. */
+    public fun write(bytes: ByteArray) {
+        gate.ensureOpen()
+        withFfiErrors { handle.writeBytes(bytes) }
+    }
+
     override fun close() {
         if (gate.markClosed()) {
             handle.close()
@@ -50,6 +57,11 @@ public class HardwareImage @InfersInternalApi constructor(
             format: ImageFormat,
         ): HardwareImage = withFfiErrors {
             HardwareImage(createHardwareImage(width, height, format.toFfi(), bytes))
+        }
+
+        @InfersInternalApi
+        internal fun empty(width: UInt, height: UInt, format: ImageFormat): HardwareImage = withFfiErrors {
+            HardwareImage(createHardwareImageEmpty(width, height, format.toFfi()))
         }
 
         @OptIn(InfersInternalApi::class)

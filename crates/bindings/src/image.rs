@@ -3,15 +3,13 @@ use crate::error::InfersError;
 use infers_core::CpuImage as CoreCpuImage;
 use infers_core::HardwareImage as CoreHardwareImage;
 use infers_core::Image;
+use parking_lot::Mutex;
 use processing::CpuImageProcessor as CoreCpuImageProcessor;
 use processing_core::{
     FitMode as CoreFitMode, ImageFormat as CoreImageFormat,
     ProcessingOptions as CoreProcessingOptions, TensorLayout as CoreTensorLayout,
 };
 use std::sync::Arc;
-
-#[cfg(target_os = "android")]
-use parking_lot::Mutex;
 
 #[cfg(feature = "vulkan")]
 use infers_gpu::VulkanImage;
@@ -97,31 +95,41 @@ impl From<ProcessingOptions> for CoreProcessingOptions {
 /// Host-resident image bytes (camera frame, decoded file, etc.).
 #[derive(uniffi::Object)]
 pub struct HardwareImage {
-    inner: CoreHardwareImage,
+    inner: Mutex<CoreHardwareImage>,
 }
 
 impl HardwareImage {
-    pub(crate) fn inner(&self) -> &CoreHardwareImage {
-        &self.inner
+    pub(crate) fn clone_inner(&self) -> CoreHardwareImage {
+        self.inner.lock().clone()
     }
 
     pub(crate) fn from_inner(inner: CoreHardwareImage) -> Self {
-        Self { inner }
+        Self {
+            inner: Mutex::new(inner),
+        }
     }
 }
 
 #[uniffi::export]
 impl HardwareImage {
     pub fn width(&self) -> u32 {
-        self.inner.width()
+        self.inner.lock().width()
     }
 
     pub fn height(&self) -> u32 {
-        self.inner.height()
+        self.inner.lock().height()
     }
 
     pub fn format(&self) -> ImageFormat {
-        self.inner.format().into()
+        self.inner.lock().format().into()
+    }
+
+    /// Overwrite pixel bytes in place. Length must match the allocated frame size.
+    pub fn write_bytes(&self, data: Vec<u8>) -> Result<(), InfersError> {
+        self.inner
+            .lock()
+            .write_bytes(&data)
+            .map_err(InfersError::from)
     }
 }
 
@@ -133,6 +141,18 @@ pub fn create_hardware_image(
     data: Vec<u8>,
 ) -> Result<Arc<HardwareImage>, InfersError> {
     let image = CoreHardwareImage::new(width, height, format.into(), data).map_err(InfersError::from)?;
+    Ok(Arc::new(HardwareImage::from_inner(image)))
+}
+
+/// Allocate a reusable zero-filled host image for later [`HardwareImage::write_bytes`].
+#[uniffi::export]
+pub fn create_hardware_image_empty(
+    width: u32,
+    height: u32,
+    format: ImageFormat,
+) -> Result<Arc<HardwareImage>, InfersError> {
+    let image =
+        CoreHardwareImage::empty(width, height, format.into()).map_err(InfersError::from)?;
     Ok(Arc::new(HardwareImage::from_inner(image)))
 }
 
@@ -273,6 +293,30 @@ impl HardwareBufferHandle {
             let owned = self.take_inner()?;
             Ok(Arc::new(crate::deferred::GpuDeferred::from_inner(
                 owned.on(device.vulkan()),
+            )))
+        }
+        #[cfg(not(target_os = "android"))]
+        {
+            let _ = (self, device);
+            Err(InfersError::PlatformError {
+                reason: "HardwareBuffer is only available on Android".into(),
+            })
+        }
+    }
+
+    /// Like [`Self::on`], but retains this handle's AHB reference for reuse.
+    ///
+    /// Acquires an extra platform +1 for the Deferred so the slot can import
+    /// again or return to a buffer pool without reallocating the wrapper.
+    pub fn borrow_on(
+        self: Arc<Self>,
+        device: Arc<crate::gpu_device::GpuDevice>,
+    ) -> Result<Arc<crate::deferred::GpuDeferred>, InfersError> {
+        #[cfg(target_os = "android")]
+        {
+            let retained = self.with_inner(|buf| buf.retain())?;
+            Ok(Arc::new(crate::deferred::GpuDeferred::from_inner(
+                retained.on(device.vulkan()),
             )))
         }
         #[cfg(not(target_os = "android"))]

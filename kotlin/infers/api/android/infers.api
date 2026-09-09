@@ -5,6 +5,18 @@ public final class dev/stashy/infers/Backend : java/lang/AutoCloseable {
 	public final fun getHandle ()Ldev/stashy/infers/ffi/FfiBackend;
 }
 
+public final class dev/stashy/infers/BufferPool : java/lang/AutoCloseable {
+	public fun <init> (ILkotlin/jvm/functions/Function0;)V
+	public final fun checkout (Ldev/stashy/infers/InferenceScope;)Ldev/stashy/infers/BufferSet;
+	public fun close ()V
+	public final fun getCapacity ()I
+}
+
+public class dev/stashy/infers/BufferSet {
+	public fun <init> ()V
+	protected final fun buffer-gd2BlFg (Ldev/stashy/infers/Device;IILdev/stashy/infers/ImageFormat;)Lkotlin/properties/ReadOnlyProperty;
+}
+
 public abstract interface class dev/stashy/infers/ByteTensorView : dev/stashy/infers/TensorView, java/lang/Iterable, kotlin/jvm/internal/markers/KMappedMarker {
 	public abstract fun copyInto ([BIII)V
 	public static synthetic fun copyInto$default (Ldev/stashy/infers/ByteTensorView;[BIIIILjava/lang/Object;)V
@@ -25,6 +37,7 @@ public final class dev/stashy/infers/CpuDeferred : dev/stashy/infers/Deferred {
 
 public final class dev/stashy/infers/CpuDevice : dev/stashy/infers/Device {
 	public static final field INSTANCE Ldev/stashy/infers/CpuDevice;
+	public fun deferFrameInternal (Ldev/stashy/infers/FrameBuffer;)Ldev/stashy/infers/Deferred;
 	public fun deferHardwareInternal (Ldev/stashy/infers/HardwareImage;)Ldev/stashy/infers/Deferred;
 	public fun getInfo ()Ldev/stashy/infers/DeviceInfo;
 }
@@ -107,8 +120,13 @@ public final class dev/stashy/infers/DeferredKt {
 }
 
 public abstract interface class dev/stashy/infers/Device {
+	public fun deferFrameInternal (Ldev/stashy/infers/FrameBuffer;)Ldev/stashy/infers/Deferred;
 	public abstract fun deferHardwareInternal (Ldev/stashy/infers/HardwareImage;)Ldev/stashy/infers/Deferred;
 	public abstract fun getInfo ()Ldev/stashy/infers/DeviceInfo;
+}
+
+public final class dev/stashy/infers/Device$DefaultImpls {
+	public static fun deferFrameInternal (Ldev/stashy/infers/Device;Ldev/stashy/infers/FrameBuffer;)Ldev/stashy/infers/Deferred;
 }
 
 public abstract interface class dev/stashy/infers/DeviceImage : java/lang/AutoCloseable {
@@ -166,6 +184,31 @@ public final class dev/stashy/infers/FlowsKt {
 	public static final fun mapInference (Lkotlinx/coroutines/flow/Flow;Lkotlin/jvm/functions/Function3;)Lkotlinx/coroutines/flow/Flow;
 }
 
+public final class dev/stashy/infers/FrameBuffer : java/lang/AutoCloseable {
+	public static final field Companion Ldev/stashy/infers/FrameBuffer$Companion;
+	public final fun clearImport ()V
+	public fun close ()V
+	public final fun getDevice ()Ldev/stashy/infers/Device;
+	public final fun getFormat ()Ldev/stashy/infers/ImageFormat;
+	public final fun getHeight-pVg5ArA ()I
+	public final fun getHost ()Ldev/stashy/infers/HardwareImage;
+	public final fun getWidth-pVg5ArA ()I
+	public final fun write ([B)V
+}
+
+public final class dev/stashy/infers/FrameBuffer$Companion {
+}
+
+public final class dev/stashy/infers/FrameBufferKt {
+	public static final fun on (Ldev/stashy/infers/InferenceScope;Ldev/stashy/infers/FrameBuffer;)Ldev/stashy/infers/Deferred;
+}
+
+public final class dev/stashy/infers/FrameBuffer_androidKt {
+	public static final fun import (Ldev/stashy/infers/FrameBuffer;Landroid/hardware/HardwareBuffer;Ldev/stashy/infers/DeviceInfo;)V
+	public static final fun import (Ldev/stashy/infers/FrameBuffer;Ldev/stashy/infers/HardwareBuffer;)V
+	public static final fun importedHardwareBufferOrNull (Ldev/stashy/infers/FrameBuffer;)Ldev/stashy/infers/HardwareBuffer;
+}
+
 public final class dev/stashy/infers/HardwareBuffer : java/lang/AutoCloseable {
 	public static final field Companion Ldev/stashy/infers/HardwareBuffer$Companion;
 	public fun <init> (Ldev/stashy/infers/ffi/HardwareBufferHandle;)V
@@ -190,6 +233,7 @@ public final class dev/stashy/infers/HardwareImage : java/lang/AutoCloseable {
 	public final fun getHandle ()Ldev/stashy/infers/ffi/HardwareImage;
 	public final fun getHeight-pVg5ArA ()I
 	public final fun getWidth-pVg5ArA ()I
+	public final fun write ([B)V
 }
 
 public final class dev/stashy/infers/HardwareImage$Companion {
@@ -257,6 +301,11 @@ public final class dev/stashy/infers/InfersException$AlreadyConsumed : dev/stash
 }
 
 public final class dev/stashy/infers/InfersException$BufferAllocationFailed : dev/stashy/infers/InfersException {
+	public fun <init> (Ljava/lang/String;)V
+	public fun getReason ()Ljava/lang/String;
+}
+
+public final class dev/stashy/infers/InfersException$BufferPoolExhausted : dev/stashy/infers/InfersException {
 	public fun <init> (Ljava/lang/String;)V
 	public fun getReason ()Ljava/lang/String;
 }

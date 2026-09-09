@@ -49,4 +49,8 @@ public sealed class InfersException(
     public class AlreadyConsumed(
         override val reason: String = "handle already consumed",
     ) : InfersException(reason)
+
+    public class BufferPoolExhausted(
+        override val reason: String,
+    ) : InfersException("Buffer pool exhausted: $reason")
 }

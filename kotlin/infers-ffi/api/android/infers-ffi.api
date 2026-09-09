@@ -1392,6 +1392,7 @@ public class dev/stashy/infers/ffi/HardwareBufferHandle : dev/stashy/infers/ffi/
 	public static final field Companion Ldev/stashy/infers/ffi/HardwareBufferHandle$Companion;
 	public fun <init> (Lcom/sun/jna/Pointer;)V
 	public fun <init> (Ldev/stashy/infers/ffi/NoPointer;)V
+	public fun borrowOn (Ldev/stashy/infers/ffi/GpuDevice;)Ldev/stashy/infers/ffi/GpuDeferred;
 	public fun close ()V
 	public fun destroy ()V
 	public fun format-pVg5ArA ()I
@@ -1410,6 +1411,7 @@ public final class dev/stashy/infers/ffi/HardwareBufferHandle$Companion {
 
 public abstract interface class dev/stashy/infers/ffi/HardwareBufferHandleInterface {
 	public static final field Companion Ldev/stashy/infers/ffi/HardwareBufferHandleInterface$Companion;
+	public abstract fun borrowOn (Ldev/stashy/infers/ffi/GpuDevice;)Ldev/stashy/infers/ffi/GpuDeferred;
 	public abstract fun format-pVg5ArA ()I
 	public abstract fun height-pVg5ArA ()I
 	public abstract fun lockCpu ()[B
@@ -1435,6 +1437,7 @@ public class dev/stashy/infers/ffi/HardwareImage : dev/stashy/infers/ffi/Disposa
 	public fun onCpu ()Ldev/stashy/infers/ffi/CpuDeferred;
 	public final fun uniffiClonePointer ()Lcom/sun/jna/Pointer;
 	public fun width-pVg5ArA ()I
+	public fun writeBytes ([B)V
 }
 
 public final class dev/stashy/infers/ffi/HardwareImage$Companion {
@@ -1447,6 +1450,7 @@ public abstract interface class dev/stashy/infers/ffi/HardwareImageInterface {
 	public abstract fun on (Ldev/stashy/infers/ffi/GpuDevice;)Ldev/stashy/infers/ffi/GpuDeferred;
 	public abstract fun onCpu ()Ldev/stashy/infers/ffi/CpuDeferred;
 	public abstract fun width-pVg5ArA ()I
+	public abstract fun writeBytes ([B)V
 }
 
 public final class dev/stashy/infers/ffi/HardwareImageInterface$Companion {
@@ -1561,6 +1565,7 @@ public final class dev/stashy/infers/ffi/Infers_bindings_androidKt {
 	public static final fun createHardwareBufferFromJava-4PLdz1A (JLdev/stashy/infers/ffi/DeviceInfo;)Ldev/stashy/infers/ffi/HardwareBufferHandle;
 	public static final fun createHardwareBufferFromOwned-4PLdz1A (JLdev/stashy/infers/ffi/DeviceInfo;)Ldev/stashy/infers/ffi/HardwareBufferHandle;
 	public static final fun createHardwareImage-SOCY_n4 (IILdev/stashy/infers/ffi/ImageFormat;[B)Ldev/stashy/infers/ffi/HardwareImage;
+	public static final fun createHardwareImageEmpty-t3GQkyU (IILdev/stashy/infers/ffi/ImageFormat;)Ldev/stashy/infers/ffi/HardwareImage;
 	public static final fun setValue (Ldev/stashy/infers/ffi/RustBufferStruct;Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;)V
 	public static final fun uniffiEnsureInitialized ()V
 }
