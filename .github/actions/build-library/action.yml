@@ -16,22 +16,6 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Download ExecuTorch artifacts
-      uses: actions/download-artifact@v8
-      with:
-        pattern: executorch-*
-        merge-multiple: true
-        path: target/executorch
-
-    - name: Verify ExecuTorch layout
-      shell: bash
-      run: |
-        test -f target/executorch/x86_64-unknown-linux-gnu/libexecutorch.a
-        test -f target/executorch/x86_64-unknown-linux-gnu/backends/vulkan/libinfers_et_vulkan_ffi.a
-        test -f target/executorch/android-arm64/libexecutorch.a
-        test -f target/executorch/android-arm64/backends/vulkan/libinfers_et_vulkan_ffi.a
-        find target/executorch -name '*.a' | head
-
     - name: Install host build deps
       shell: bash
       run: |
@@ -54,6 +38,24 @@ runs:
       uses: actions-rust-lang/setup-rust-toolchain@v1
       with:
         target: aarch64-linux-android
+
+    # After rust-cache: a partial cache hit runs cleanTargetDir, which treats
+    # target/executorch as a Cargo profile and deletes the prebuilt .a files.
+    - name: Download ExecuTorch artifacts
+      uses: actions/download-artifact@v8
+      with:
+        pattern: executorch-*
+        merge-multiple: true
+        path: target/executorch
+
+    - name: Verify ExecuTorch layout
+      shell: bash
+      run: |
+        test -f target/executorch/x86_64-unknown-linux-gnu/libexecutorch.a
+        test -f target/executorch/x86_64-unknown-linux-gnu/backends/vulkan/libinfers_et_vulkan_ffi.a
+        test -f target/executorch/android-arm64/libexecutorch.a
+        test -f target/executorch/android-arm64/backends/vulkan/libinfers_et_vulkan_ffi.a
+        find target/executorch -name '*.a' | head
 
     # TODO Restore once migrated from Gobley
     #    - name: Build Rust crate ${{ (inputs.release == 'true' && ' (release)') || '' }}
