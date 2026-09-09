@@ -14,6 +14,9 @@ plugins {
 
 android {
     namespace = "dev.stashy.infers.ffi"
+    defaultConfig {
+        consumerProguardFiles("consumer-rules.pro")
+    }
 }
 
 val androidApi: Int = libs.versions.android.min.sdk

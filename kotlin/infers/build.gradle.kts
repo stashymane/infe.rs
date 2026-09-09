@@ -7,6 +7,9 @@ plugins {
 
 android {
     namespace = "dev.stashy.infers.core"
+    defaultConfig {
+        consumerProguardFiles("consumer-rules.pro")
+    }
 }
 
 kotlin {
