@@ -40,7 +40,7 @@ class VulkanPipelineTest {
                     val cpuShape =
                         inferenceScope {
                             val hardware = HardwareImage.fromBytes(rawBytes, 4u, 4u, ImageFormat.Rgb888)
-                            hardware.onCpu().process(cpu, options).materialize().shape
+                            hardware.on(CpuDevice).process(cpu, options).materialize().shape
                         }
                     inferenceScope {
                         val hardware = HardwareImage.fromBytes(rawBytes, 4u, 4u, ImageFormat.Rgb888)

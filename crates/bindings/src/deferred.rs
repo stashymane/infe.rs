@@ -1,6 +1,8 @@
 use crate::device::DeviceInfo;
 use crate::error::InfersError;
-use crate::image::{CpuImageProcessor, GpuImage, GpuImageProcessor, HardwareImage, ProcessingOptions};
+use crate::image::{
+    CpuImage, CpuImageProcessor, GpuImage, GpuImageProcessor, HardwareImage, ProcessingOptions,
+};
 use crate::tensor::{CpuTensor, DataType, GpuTensor, TensorShape};
 use infers_core::{Cpu, Deferred, Pending};
 use parking_lot::Mutex;
@@ -34,6 +36,12 @@ impl CpuDeferred {
 impl CpuDeferred {
     pub fn device_info(&self) -> DeviceInfo {
         infers_core::Cpu::info().clone().into()
+    }
+
+    pub fn materialize(&self) -> Result<Arc<CpuImage>, InfersError> {
+        let deferred = self.take()?;
+        let image = deferred.materialize().map_err(InfersError::from)?;
+        Ok(Arc::new(CpuImage::from_core(image)))
     }
 
     pub fn process(

@@ -39,7 +39,7 @@ class XnnpackE2eTest {
                             height.toUInt(),
                             ImageFormat.Rgb888,
                         )
-                        val pending = hardware.onCpu().process(processor, options)
+                        val pending = hardware.on(CpuDevice).process(processor, options)
                         if (pending.shape != inputShape) return@inferenceScope
                         val outputs = session.infer(pending)
                         assertTrue(outputs.isNotEmpty())

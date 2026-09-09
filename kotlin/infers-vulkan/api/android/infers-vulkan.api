@@ -6,19 +6,14 @@ public final class dev/stashy/infers/vulkan/GpuDeferred : dev/stashy/infers/Defe
 	public fun <init> (Ldev/stashy/infers/ffi/GpuDeferred;)V
 	public fun close ()V
 	public final fun getDeviceInfo ()Ldev/stashy/infers/DeviceInfo;
-}
-
-public final class dev/stashy/infers/vulkan/GpuDeferredKt {
-	public static final fun materialize (Ldev/stashy/infers/InferenceScope;Ldev/stashy/infers/vulkan/GpuDeferred;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public static final fun materialize (Ldev/stashy/infers/InferenceScope;Ldev/stashy/infers/vulkan/GpuPending;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public static final fun on (Ldev/stashy/infers/InferenceScope;Ldev/stashy/infers/HardwareImage;Ldev/stashy/infers/vulkan/GpuDevice;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public static final fun process (Ldev/stashy/infers/InferenceScope;Ldev/stashy/infers/vulkan/GpuDeferred;Ldev/stashy/infers/vulkan/GpuImageProcessor;Ldev/stashy/infers/ProcessingOptions;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun materializeInternal (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
 
 public final class dev/stashy/infers/vulkan/GpuDevice : dev/stashy/infers/Device, java/lang/AutoCloseable {
 	public synthetic fun <init> (JILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public synthetic fun <init> (JLkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public fun close ()V
+	public fun deferHardwareInternal (Ldev/stashy/infers/HardwareImage;)Ldev/stashy/infers/Deferred;
 	public fun getInfo ()Ldev/stashy/infers/DeviceInfo;
 }
 
@@ -33,7 +28,7 @@ public final class dev/stashy/infers/vulkan/GpuImageProcessor : dev/stashy/infer
 	public fun <init> (Ldev/stashy/infers/vulkan/GpuDevice;)V
 	public fun close ()V
 	public fun getDeviceInfo ()Ldev/stashy/infers/DeviceInfo;
-	public fun processInternal (Ldev/stashy/infers/DeviceImage;Ldev/stashy/infers/ProcessingOptions;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun processInternal (Ldev/stashy/infers/Deferred;Ldev/stashy/infers/ProcessingOptions;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
 
 public final class dev/stashy/infers/vulkan/GpuPending : dev/stashy/infers/Pending {
@@ -41,6 +36,7 @@ public final class dev/stashy/infers/vulkan/GpuPending : dev/stashy/infers/Pendi
 	public fun close ()V
 	public fun getDtype ()Ldev/stashy/infers/DataType;
 	public fun getShape ()Ldev/stashy/infers/TensorShape;
+	public fun materializeInternal (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
 
 public final class dev/stashy/infers/vulkan/GpuSession : dev/stashy/infers/ModelSession {
@@ -68,9 +64,6 @@ public final class dev/stashy/infers/vulkan/GpuTensor : dev/stashy/infers/Tensor
 }
 
 public final class dev/stashy/infers/vulkan/InferenceScopeExtensionsKt {
-	public static final fun infer (Ldev/stashy/infers/InferenceScope;Ldev/stashy/infers/ModelSession;Ldev/stashy/infers/Tensor;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public static final fun infer (Ldev/stashy/infers/InferenceScope;Ldev/stashy/infers/ModelSession;Ldev/stashy/infers/vulkan/GpuPending;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public static final fun infer (Ldev/stashy/infers/InferenceScope;Ldev/stashy/infers/ModelSession;Ljava/util/List;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static final fun uploadTensor (Ldev/stashy/infers/InferenceScope;Ldev/stashy/infers/vulkan/GpuDevice;Ldev/stashy/infers/CpuTensor;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
 

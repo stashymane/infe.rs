@@ -1,6 +1,8 @@
 use crate::device::DeviceInfo;
 use crate::error::InfersError;
+use infers_core::CpuImage as CoreCpuImage;
 use infers_core::HardwareImage as CoreHardwareImage;
+use infers_core::Image;
 use processing::CpuImageProcessor as CoreCpuImageProcessor;
 use processing_core::{
     FitMode as CoreFitMode, ImageFormat as CoreImageFormat,
@@ -330,6 +332,38 @@ pub fn create_hardware_buffer_from_owned(
         Err(InfersError::PlatformError {
             reason: "HardwareBuffer is only available on Android".into(),
         })
+    }
+}
+
+/// CPU-resident image (zero-copy wrap of [`HardwareImage`] bytes).
+#[derive(uniffi::Object)]
+pub struct CpuImage {
+    inner: CoreCpuImage,
+}
+
+impl CpuImage {
+    pub(crate) fn from_core(inner: CoreCpuImage) -> Self {
+        Self { inner }
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn inner(&self) -> &CoreCpuImage {
+        &self.inner
+    }
+}
+
+#[uniffi::export]
+impl CpuImage {
+    pub fn width(&self) -> u32 {
+        self.inner.width()
+    }
+
+    pub fn height(&self) -> u32 {
+        self.inner.height()
+    }
+
+    pub fn format(&self) -> ImageFormat {
+        self.inner.format().into()
     }
 }
 

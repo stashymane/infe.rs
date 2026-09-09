@@ -21,7 +21,7 @@ import dev.stashy.infers.ffi.CpuTensor as FfiCpuTensor
  * Read results via [floats] / [ints] / [longs] / [bytes] views. Native calls are not
  * interruptible — cancellation is observed between stages, not mid-readback.
  */
-public interface Tensor<D : Device> : AutoCloseable {
+public interface Tensor<D : Device<D>> : AutoCloseable {
     public val shape: TensorShape
     public val dtype: DataType
     public val deviceInfo: DeviceInfo

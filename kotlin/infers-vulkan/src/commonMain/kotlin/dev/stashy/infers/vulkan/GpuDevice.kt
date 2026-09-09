@@ -1,8 +1,10 @@
 package dev.stashy.infers.vulkan
 
 import dev.stashy.infers.CpuTensor
+import dev.stashy.infers.Deferred
 import dev.stashy.infers.Device
 import dev.stashy.infers.DeviceInfo
+import dev.stashy.infers.HardwareImage
 import dev.stashy.infers.InfersInternalApi
 import dev.stashy.infers.internal.CloseGate
 import dev.stashy.infers.internal.fromFfi
@@ -15,7 +17,7 @@ import dev.stashy.infers.ffi.GpuDevice as FfiGpuDevice
 @OptIn(InfersInternalApi::class)
 public class GpuDevice private constructor(
     internal val handle: FfiGpuDevice,
-) : Device,
+) : Device<GpuDevice>,
     AutoCloseable {
     private val gate = CloseGate("GpuDevice")
 
@@ -31,6 +33,12 @@ public class GpuDevice private constructor(
 
     @InfersInternalApi
     internal fun ensureOpen() = gate.ensureOpen()
+
+    override fun deferHardwareInternal(hardware: HardwareImage): Deferred<GpuDevice> {
+        gate.ensureOpen()
+        hardware.ensureOpen()
+        return withFfiErrors { GpuDeferred(hardware.handle.on(handle)) }
+    }
 
     @InfersInternalApi
     internal suspend fun uploadTensorInternal(tensor: CpuTensor): GpuTensor = withContext(Dispatchers.Default) {

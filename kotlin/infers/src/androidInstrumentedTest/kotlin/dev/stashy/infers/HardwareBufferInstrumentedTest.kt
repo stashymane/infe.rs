@@ -38,7 +38,7 @@ class HardwareBufferInstrumentedTest {
                         buffer.height,
                         ImageFormat.Rgb888,
                     )
-                    val pending = hardware.onCpu().process(processor, options)
+                    val pending = hardware.on(CpuDevice).process(processor, options)
                     assertEquals(TensorShape.of(1, 3, 2, 2), pending.shape)
                     assertTrue(pending.materialize().floats().use { it.size > 0 })
                 }

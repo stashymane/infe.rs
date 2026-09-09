@@ -10,7 +10,7 @@ import kotlinx.coroutines.withContext
 import dev.stashy.infers.ffi.CpuSession as FfiCpuSession
 
 /** Loaded model ready for inference on device [D]. */
-public interface ModelSession<D : Device> : AutoCloseable {
+public interface ModelSession<D : Device<D>> : AutoCloseable {
     public val deviceInfo: DeviceInfo
     public val inputShapes: List<TensorShape>
     public val outputShapes: List<TensorShape>

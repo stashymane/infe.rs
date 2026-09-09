@@ -38,6 +38,7 @@ public class dev/stashy/infers/ffi/CpuDeferred : dev/stashy/infers/ffi/CpuDeferr
 	public fun deviceInfo ()Ldev/stashy/infers/ffi/DeviceInfo;
 	protected final fun getCleanable ()Ldev/stashy/infers/ffi/UniffiCleaner$Cleanable;
 	protected final fun getPointer ()Lcom/sun/jna/Pointer;
+	public fun materialize ()Ldev/stashy/infers/ffi/CpuImage;
 	public fun process (Ldev/stashy/infers/ffi/CpuImageProcessor;Ldev/stashy/infers/ffi/ProcessingOptions;)Ldev/stashy/infers/ffi/CpuPending;
 	public final fun uniffiClonePointer ()Lcom/sun/jna/Pointer;
 }
@@ -48,6 +49,7 @@ public final class dev/stashy/infers/ffi/CpuDeferred$Companion {
 public abstract interface class dev/stashy/infers/ffi/CpuDeferredInterface {
 	public static final field Companion Ldev/stashy/infers/ffi/CpuDeferredInterface$Companion;
 	public abstract fun deviceInfo ()Ldev/stashy/infers/ffi/DeviceInfo;
+	public abstract fun materialize ()Ldev/stashy/infers/ffi/CpuImage;
 	public abstract fun process (Ldev/stashy/infers/ffi/CpuImageProcessor;Ldev/stashy/infers/ffi/ProcessingOptions;)Ldev/stashy/infers/ffi/CpuPending;
 }
 
@@ -76,6 +78,33 @@ public abstract interface class dev/stashy/infers/ffi/CpuDeviceInterface {
 }
 
 public final class dev/stashy/infers/ffi/CpuDeviceInterface$Companion {
+}
+
+public class dev/stashy/infers/ffi/CpuImage : dev/stashy/infers/ffi/CpuImageInterface, dev/stashy/infers/ffi/Disposable {
+	public static final field Companion Ldev/stashy/infers/ffi/CpuImage$Companion;
+	public fun <init> (Lcom/sun/jna/Pointer;)V
+	public fun <init> (Ldev/stashy/infers/ffi/NoPointer;)V
+	public fun close ()V
+	public fun destroy ()V
+	public fun format ()Ldev/stashy/infers/ffi/ImageFormat;
+	protected final fun getCleanable ()Ldev/stashy/infers/ffi/UniffiCleaner$Cleanable;
+	protected final fun getPointer ()Lcom/sun/jna/Pointer;
+	public fun height-pVg5ArA ()I
+	public final fun uniffiClonePointer ()Lcom/sun/jna/Pointer;
+	public fun width-pVg5ArA ()I
+}
+
+public final class dev/stashy/infers/ffi/CpuImage$Companion {
+}
+
+public abstract interface class dev/stashy/infers/ffi/CpuImageInterface {
+	public static final field Companion Ldev/stashy/infers/ffi/CpuImageInterface$Companion;
+	public abstract fun format ()Ldev/stashy/infers/ffi/ImageFormat;
+	public abstract fun height-pVg5ArA ()I
+	public abstract fun width-pVg5ArA ()I
+}
+
+public final class dev/stashy/infers/ffi/CpuImageInterface$Companion {
 }
 
 public class dev/stashy/infers/ffi/CpuImageProcessor : dev/stashy/infers/ffi/CpuImageProcessorInterface, dev/stashy/infers/ffi/Disposable {
@@ -593,6 +622,24 @@ public final class dev/stashy/infers/ffi/FfiConverterTypeCpuDevice : dev/stashy/
 	public fun read-JPGhLiY (Ljava/nio/ByteBuffer;)Ldev/stashy/infers/ffi/CpuDevice;
 	public synthetic fun read-JPGhLiY (Ljava/nio/ByteBuffer;)Ljava/lang/Object;
 	public fun write-OHYOuyI (Ldev/stashy/infers/ffi/CpuDevice;Ljava/nio/ByteBuffer;)V
+	public synthetic fun write-OHYOuyI (Ljava/lang/Object;Ljava/nio/ByteBuffer;)V
+}
+
+public final class dev/stashy/infers/ffi/FfiConverterTypeCpuImage : dev/stashy/infers/ffi/FfiConverter {
+	public static final field INSTANCE Ldev/stashy/infers/ffi/FfiConverterTypeCpuImage;
+	public fun allocationSize-I7RO_PI (Ldev/stashy/infers/ffi/CpuImage;)J
+	public synthetic fun allocationSize-I7RO_PI (Ljava/lang/Object;)J
+	public fun lift (Lcom/sun/jna/Pointer;)Ldev/stashy/infers/ffi/CpuImage;
+	public synthetic fun lift (Ljava/lang/Object;)Ljava/lang/Object;
+	public fun liftFromRustBuffer (Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;)Ldev/stashy/infers/ffi/CpuImage;
+	public synthetic fun liftFromRustBuffer (Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;)Ljava/lang/Object;
+	public fun lower (Ldev/stashy/infers/ffi/CpuImage;)Lcom/sun/jna/Pointer;
+	public synthetic fun lower (Ljava/lang/Object;)Ljava/lang/Object;
+	public fun lowerIntoRustBuffer (Ldev/stashy/infers/ffi/CpuImage;)Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;
+	public synthetic fun lowerIntoRustBuffer (Ljava/lang/Object;)Ldev/stashy/infers/ffi/RustBufferStruct$ByValue;
+	public fun read-JPGhLiY (Ljava/nio/ByteBuffer;)Ldev/stashy/infers/ffi/CpuImage;
+	public synthetic fun read-JPGhLiY (Ljava/nio/ByteBuffer;)Ljava/lang/Object;
+	public fun write-OHYOuyI (Ldev/stashy/infers/ffi/CpuImage;Ljava/nio/ByteBuffer;)V
 	public synthetic fun write-OHYOuyI (Ljava/lang/Object;Ljava/nio/ByteBuffer;)V
 }
 

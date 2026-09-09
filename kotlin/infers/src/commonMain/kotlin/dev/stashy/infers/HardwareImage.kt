@@ -61,4 +61,4 @@ public class HardwareImage @InfersInternalApi constructor(
 
 @OptIn(InfersInternalApi::class)
 context(scope: InferenceScope)
-public fun HardwareImage.onCpu(): CpuDeferred = scope.register(CpuDeferred(handle.onCpu()))
+public fun <D : Device<D>> HardwareImage.on(device: D): Deferred<D> = scope.register(device.deferHardwareInternal(this))

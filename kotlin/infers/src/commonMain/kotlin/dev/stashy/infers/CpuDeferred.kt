@@ -14,6 +14,12 @@ public class CpuDeferred @InfersInternalApi constructor(
     @InfersInternalApi
     internal fun ensureOpen() = gate.ensureOpen()
 
+    @InfersInternalApi
+    override suspend fun materializeInternal(): DeviceImage<CpuDevice> = withFfiErrors {
+        gate.ensureOpen()
+        CpuImage(handle.materialize())
+    }
+
     override fun close() {
         if (gate.markClosed()) {
             handle.close()
@@ -41,6 +47,12 @@ public class CpuPending @InfersInternalApi constructor(
 
     @InfersInternalApi
     internal fun ensureOpen() = gate.ensureOpen()
+
+    @InfersInternalApi
+    override suspend fun materializeInternal(): Tensor<CpuDevice> = withFfiErrors {
+        gate.ensureOpen()
+        CpuTensor.fromFfi(handle.materialize())
+    }
 
     override fun close() {
         if (gate.markClosed()) {
