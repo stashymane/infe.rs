@@ -10,6 +10,7 @@ description.workspace = true
 [dependencies]
 infers-core = { path = "../infers-core" }
 infers-gpu = { path = "../infers-gpu", optional = true }
+image = { version = "0.25", default-features = false, features = ["jpeg"] }
 
 [features]
 vulkan = ["dep:infers-gpu"]

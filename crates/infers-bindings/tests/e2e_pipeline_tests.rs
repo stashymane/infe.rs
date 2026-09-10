@@ -2,9 +2,7 @@ use infers_bindings::*;
 
 mod common;
 
-fn bindings_processing_options(
-    opts: infers_core::ProcessingOptions,
-) -> ProcessingOptions {
+fn bindings_processing_options(opts: infers_core::ProcessingOptions) -> ProcessingOptions {
     ProcessingOptions {
         src_w: opts.src_w,
         src_h: opts.src_h,
@@ -25,28 +23,37 @@ fn bindings_processing_options(
 #[test]
 fn test_cpu_preprocess_pipeline() {
     let processor = CpuImageProcessor::new();
-    let frame = infers_test_utils::camera_frame_640x480(128);
-    let hardware = create_hardware_image(
-        frame.width(),
-        frame.height(),
-        ImageFormat::Rgb888,
-        frame.as_bytes().to_vec(),
-    )
-    .expect("hardware image");
 
-    let options = bindings_processing_options(infers_test_utils::detector_preprocess_options(224));
-    let deferred = hardware.on_cpu();
-    let pending = deferred.process(processor, options).expect("preprocess");
-    let tensor = pending.materialize().expect("materialize");
-    assert_eq!(
-        tensor.shape(),
-        TensorShape {
-            dims: vec![1, 3, 224, 224]
-        }
-    );
-    assert_eq!(tensor.dtype(), DataType::F32);
-    assert_eq!(
-        tensor.read_bytes().expect("read bytes").len(),
-        1 * 3 * 224 * 224 * 4
-    );
+    for (label, frame) in infers_test_utils::test_input_frames() {
+        let hardware = create_hardware_image(
+            frame.width(),
+            frame.height(),
+            ImageFormat::Rgb888,
+            frame.as_bytes().to_vec(),
+        )
+        .unwrap_or_else(|e| panic!("{label}: hardware image: {e}"));
+
+        let options =
+            bindings_processing_options(infers_test_utils::detector_preprocess_options(&frame, 224));
+        let deferred = hardware.on_cpu();
+        let pending = deferred
+            .process(processor.clone(), options)
+            .unwrap_or_else(|e| panic!("{label}: preprocess: {e}"));
+        let tensor = pending
+            .materialize()
+            .unwrap_or_else(|e| panic!("{label}: materialize: {e}"));
+        assert_eq!(
+            tensor.shape(),
+            TensorShape {
+                dims: vec![1, 3, 224, 224]
+            },
+            "{label}"
+        );
+        assert_eq!(tensor.dtype(), DataType::F32, "{label}");
+        assert_eq!(
+            tensor.read_bytes().expect("read bytes").len(),
+            1 * 3 * 224 * 224 * 4,
+            "{label}"
+        );
+    }
 }

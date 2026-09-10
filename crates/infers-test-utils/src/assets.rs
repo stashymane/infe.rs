@@ -1,8 +1,76 @@
 use std::path::{Path, PathBuf};
 
-use infers_core::{CoreError, Cpu, DataType, Tensor};
+use image::ImageReader;
+use infers_core::{CoreError, Cpu, DataType, HardwareImage, ImageFormat, Tensor};
 
 use crate::{cpu_tensor_f32, read_f32_output};
+
+/// Bundled JPEG under `assets/images/`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SampleImage {
+    Cat,
+    Plant,
+    Office,
+}
+
+impl SampleImage {
+    pub const ALL: &[Self] = &[Self::Cat, Self::Plant, Self::Office];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Cat => "cat",
+            Self::Plant => "plant",
+            Self::Office => "office",
+        }
+    }
+
+    pub fn file_name(self) -> &'static str {
+        match self {
+            Self::Cat => "cat-unsplash-SKraVaPcPFY.jpg",
+            Self::Plant => "plant-unsplash-yzPWspWSDm0.jpg",
+            Self::Office => "office-unsplash-_aIFYxHW328.jpg",
+        }
+    }
+}
+
+/// Locate the repo `assets/` directory by walking up from this crate's manifest dir.
+pub fn assets_dir() -> Option<PathBuf> {
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    for ancestor in manifest_dir.ancestors() {
+        let candidate = ancestor.join("assets");
+        if candidate.join("images").is_dir() {
+            return Some(candidate);
+        }
+    }
+    None
+}
+
+pub fn sample_image_path(image: SampleImage) -> Option<PathBuf> {
+    let path = assets_dir()?.join("images").join(image.file_name());
+    path.is_file().then_some(path)
+}
+
+/// Decode a JPEG on disk into an RGB888 [`HardwareImage`].
+pub fn load_rgb_jpeg(path: &Path) -> Result<HardwareImage, String> {
+    let decoded = ImageReader::open(path)
+        .map_err(|e| format!("open {}: {e}", path.display()))?
+        .decode()
+        .map_err(|e| format!("decode {}: {e}", path.display()))?
+        .into_rgb8();
+    let (width, height) = decoded.dimensions();
+    HardwareImage::new(width, height, ImageFormat::Rgb888, decoded.into_raw())
+        .map_err(|e| format!("HardwareImage from {}: {e}", path.display()))
+}
+
+pub fn load_sample_image(image: SampleImage) -> Result<HardwareImage, String> {
+    let path = sample_image_path(image).ok_or_else(|| {
+        format!(
+            "sample image {} not found under assets/images/",
+            image.file_name()
+        )
+    })?;
+    load_rgb_jpeg(&path)
+}
 
 /// Locate `target/yolo26n-face` by walking up from this crate's manifest dir.
 pub fn yolo26n_face_dir() -> Option<PathBuf> {

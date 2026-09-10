@@ -11,7 +11,7 @@ use infers_test_utils::{
     assets::{
         assert_detector_inference_outputs, read_model_bytes, yolo26n_face_asset, yolo26n_face_imgsz,
     },
-    camera_frame_640x480, detector_preprocess_options,
+    detector_preprocess_options, test_input_frames,
 };
 
 #[test]
@@ -38,21 +38,28 @@ fn test_xnnpack_detector_pipeline_inference() {
         .expect("load xnnpack model");
 
     let image_proc = CpuImageProcessor::new();
-    let frame = camera_frame_640x480(128);
-    let pending = frame
-        .on_cpu()
-        .process(&image_proc, &detector_preprocess_options(imgsz))
-        .expect("cpu preprocess");
-
-    assert_eq!(pending.shape().dims(), &[1, 3, imgsz as usize, imgsz as usize]);
-    assert_eq!(pending.dtype(), DataType::F32);
-
-    let outputs = session
-        .infer(pending)
-        .expect("xnnpack detector inference must complete");
-
     let expected_shapes = session.output_shapes().to_vec();
-    assert_detector_inference_outputs(&outputs, &expected_shapes);
+
+    for (label, frame) in test_input_frames() {
+        let options = detector_preprocess_options(&frame, imgsz);
+        let pending = frame
+            .on_cpu()
+            .process(&image_proc, &options)
+            .unwrap_or_else(|e| panic!("{label}: cpu preprocess: {e}"));
+
+        assert_eq!(
+            pending.shape().dims(),
+            &[1, 3, imgsz as usize, imgsz as usize],
+            "{label}"
+        );
+        assert_eq!(pending.dtype(), DataType::F32, "{label}");
+
+        let outputs = session
+            .infer(pending)
+            .unwrap_or_else(|e| panic!("{label}: xnnpack detector inference: {e}"));
+
+        assert_detector_inference_outputs(&outputs, &expected_shapes);
+    }
 }
 
 #[test]
@@ -77,27 +84,30 @@ fn test_vulkan_detector_pipeline_inference() {
     let bytes = read_model_bytes(&pte_path).expect("read vulkan model.pte");
     let backend = ExecuTorchBackend::new();
     let mut session = backend
-        .load_vulkan(
-            &bytes,
-            &vulkan,
-            VulkanOptions { method: None },
-        )
+        .load_vulkan(&bytes, &vulkan, VulkanOptions { method: None })
         .expect("load vulkan model");
 
     let image_proc = GpuImageProcessor::new(vulkan.clone()).expect("gpu processor");
-    let frame = camera_frame_640x480(128);
-    let pending = frame
-        .on(&vulkan)
-        .process(&image_proc, &detector_preprocess_options(imgsz))
-        .expect("gpu preprocess");
-
-    assert_eq!(pending.shape().dims(), &[1, 3, imgsz as usize, imgsz as usize]);
-    assert_eq!(pending.dtype(), DataType::F32);
-
-    let outputs = session
-        .infer(pending)
-        .expect("vulkan detector inference must complete");
-
     let expected_shapes = session.output_shapes().to_vec();
-    assert_detector_inference_outputs(&outputs, &expected_shapes);
+
+    for (label, frame) in test_input_frames() {
+        let options = detector_preprocess_options(&frame, imgsz);
+        let pending = frame
+            .on(&vulkan)
+            .process(&image_proc, &options)
+            .unwrap_or_else(|e| panic!("{label}: gpu preprocess: {e}"));
+
+        assert_eq!(
+            pending.shape().dims(),
+            &[1, 3, imgsz as usize, imgsz as usize],
+            "{label}"
+        );
+        assert_eq!(pending.dtype(), DataType::F32, "{label}");
+
+        let outputs = session
+            .infer(pending)
+            .unwrap_or_else(|e| panic!("{label}: vulkan detector inference: {e}"));
+
+        assert_detector_inference_outputs(&outputs, &expected_shapes);
+    }
 }

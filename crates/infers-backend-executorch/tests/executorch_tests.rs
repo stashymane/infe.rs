@@ -143,27 +143,6 @@ fn test_load_invalid_model_xnnpack() {
 }
 
 #[test]
-fn test_asset_model_loading_and_error_handling() {
-    let backend = ExecuTorchBackend::new();
-    let tflite_path = "../../assets/face_detector.tflite";
-
-    let result = backend.load_xnnpack_from_file(
-        tflite_path,
-        XnnpackOptions {
-            num_threads: 1,
-            method: None,
-        },
-    );
-    assert!(result.is_err());
-    match result.err().unwrap() {
-        CoreError::ModelLoadFailed(msg) => {
-            assert!(!msg.is_empty());
-        }
-        other => panic!("Expected ModelLoadFailed error, got {:?}", other),
-    }
-}
-
-#[test]
 fn test_yolo26n_face_xnnpack_asset_loads() {
     let Some(pte_path) = yolo26n_face_asset("xnnpack/model.pte") else {
         eprintln!("skipping: target/yolo26n-face/xnnpack/model.pte not built");

@@ -1,6 +1,5 @@
 use infers::{
-    CoreError, CpuImageProcessor, DataType, ExecuTorchBackend,
-    Session, XnnpackOptions,
+    CoreError, CpuImageProcessor, DataType, ExecuTorchBackend, Session, XnnpackOptions,
 };
 use infers_processing::DeferredCpuProcessExt;
 #[cfg(feature = "vulkan")]
@@ -8,47 +7,61 @@ use infers::{GpuImageProcessor, HardwareImageVulkanExt, Vulkan};
 #[cfg(feature = "vulkan")]
 use infers_processing::DeferredVulkanProcessExt;
 use infers_test_utils::{
-    camera_frame_640x480, detector_preprocess_options, landmarker_preprocess_options,
-    mock_cpu_detector, mock_cpu_landmarker, mock_gpu_detector, mock_gpu_landmarker,
-    read_f32_output,
+    detector_preprocess_options, landmarker_preprocess_options, mock_cpu_detector,
+    mock_cpu_landmarker, mock_gpu_detector, mock_gpu_landmarker, read_f32_output, test_input_frames,
 };
 
 #[test]
 fn test_cpu_face_pipeline() {
     let image_proc = CpuImageProcessor::new();
-    let mut detector = mock_cpu_detector(224);
-    let mut landmarker = mock_cpu_landmarker(224);
 
-    let frame = camera_frame_640x480(128);
-    let detector_pending = frame
-        .clone()
-        .on_cpu()
-        .process(&image_proc, &detector_preprocess_options(224))
-        .expect("detector preprocess");
+    for (label, frame) in test_input_frames() {
+        let mut detector = mock_cpu_detector(224);
+        let mut landmarker = mock_cpu_landmarker(224);
 
-    assert_eq!(detector_pending.shape().dims(), &[1, 3, 224, 224]);
-    assert_eq!(detector_pending.dtype(), DataType::F32);
+        let detector_pending = frame
+            .clone()
+            .on_cpu()
+            .process(&image_proc, &detector_preprocess_options(&frame, 224))
+            .unwrap_or_else(|e| panic!("{label}: detector preprocess: {e}"));
 
-    let detector_outputs = detector
-        .infer(detector_pending)
-        .expect("detector infer");
-    let boxes = read_f32_output(&detector_outputs).expect("read boxes");
-    assert_eq!(boxes.len(), 4);
+        assert_eq!(
+            detector_pending.shape().dims(),
+            &[1, 3, 224, 224],
+            "{label}"
+        );
+        assert_eq!(detector_pending.dtype(), DataType::F32, "{label}");
 
-    let landmarker_pending = frame
-        .clone()
-        .on_cpu()
-        .process(
-            &image_proc,
-            &landmarker_preprocess_options(boxes[0], boxes[1], boxes[2], boxes[3], 224),
-        )
-        .expect("landmarker preprocess");
+        let detector_outputs = detector
+            .infer(detector_pending)
+            .unwrap_or_else(|e| panic!("{label}: detector infer: {e}"));
+        let boxes = read_f32_output(&detector_outputs)
+            .unwrap_or_else(|e| panic!("{label}: read boxes: {e}"));
+        assert_eq!(boxes.len(), 4, "{label}");
 
-    let landmarker_outputs = landmarker
-        .infer(landmarker_pending)
-        .expect("landmarker infer");
-    let landmarks = read_f32_output(&landmarker_outputs).expect("read landmarks");
-    assert_eq!(landmarks.len(), 4);
+        let landmarker_pending = frame
+            .clone()
+            .on_cpu()
+            .process(
+                &image_proc,
+                &landmarker_preprocess_options(
+                    &frame,
+                    boxes[0],
+                    boxes[1],
+                    boxes[2],
+                    boxes[3],
+                    224,
+                ),
+            )
+            .unwrap_or_else(|e| panic!("{label}: landmarker preprocess: {e}"));
+
+        let landmarker_outputs = landmarker
+            .infer(landmarker_pending)
+            .unwrap_or_else(|e| panic!("{label}: landmarker infer: {e}"));
+        let landmarks = read_f32_output(&landmarker_outputs)
+            .unwrap_or_else(|e| panic!("{label}: read landmarks: {e}"));
+        assert_eq!(landmarks.len(), 4, "{label}");
+    }
 }
 
 #[test]
@@ -86,41 +99,55 @@ fn test_gpu_shared_vulkan_face_pipeline() {
         }
     };
 
-    let mut detector = mock_gpu_detector(vulkan.clone(), 224);
-    let mut landmarker = mock_gpu_landmarker(vulkan.clone(), 224);
-
     let image_proc = GpuImageProcessor::new(vulkan.clone()).expect("gpu processor");
 
-    let frame = camera_frame_640x480(128);
-    let detector_pending = frame
-        .clone()
-        .on(&vulkan)
-        .process(&image_proc, &detector_preprocess_options(224))
-        .expect("gpu detector preprocess");
+    for (label, frame) in test_input_frames() {
+        let mut detector = mock_gpu_detector(vulkan.clone(), 224);
+        let mut landmarker = mock_gpu_landmarker(vulkan.clone(), 224);
 
-    assert_eq!(detector_pending.shape().dims(), &[1, 3, 224, 224]);
-    assert_eq!(detector_pending.dtype(), DataType::F32);
+        let detector_pending = frame
+            .clone()
+            .on(&vulkan)
+            .process(&image_proc, &detector_preprocess_options(&frame, 224))
+            .unwrap_or_else(|e| panic!("{label}: gpu detector preprocess: {e}"));
 
-    let detector_outputs = detector
-        .infer(detector_pending)
-        .expect("gpu detector infer");
-    let boxes = read_f32_output(&detector_outputs).expect("read boxes");
-    assert_eq!(boxes, vec![10.0, 20.0, 100.0, 120.0]);
+        assert_eq!(
+            detector_pending.shape().dims(),
+            &[1, 3, 224, 224],
+            "{label}"
+        );
+        assert_eq!(detector_pending.dtype(), DataType::F32, "{label}");
 
-    let landmarker_pending = frame
-        .clone()
-        .on(&vulkan)
-        .process(
-            &image_proc,
-            &landmarker_preprocess_options(boxes[0], boxes[1], boxes[2], boxes[3], 224),
-        )
-        .expect("gpu landmarker preprocess");
+        let detector_outputs = detector
+            .infer(detector_pending)
+            .unwrap_or_else(|e| panic!("{label}: gpu detector infer: {e}"));
+        let boxes = read_f32_output(&detector_outputs)
+            .unwrap_or_else(|e| panic!("{label}: read boxes: {e}"));
+        assert_eq!(boxes, vec![10.0, 20.0, 100.0, 120.0], "{label}");
 
-    let landmarker_outputs = landmarker
-        .infer(landmarker_pending)
-        .expect("gpu landmarker infer");
-    let landmarks = read_f32_output(&landmarker_outputs).expect("read landmarks");
-    assert_eq!(landmarks, vec![30.0, 40.0, 50.0, 60.0]);
+        let landmarker_pending = frame
+            .clone()
+            .on(&vulkan)
+            .process(
+                &image_proc,
+                &landmarker_preprocess_options(
+                    &frame,
+                    boxes[0],
+                    boxes[1],
+                    boxes[2],
+                    boxes[3],
+                    224,
+                ),
+            )
+            .unwrap_or_else(|e| panic!("{label}: gpu landmarker preprocess: {e}"));
+
+        let landmarker_outputs = landmarker
+            .infer(landmarker_pending)
+            .unwrap_or_else(|e| panic!("{label}: gpu landmarker infer: {e}"));
+        let landmarks = read_f32_output(&landmarker_outputs)
+            .unwrap_or_else(|e| panic!("{label}: read landmarks: {e}"));
+        assert_eq!(landmarks, vec![30.0, 40.0, 50.0, 60.0], "{label}");
+    }
 }
 
 #[test]
@@ -144,10 +171,13 @@ fn test_execu_torch_vulkan_load_shares_context_with_processor() {
     );
     assert!(result.is_err());
 
-    let _ = camera_frame_640x480(64)
-        .on(&vulkan)
-        .process(&image_proc, &detector_preprocess_options(64))
-        .expect("preprocess");
+    for (label, frame) in test_input_frames() {
+        let options = detector_preprocess_options(&frame, 64);
+        let _ = frame
+            .on(&vulkan)
+            .process(&image_proc, &options)
+            .unwrap_or_else(|e| panic!("{label}: preprocess: {e}"));
+    }
 
     drop(image_proc);
 }

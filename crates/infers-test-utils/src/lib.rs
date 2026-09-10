@@ -218,17 +218,28 @@ pub fn camera_frame_640x480(fill: u8) -> HardwareImage {
     HardwareImage::new(640, 480, ImageFormat::Rgb888, bytes).expect("valid frame buffer")
 }
 
-pub fn detector_preprocess_options(dest: u32) -> ProcessingOptions {
+/// Synthetic frame plus every bundled sample JPEG under `assets/images/`.
+pub fn test_input_frames() -> Vec<(&'static str, HardwareImage)> {
+    let mut frames = vec![("synthetic-640x480", camera_frame_640x480(128))];
+    for sample in assets::SampleImage::ALL {
+        let image = assets::load_sample_image(*sample)
+            .unwrap_or_else(|err| panic!("load sample {}: {err}", sample.label()));
+        frames.push((sample.label(), image));
+    }
+    frames
+}
+
+pub fn detector_preprocess_options(frame: &HardwareImage, dest: u32) -> ProcessingOptions {
     ProcessingOptions {
-        src_w: 640,
-        src_h: 480,
+        src_w: frame.width(),
+        src_h: frame.height(),
         crop_x: 0,
         crop_y: 0,
-        crop_w: 640,
-        crop_h: 480,
+        crop_w: frame.width(),
+        crop_h: frame.height(),
         dest_w: dest,
         dest_h: dest,
-        src_format: ImageFormat::Rgb888,
+        src_format: frame.format(),
         dest_format: ImageFormat::Rgbf32,
         fit_mode: FitMode::Contain,
         rotation_degrees: 0.0,
@@ -237,6 +248,7 @@ pub fn detector_preprocess_options(dest: u32) -> ProcessingOptions {
 }
 
 pub fn landmarker_preprocess_options(
+    frame: &HardwareImage,
     box_x: f32,
     box_y: f32,
     box_w: f32,
@@ -244,15 +256,15 @@ pub fn landmarker_preprocess_options(
     dest: u32,
 ) -> ProcessingOptions {
     ProcessingOptions {
-        src_w: 640,
-        src_h: 480,
+        src_w: frame.width(),
+        src_h: frame.height(),
         crop_x: box_x.max(0.0) as u32,
         crop_y: box_y.max(0.0) as u32,
         crop_w: box_w.max(1.0) as u32,
         crop_h: box_h.max(1.0) as u32,
         dest_w: dest,
         dest_h: dest,
-        src_format: ImageFormat::Rgb888,
+        src_format: frame.format(),
         dest_format: ImageFormat::Rgbf32,
         fit_mode: FitMode::Stretch,
         rotation_degrees: 0.0,
