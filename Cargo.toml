@@ -1,17 +1,19 @@
 [workspace]
 members = [
-    "crates/backends/executorch",
-    "crates/bindings",
-    "crates/core",
-    "crates/gpu",
-    "crates/platform/android",
-    "crates/processing",
-    "crates/processing/core",
-    "crates/test-utils",
+    "crates/infers",
+    "crates/infers-backend-executorch",
+    "crates/infers-bindings",
+    "crates/infers-core",
+    "crates/infers-gpu",
+    "crates/infers-platform-android",
+    "crates/infers-processing",
+    "crates/infers-processing-core",
+    "crates/infers-test-utils",
 ]
 exclude = [
-    "crates/processing/shaders",
+    "crates/infers-processing-shaders",
 ]
+default-members = ["crates/infers"]
 resolver = "3"
 
 [workspace.package]
@@ -33,45 +35,3 @@ criterion = { version = "0.8.2", features = ["html_reports"] }
 # poison it and turn every later access into an error or panic.
 parking_lot = "0.12"
 thiserror = "2"
-
-[package]
-name = "infers"
-version.workspace = true
-edition.workspace = true
-license.workspace = true
-repository.workspace = true
-homepage.workspace = true
-description.workspace = true
-
-[dependencies]
-infers-core = { path = "crates/core" }
-infers-gpu = { path = "crates/gpu", optional = true }
-processing = { path = "crates/processing" }
-infers-backend-executorch = { path = "crates/backends/executorch", default-features = false }
-
-[features]
-default = ["portable", "xnnpack", "vulkan"]
-portable = ["infers-backend-executorch/portable"]
-xnnpack = ["infers-backend-executorch/xnnpack"]
-vulkan = ["infers-backend-executorch/vulkan", "processing/vulkan", "dep:infers-gpu"]
-
-[dev-dependencies]
-criterion = { workspace = true }
-infers-test-utils = { path = "crates/test-utils", features = ["vulkan"] }
-
-[[bench]]
-name = "cpu_pipeline"
-path = "benches/cpu_pipeline.rs"
-harness = false
-
-[[bench]]
-name = "gpu_pipeline"
-path = "benches/gpu_pipeline.rs"
-harness = false
-required-features = ["vulkan"]
-
-[target.'cfg(target_os = "android")'.dependencies]
-platform-android = { path = "crates/platform/android" }
-
-[lints]
-workspace = true

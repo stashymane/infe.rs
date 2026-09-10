@@ -1,0 +1,41 @@
+[package]
+name = "infers"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description.workspace = true
+
+[dependencies]
+infers-core = { path = "../infers-core" }
+infers-gpu = { path = "../infers-gpu", optional = true }
+infers-processing = { path = "../infers-processing" }
+infers-backend-executorch = { path = "../infers-backend-executorch", default-features = false }
+
+[features]
+default = ["portable", "xnnpack", "vulkan"]
+portable = ["infers-backend-executorch/portable"]
+xnnpack = ["infers-backend-executorch/xnnpack"]
+vulkan = ["infers-backend-executorch/vulkan", "infers-processing/vulkan", "dep:infers-gpu"]
+
+[dev-dependencies]
+criterion = { workspace = true }
+infers-test-utils = { path = "../infers-test-utils", features = ["vulkan"] }
+
+[[bench]]
+name = "cpu_pipeline"
+path = "benches/cpu_pipeline.rs"
+harness = false
+
+[[bench]]
+name = "gpu_pipeline"
+path = "benches/gpu_pipeline.rs"
+harness = false
+required-features = ["vulkan"]
+
+[target.'cfg(target_os = "android")'.dependencies]
+infers-platform-android = { path = "../infers-platform-android" }
+
+[lints]
+workspace = true

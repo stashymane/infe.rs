@@ -1,0 +1,29 @@
+[package]
+name = "infers-backend-executorch"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description.workspace = true
+
+[features]
+default = ["portable", "xnnpack", "vulkan"]
+portable = []
+xnnpack = []
+vulkan = ["dep:infers-gpu", "dep:infers-processing", "infers-processing/vulkan"]
+
+[dependencies]
+infers-core = { path = "../infers-core" }
+infers-gpu = { path = "../infers-gpu", optional = true }
+infers-processing = { path = "../infers-processing", optional = true }
+parking_lot.workspace = true
+thiserror.workspace = true
+tempfile = "3"
+executorch = { version = "0.12.0", features = ["std", "module", "data-loader", "ndarray", "half", "tensor-ptr"] }
+
+[dev-dependencies]
+infers-test-utils = { path = "../infers-test-utils", features = ["vulkan"] }
+
+[lints]
+workspace = true

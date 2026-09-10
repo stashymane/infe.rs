@@ -27,7 +27,7 @@ val repoRoot = rootProject.layout.projectDirectory.dir("..")
 val executorchOutputDir = repoRoot.dir("target/executorch")
 
 cargo {
-    packageDirectory = rootProject.layout.projectDirectory.dir("../crates/bindings")
+    packageDirectory = rootProject.layout.projectDirectory.dir("../crates/infers-bindings")
     features = setOf(
         "portable",
         "xnnpack",

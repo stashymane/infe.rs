@@ -1,0 +1,15 @@
+error[E0308]: mismatched types
+ --> tests/ui/hardware_image_into_gpu_processor.rs:9:26
+  |
+9 |     let _ = proc.process(&host, &infers_processing_core::ProcessingOptions::default());
+  |                  ------- ^^^^^ expected `&VulkanImage`, found `&HardwareImage`
+  |                  |
+  |                  arguments to this method are incorrect
+  |
+  = note: expected reference `&VulkanImage`
+             found reference `&HardwareImage`
+note: method defined here
+ --> src/gpu/processor.rs
+  |
+  |     pub fn process(
+  |            ^^^^^^^

@@ -972,9 +972,9 @@ dependencies = [
  "infers-backend-executorch",
  "infers-core",
  "infers-gpu",
+ "infers-platform-android",
+ "infers-processing",
  "infers-test-utils",
- "platform-android",
- "processing",
 ]
 
 [[package]]
@@ -984,9 +984,9 @@ dependencies = [
  "executorch",
  "infers-core",
  "infers-gpu",
+ "infers-processing",
  "infers-test-utils",
  "parking_lot",
- "processing",
  "tempfile",
  "thiserror",
 ]
@@ -998,11 +998,11 @@ dependencies = [
  "infers-backend-executorch",
  "infers-core",
  "infers-gpu",
+ "infers-platform-android",
+ "infers-processing",
+ "infers-processing-core",
  "infers-test-utils",
  "parking_lot",
- "platform-android",
- "processing",
- "processing-core",
  "thiserror",
  "uniffi",
 ]
@@ -1013,8 +1013,8 @@ version = "0.0.0-dev"
 dependencies = [
  "bytemuck",
  "infers-gpu",
+ "infers-processing-core",
  "infers-test-utils",
- "processing-core",
  "thiserror",
  "trybuild",
 ]
@@ -1028,6 +1028,38 @@ dependencies = [
  "infers-core",
  "parking_lot",
  "thiserror",
+]
+
+[[package]]
+name = "infers-platform-android"
+version = "0.0.0-dev"
+dependencies = [
+ "ash",
+ "infers-core",
+ "infers-gpu",
+ "infers-processing",
+ "thiserror",
+]
+
+[[package]]
+name = "infers-processing"
+version = "0.0.0-dev"
+dependencies = [
+ "ash",
+ "infers-core",
+ "infers-gpu",
+ "infers-processing-core",
+ "parking_lot",
+ "spirv-builder",
+ "thiserror",
+ "trybuild",
+]
+
+[[package]]
+name = "infers-processing-core"
+version = "0.0.0-dev"
+dependencies = [
+ "libm",
 ]
 
 [[package]]
@@ -1443,17 +1475,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b4596b6d070b27117e987119b4dac604f3c58cfb0b191112e24771b2faeac1a6"
 
 [[package]]
-name = "platform-android"
-version = "0.0.0-dev"
-dependencies = [
- "ash",
- "infers-core",
- "infers-gpu",
- "processing",
- "thiserror",
-]
-
-[[package]]
 name = "plotters"
 version = "0.3.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1528,27 +1549,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "985e7ec9bb745e6ce6535b544d84d6cd6f7ad8bd711c398938ae983b91a766d9"
 dependencies = [
  "unicode-ident",
-]
-
-[[package]]
-name = "processing"
-version = "0.0.0-dev"
-dependencies = [
- "ash",
- "infers-core",
- "infers-gpu",
- "parking_lot",
- "processing-core",
- "spirv-builder",
- "thiserror",
- "trybuild",
-]
-
-[[package]]
-name = "processing-core"
-version = "0.0.0-dev"
-dependencies = [
- "libm",
 ]
 
 [[package]]

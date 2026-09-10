@@ -1,0 +1,21 @@
+[package]
+name = "infers-platform-android"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description.workspace = true
+
+[target.'cfg(target_os = "android")'.dependencies]
+infers-core = { path = "../infers-core" }
+infers-gpu = { path = "../infers-gpu" }
+ash = "0.38"
+thiserror.workspace = true
+
+[target.'cfg(target_os = "android")'.dev-dependencies]
+infers-processing = { path = "../infers-processing" }
+infers-gpu = { path = "../infers-gpu" }
+
+[lints]
+workspace = true
